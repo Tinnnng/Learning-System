@@ -48,7 +48,11 @@ export interface paths {
         /** List Papers */
         get: operations["list_papers_api_bank_papers_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Paper
+         * @description 建立自建題組（例如期中考自己出題）。
+         */
+        post: operations["create_paper_api_bank_papers_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -106,6 +110,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bank/papers/{paper_id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Question */
+        post: operations["add_question_api_bank_papers__paper_id__questions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bank/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Question
+         * @description 修改題目。官方試卷重新匯入時會被匯入檔覆蓋。
+         */
+        put: operations["update_question_api_bank_questions__question_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ingest/files": {
         parameters: {
             query?: never;
@@ -135,7 +176,11 @@ export interface paths {
         };
         /** Get Converted File */
         get: operations["get_converted_file_api_ingest_files__name__get"];
-        put?: never;
+        /**
+         * Save Converted File
+         * @description 儲存匯入預覽頁的修改，回傳重新檢查的結果。
+         */
+        put: operations["save_converted_file_api_ingest_files__name__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1200,6 +1245,27 @@ export interface components {
             /** Daily */
             daily: components["schemas"]["DailyStat"][];
         };
+        /**
+         * PaperCreate
+         * @description 自建題組（例如期中考自己出題），之後用 QuestionEdit 一題一題加。
+         */
+        PaperCreate: {
+            /**
+             * Exam Type
+             * @default 期中考
+             */
+            exam_type: string;
+            /** Subject */
+            subject: string;
+            /** Year */
+            year?: number | null;
+            /** Title */
+            title?: string | null;
+            /** Categories */
+            categories?: string[];
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+        };
         /** PaperDetail */
         PaperDetail: {
             /** Id */
@@ -1361,6 +1427,32 @@ export interface components {
             last_wrong_at: string | null;
             /** Mastered At */
             mastered_at: string | null;
+        };
+        /**
+         * QuestionEdit
+         * @description 手動新增或修改題目（修正轉檔錯誤、自己出題）。
+         */
+        QuestionEdit: {
+            /**
+             * Type
+             * @default single_choice
+             * @enum {string}
+             */
+            type: "single_choice" | "multi_choice" | "essay";
+            /** Passage */
+            passage?: string | null;
+            /** Stem */
+            stem: string;
+            /** Options */
+            options: string[];
+            /** Answer */
+            answer: string[];
+            /** Points */
+            points?: number | null;
+            /** Explanation */
+            explanation?: string | null;
+            /** Tags */
+            tags?: string[];
         };
         /**
          * QuestionFilter
@@ -1975,6 +2067,39 @@ export interface operations {
             };
         };
     };
+    create_paper_api_bank_papers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_paper_api_bank_papers__paper_id__get: {
         parameters: {
             query?: never;
@@ -2057,6 +2182,76 @@ export interface operations {
             };
         };
     };
+    add_question_api_bank_papers__paper_id__questions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_question_api_bank_questions__question_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_converted_files_api_ingest_files_get: {
         parameters: {
             query?: never;
@@ -2095,6 +2290,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportBundle"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_converted_file_api_ingest_files__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportBundle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckReport"];
                 };
             };
             /** @description Validation Error */

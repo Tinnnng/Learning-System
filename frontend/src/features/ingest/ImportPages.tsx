@@ -4,13 +4,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Button } from '@/components/Button'
+import { QuestionEditorDialog } from '@/components/QuestionEditorDialog'
 import { Icon } from '@/components/Icon'
 import { OptionBubble } from '@/components/OptionBubble'
 import { PageHeader } from '@/components/PageHeader'
 import { QuestionFigure, RichText } from '@/components/RichText'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { cx } from '@/lib/cx'
+import { api } from '@/lib/api'
 import { shortName } from '@/lib/format'
+import type { QuestionDraft } from '@/lib/questionEdit'
 import type { ConvertedFile, ImportOutcome } from '@/lib/types'
 import { fetchBundle, fetchConverted, importFile } from './api'
 
@@ -112,13 +115,22 @@ export function ImportPreviewPage() {
   const bundle = useQuery({ queryKey: ['ingest', 'bundle', name], queryFn: () => fetchBundle(name) })
   const files = useQuery({ queryKey: ['ingest', 'files'], queryFn: fetchConverted })
   const [index, setIndex] = useState(0)
+  const [editing, setEditing] = useState(false)
   const run = useImport()
+  const queryClient = useQueryClient()
 
   if (bundle.isPending) return <Loading />
   if (bundle.isError) return <ErrorState error={bundle.error} onRetry={() => bundle.refetch()} />
   const data = bundle.data
   const report = files.data?.find((file) => file.name === name)?.report
   const question = data.questions[index]
+  const editable = name.toLowerCase().endsWith('.json')
+  const saveEdit = async (draft: QuestionDraft) => {
+    // 只換掉可編輯的欄位，圖片、頁面截圖、答案來源等保留
+    const questions = data.questions.map((item, position) => (position === index ? { ...item, ...draft } : item))
+    await api.put(`/ingest/files/${encodeURIComponent(name)}`, { ...data, questions })
+    await queryClient.invalidateQueries({ queryKey: ['ingest'] })
+  }
   const issuesFor = (number: number) => report?.issues.filter((issue) => issue.question === number) ?? []
   const paperIssues = report?.issues.filter((issue) => issue.question === null) ?? []
 
@@ -174,7 +186,15 @@ export function ImportPreviewPage() {
       {question && (
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section aria-label="解析結果" className="flex flex-col gap-4 rounded-lg bg-sheet px-5 py-6 shadow-sheet sm:px-7">
-            <h2 className="eyebrow m-0">解析結果・第 {question.number} 題</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="eyebrow m-0">解析結果・第 {question.number} 題</h2>
+              {editable && (
+                <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+                  <Icon name="edit" size={16} />
+                  修改這題
+                </Button>
+              )}
+            </div>
             {issuesFor(question.number).map((issue) => (
               <p key={issue.message} className={cx('m-0 text-sm', issue.level === 'error' ? 'text-bad' : 'text-accent')}>
                 {issue.message}
@@ -236,6 +256,28 @@ export function ImportPreviewPage() {
             )}
           </section>
         </div>
+      )}
+      {question && (
+        <QuestionEditorDialog
+          title={`修改第 ${question.number} 題`}
+          initial={
+            editing
+              ? {
+                  type: question.type === 'multi_choice' ? 'multi_choice' : 'single_choice',
+                  passage: question.passage ?? null,
+                  stem: question.stem,
+                  options: question.options ?? [],
+                  answer: question.answer ?? [],
+                  points: question.points ?? null,
+                  explanation: question.explanation ?? null,
+                  tags: question.tags ?? [],
+                }
+              : null
+          }
+          onClose={() => setEditing(false)}
+          onSave={saveEdit}
+          note="修改會直接寫回匯入檔，存檔後會重新檢查；確認沒問題再按「確認並匯入」。"
+        />
       )}
     </div>
   )

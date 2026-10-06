@@ -82,3 +82,14 @@ def resolve_converted(name: str) -> Path | None:
     if path.parent != converted_dir().resolve() or not path.is_file():
         return None
     return path
+
+
+def save_converted(name: str, bundle: ImportBundle) -> CheckReport:
+    """儲存在匯入預覽頁修改過的匯入檔（只限 JSON；文字檔請改原始檔）。"""
+    path = resolve_converted(name)
+    if path is None:
+        raise FileNotFoundError(name)
+    if path.suffix.lower() != ".json":
+        raise ValueError("只有 JSON 匯入檔可以在網頁上修改；題目文字檔請直接改原始檔")
+    path.write_text(bundle.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
+    return check_bundle(bundle)

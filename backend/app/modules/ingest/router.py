@@ -22,6 +22,17 @@ def get_converted_file(name: str) -> ImportBundle:
     return service.load_bundle(path)
 
 
+@router.put("/files/{name}", response_model=CheckReport)
+def save_converted_file(name: str, bundle: ImportBundle) -> CheckReport:
+    """儲存匯入預覽頁的修改，回傳重新檢查的結果。"""
+    try:
+        return service.save_converted(name, bundle)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="找不到檔案") from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.post("/files/{name}/import", response_model=ImportOutcome)
 def import_converted_file(name: str, db: Session = Depends(get_db)) -> ImportOutcome:
     path = service.resolve_converted(name)

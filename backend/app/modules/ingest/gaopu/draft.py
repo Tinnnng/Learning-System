@@ -193,6 +193,12 @@ def _attach_figures(document: pymupdf.Document, questions: list[_Question]) -> d
     return figures
 
 
+def _looks_like_cloze_option(option: str) -> bool:
+    """克漏字的選項通常是 1～3 個英文字（單字或片語）。"""
+    words = option.split()
+    return 0 < len(words) <= 3 and all(re.fullmatch(r"[A-Za-z'’-]+", word) for word in words)
+
+
 def generate_draft(pdf_path: Path, source_key: str) -> QuestionDraftFile:
     with pymupdf.open(pdf_path) as document:
         questions = _parse_questions(_read_lines(document))
@@ -203,11 +209,16 @@ def generate_draft(pdf_path: Path, source_key: str) -> QuestionDraftFile:
         notes = list(question.notes)
         if len(question.options) != 4 or any(not option for option in question.options):
             notes.append(f"選項數量異常（{len(question.options)} 個），請對照 PDF")
+        stem = question.stem
+        if not stem and question.options and all(_looks_like_cloze_option(option) for option in question.options):
+            # 克漏字：PDF 上只有選項，題幹在文章的空格裡
+            stem = f"選出最適合填入 {{{{blank:{question.number}}}}} 的答案"
+            notes.append("疑似克漏字：已自動補上題幹，請把文章放進同組每一題的 passage，並在文章空格處寫 {{blank:題號}}")
         drafts.append(
             QuestionDraft(
                 number=question.number,
                 page=question.page,
-                stem=question.stem or "（題幹抽取失敗，請對照 PDF）",
+                stem=stem or "（題幹抽取失敗，請對照 PDF）",
                 options=question.options,
                 figures=figures.get(question.number, []),
                 review_notes=notes,

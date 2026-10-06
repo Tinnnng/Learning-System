@@ -137,3 +137,17 @@ def test_built_bundle_passes_validation(gaopu_group, tmp_path, data_dir):
     bundle = build_bundle(gaopu_group, make_draft(), data_dir / "assets")
     report = check_bundle(bundle)
     assert report.ok, report.issues
+
+
+def test_cloze_questions_get_a_stem(tmp_path):
+    from app.modules.ingest.gaopu import draft as draft_module
+
+    lines = [
+        line(80, (36, "1"), (58, "一般的題目？")),
+        line(95, (58, A + "甲"), (176, B + "乙"), (297, C + "丙"), (416, D + "丁")),
+        line(110, (36, "2")),
+        line(125, (58, A + "conducted"), (176, B + "included"), (297, C + "carried out"), (416, D + "secluded")),
+    ]
+    parsed = draft_module._parse_questions(lines)
+    assert parsed[1].stem == ""
+    assert draft_module._looks_like_cloze_option("carried out") and not draft_module._looks_like_cloze_option("甲")

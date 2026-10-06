@@ -137,3 +137,23 @@ def test_converted_files_api(client, data_dir):
     finally:
         for file in converted.glob("*.json"):
             file.unlink()
+
+
+def test_save_converted_file(client, data_dir):
+    converted = data_dir / "converted"
+    converted.mkdir(exist_ok=True)
+    (converted / "edit.json").write_text(make_bundle("edit-paper").model_dump_json(), encoding="utf-8")
+    (converted / "text.txt").write_text("# 科目：x\n1. 題\n(A) a\n(B) b\n答案：A\n", encoding="utf-8")
+    try:
+        bundle = client.get("/api/ingest/files/edit.json").json()
+        bundle["questions"][0]["stem"] = "改過的題幹"
+        bundle["questions"][0]["answer"] = []
+        report = client.put("/api/ingest/files/edit.json", json=bundle).json()
+        assert report["ok"] is False  # 存檔後重新檢查：缺答案
+        assert json.loads((converted / "edit.json").read_text(encoding="utf-8"))["questions"][0]["stem"] == "改過的題幹"
+        text_bundle = client.get("/api/ingest/files/text.txt").json()
+        assert client.put("/api/ingest/files/text.txt", json=text_bundle).status_code == 400
+    finally:
+        for file in converted.iterdir():
+            if file.is_file():
+                file.unlink()

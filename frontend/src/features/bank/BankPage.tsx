@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ChipGroup } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
-import { ButtonLink } from '@/components/Button'
+import { Button, ButtonLink } from '@/components/Button'
 import { shortName } from '@/lib/format'
 import type { PaperSummary } from '@/lib/types'
 import { fetchFilters, fetchPapers, type PaperFilters } from './api'
+import { NewPaperDialog } from './NewPaperDialog'
 import { StartPanel } from './StartPanel'
 
 const ORIGIN_LABELS: Record<string, string> = { official: '考古題', generated: '教材出題', manual: '自建題目' }
@@ -42,6 +44,7 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
 
 export function BankPage() {
   const [params, setParams] = useSearchParams()
+  const [creating, setCreating] = useState(false)
   const filters: PaperFilters = {
     exam_type: params.get('exam_type'),
     year: params.get('year') ? Number(params.get('year')) : null,
@@ -72,10 +75,16 @@ export function BankPage() {
         title="試卷"
         description="選一份試卷整份寫，或用下面的條件跨試卷出題，例如把所有年度的「法學知識與英文」混在一起練。"
         actions={
-          <ButtonLink to="/import" variant="ghost" size="sm">
-            <Icon name="import" size={18} />
-            匯入題目
-          </ButtonLink>
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
+              <Icon name="plus" size={18} />
+              自建題組
+            </Button>
+            <ButtonLink to="/import" variant="ghost" size="sm">
+              <Icon name="import" size={18} />
+              匯入題目
+            </ButtonLink>
+          </>
         }
       />
 
@@ -161,6 +170,7 @@ export function BankPage() {
           />
         </aside>
       </div>
+      <NewPaperDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   )
 }

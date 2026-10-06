@@ -85,3 +85,26 @@ def test_query_question_ids_filters_and_skips_essays(db):
     with_paper = service.get_questions_with_paper(db, all_ids[::-1])
     assert [q.id for q in with_paper] == all_ids[::-1]
     assert {q.paper.id for q in with_paper} == {a, b}
+
+
+def test_edit_add_question_and_manual_paper(client, db):
+    from app.modules.bank.schemas import PaperCreate, QuestionEdit
+
+    paper_id = service.upsert_paper(db, make_bundle(questions=1)).paper_id
+    question_id = service.get_paper(db, paper_id).questions[0].id
+    edit = QuestionEdit(stem="修正後", options=["甲", "乙", "丙"], answer=["C"], explanation="因為丙")
+    updated = service.update_question(db, question_id, edit)
+    assert (updated.stem, updated.answer, updated.answer_source) == ("修正後", ["C"], "ANS")
+
+    added = service.add_question(db, paper_id, QuestionEdit(stem="新題", options=["是", "否"], answer=["A"]))
+    assert added.number == 2 and added.answer_source == "manual"
+
+    manual = service.create_paper(db, PaperCreate(subject="程式設計", categories=["資工"]))
+    assert manual.origin == "manual" and manual.exam_type == "期中考" and manual.source_key.startswith("manual-")
+    assert client.post(f"/api/bank/papers/{manual.id}/questions", json={"stem": "Q", "options": ["a", "b"], "answer": ["B"]}).json()["number"] == 1
+
+    bad = client.put(f"/api/bank/questions/{question_id}", json={"stem": "x", "options": ["a", "b"], "answer": ["C"]})
+    assert bad.status_code == 422
+    multi = client.put(f"/api/bank/questions/{question_id}", json={"type": "multi_choice", "stem": "x", "options": ["a", "b"], "answer": ["A"]})
+    assert multi.status_code == 422
+    assert client.put("/api/bank/questions/999", json={"stem": "x", "options": ["a", "b"], "answer": ["A"]}).status_code == 404

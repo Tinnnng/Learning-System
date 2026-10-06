@@ -1,5 +1,6 @@
 """題庫的公開介面。其他模組只能透過這裡的函式讀寫試卷與題目。"""
 
+import uuid
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -9,10 +10,12 @@ from app.core.config import get_settings
 from app.modules.bank.models import ExamPaper, PaperCategory, Question
 from app.modules.bank.schemas import (
     FilterOptions,
+    PaperCreate,
     PaperDetail,
     PaperRef,
     PaperSummary,
     PaperUpsert,
+    QuestionEdit,
     QuestionFilter,
     QuestionOut,
     QuestionWithPaper,
@@ -210,3 +213,62 @@ def resolve_asset_path(relative_path: str) -> Path | None:
     if not path.is_relative_to(assets_dir) or not path.is_file():
         return None
     return path
+
+
+# ---------- 手動編修 ----------
+
+
+class BankError(Exception):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _apply_edit(question: Question, data: QuestionEdit) -> None:
+    question.type = data.type
+    question.passage = data.passage or None
+    question.stem = data.stem
+    question.options = data.options
+    question.answer = sorted(data.answer)
+    question.points = data.points
+    question.explanation = data.explanation or None
+    question.tags = data.tags
+
+
+def update_question(db: Session, question_id: int, data: QuestionEdit) -> QuestionOut:
+    """修改題目（修正轉檔錯誤）。官方試卷重新匯入時，這裡的修改會被匯入檔覆蓋。"""
+    question = db.get(Question, question_id)
+    if question is None:
+        raise BankError("找不到這一題", status_code=404)
+    _apply_edit(question, data)
+    db.commit()
+    return QuestionOut.model_validate(question)
+
+
+def add_question(db: Session, paper_id: int, data: QuestionEdit) -> QuestionOut:
+    paper = db.get(ExamPaper, paper_id)
+    if paper is None:
+        raise BankError("找不到這份試卷", status_code=404)
+    last = db.scalar(select(func.max(Question.number)).where(Question.paper_id == paper_id)) or 0
+    question = Question(paper_id=paper_id, number=last + 1, answer_source="manual", assets=[])
+    _apply_edit(question, data)
+    db.add(question)
+    db.commit()
+    return QuestionOut.model_validate(question)
+
+
+def create_paper(db: Session, data: PaperCreate) -> PaperDetail:
+    paper = ExamPaper(
+        source_key=f"manual-{uuid.uuid4().hex[:12]}",
+        origin="manual",
+        exam_type=data.exam_type,
+        year=data.year,
+        subject=data.subject,
+        title=data.title or f"{data.subject}（自建）",
+        duration_minutes=data.duration_minutes,
+        source_files=[],
+        categories=[PaperCategory(name=name) for name in dict.fromkeys(data.categories)],
+    )
+    db.add(paper)
+    db.commit()
+    return get_paper(db, paper.id)

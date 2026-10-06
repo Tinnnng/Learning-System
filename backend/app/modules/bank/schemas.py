@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 QuestionType = Literal["single_choice", "multi_choice", "essay"]
 Origin = Literal["official", "generated", "manual"]
@@ -137,3 +137,40 @@ class FilterOptions(BaseModel):
     categories: list[str]
     subjects: list[str]
     origins: list[Origin]
+
+
+class QuestionEdit(BaseModel):
+    """手動新增或修改題目（修正轉檔錯誤、自己出題）。"""
+
+    type: QuestionType = "single_choice"
+    passage: str | None = None
+    stem: str = Field(min_length=1)
+    options: list[str] = Field(min_length=2, max_length=len(OPTION_LETTERS))
+    answer: list[str] = Field(min_length=1)
+    points: float | None = None
+    explanation: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_answer(self) -> "QuestionEdit":
+        if any(not option.strip() for option in self.options):
+            raise ValueError("選項不能空白")
+        valid = OPTION_LETTERS[: len(self.options)]
+        if any(letter not in valid for letter in self.answer):
+            raise ValueError(f"答案必須是 {valid} 其中之一")
+        if len(set(self.answer)) != len(self.answer):
+            raise ValueError("答案有重複")
+        if self.type == "multi_choice" and len(self.answer) < 2:
+            raise ValueError("複選題至少要有兩個正確答案")
+        return self
+
+
+class PaperCreate(BaseModel):
+    """自建題組（例如期中考自己出題），之後用 QuestionEdit 一題一題加。"""
+
+    exam_type: str = Field(default="期中考", min_length=1, max_length=50)
+    subject: str = Field(min_length=1, max_length=200)
+    year: int | None = None
+    title: str | None = Field(default=None, max_length=300)
+    categories: list[str] = Field(default_factory=list)
+    duration_minutes: int | None = Field(default=None, ge=1)
