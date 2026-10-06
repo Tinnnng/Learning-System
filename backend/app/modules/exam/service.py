@@ -23,11 +23,12 @@ from app.modules.exam.schemas import (
     SessionResult,
     SessionSummary,
 )
+from app.modules.notes import service as notes_service
 from app.modules.review import service as review_service
 from app.modules.review.schemas import AttemptIn
 
 _MODE_NAMES = {"practice": "練習", "mock": "模擬考"}
-_SOURCE_NAMES = {"wrong_book": "錯題重寫", "review_due": "今日錯題複習", "questions": "指定題目"}
+_SOURCE_NAMES = {"wrong_book": "錯題重寫", "review_due": "今日錯題複習", "starred": "收藏題目", "questions": "指定題目"}
 
 # 選項彼此引用（以上皆是、(A)(B)皆正確…）時打亂會讓題意錯誤，這類題目不打亂選項
 _ORDER_DEPENDENT = re.compile(
@@ -69,6 +70,9 @@ def _resolve_question_ids(db: Session, data: SessionCreate) -> list[int]:
         return review_service.wrong_question_ids(db, source.filter)
     if source.kind == "review_due":
         return review_service.wrong_question_ids(db, source.filter, due_only=True)
+    if source.kind == "starred":
+        allowed = set(bank_service.query_question_ids(db, source.filter))
+        return [qid for qid in notes_service.starred_question_ids(db) if qid in allowed]
     found = {q.id for q in bank_service.get_questions(db, source.question_ids or [])}
     return [qid for qid in source.question_ids or [] if qid in found]
 

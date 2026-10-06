@@ -25,6 +25,7 @@
   --bad: #c42a5c;
   --bad-soft: #ffe8f0;
   --bad-hl: #ffc2d6; /* 粉紅螢光筆：答錯 */
+  --star: #d99a00; /* 收藏的星號 */
   --line: #e3e6ee;
   --overlay: rgb(26 35 64 / 0.4);
 
@@ -94,6 +95,7 @@
   --bad: #ff7aa3;
   --bad-soft: #3a1626;
   --bad-hl: rgb(255 111 154 / 0.3);
+  --star: #f2d24a;
   --line: #232a4b;
   --overlay: rgb(3 5 15 / 0.65);
   --shadow-sheet: 0 1px 0 rgb(0 0 0 / 0.25), 0 18px 40px -26px rgb(0 0 0 / 0.9);

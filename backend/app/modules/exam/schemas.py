@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.modules.bank.schemas import Asset, PaperRef, QuestionFilter, QuestionType, SourceRef
 
 ExamMode = Literal["practice", "mock"]
-SourceKind = Literal["filter", "wrong_book", "review_due", "questions"]
+SourceKind = Literal["filter", "wrong_book", "review_due", "starred", "questions"]
 
 
 class ExamSource(BaseModel):
@@ -15,6 +15,7 @@ class ExamSource(BaseModel):
     - filter：依題庫條件（試卷、科目、年度…）
     - wrong_book：錯題本（可再加 filter 縮小範圍）
     - review_due：錯題本中今天到期該複習的
+    - starred：收藏的題目
     - questions：直接指定題目 id
     """
 

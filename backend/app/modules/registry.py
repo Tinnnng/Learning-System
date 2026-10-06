@@ -26,6 +26,7 @@ ENABLED_MODULES: list[str] = [
     "ai",
     "tutor",
     "calendar",
+    "notes",
 ]
 
 

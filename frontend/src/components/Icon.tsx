@@ -24,6 +24,8 @@ const PATHS = {
   spark: 'M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9ZM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z',
   camera: 'M4 7.5h3.5L9 5h6l1.5 2.5H20A1.5 1.5 0 0 1 21.5 9v9A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5ZM12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
   home: 'M4 10.5 12 4l8 6.5V20h-5.5v-6h-5v6H4Z',
+  star: 'M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8Z',
+  note: 'M5 4.5h14v10.5l-4.5 4.5H5ZM14.5 19.5V15H19M8.5 9h7M8.5 12.5h4',
   plus: 'M12 5v14M5 12h14',
   edit: 'M4.5 19.5h4l10-10-4-4-10 10ZM13 7l4 4',
   trash: 'M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5',
@@ -41,15 +43,17 @@ interface IconProps {
   className?: string
   /** 有意義的圖示要給 label；純裝飾不給 */
   label?: string
+  /** 實心（目前只有星號用） */
+  filled?: boolean
 }
 
-export function Icon({ name, size = 20, className, label }: IconProps) {
+export function Icon({ name, size = 20, className, label, filled }: IconProps) {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={name === 'play' ? 'currentColor' : 'none'}
+      fill={name === 'play' || (name === 'star' && filled) ? 'currentColor' : 'none'}
       stroke="currentColor"
       strokeWidth={1.6}
       strokeLinecap="round"

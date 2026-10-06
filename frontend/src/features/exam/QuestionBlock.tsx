@@ -5,6 +5,7 @@ import { AiTutor } from '@/components/AiTutor'
 import { Button } from '@/components/Button'
 import { Dialog } from '@/components/Dialog'
 import { Icon } from '@/components/Icon'
+import { NoteControls } from '@/components/NoteControls'
 import { type BubbleState, OptionBubble } from '@/components/OptionBubble'
 import { QuestionFigure, RichText } from '@/components/RichText'
 import { cx } from '@/lib/cx'
@@ -132,6 +133,8 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
       )}
 
       {item.revealed && !item.explanation && <AiTutor questionId={item.question_id} myAnswer={item.original_response} />}
+
+      <NoteControls questionId={item.question_id} className="-ml-2" />
 
       {item.page_snapshot && (
         <Dialog open={showPage} onClose={() => setShowPage(false)} title="原始試卷" wide>

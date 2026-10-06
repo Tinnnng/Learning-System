@@ -798,6 +798,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notes/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notes
+         * @description 一次取多題的收藏與筆記（列表頁用），例如 ?ids=1&ids=2。
+         */
+        get: operations["get_notes_api_notes_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notes/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Note */
+        get: operations["get_note_api_notes_questions__question_id__get"];
+        /** Save Note */
+        put: operations["save_note_api_notes_questions__question_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notes/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Noted
+         * @description 收藏或寫過筆記的題目，最近更新的在前面。
+         */
+        get: operations["list_noted_api_notes_list_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1029,6 +1087,7 @@ export interface components {
          *     - filter：依題庫條件（試卷、科目、年度…）
          *     - wrong_book：錯題本（可再加 filter 縮小範圍）
          *     - review_due：錯題本中今天到期該複習的
+         *     - starred：收藏的題目
          *     - questions：直接指定題目 id
          */
         ExamSource: {
@@ -1037,7 +1096,7 @@ export interface components {
              * @default filter
              * @enum {string}
              */
-            kind: "filter" | "wrong_book" | "review_due" | "questions";
+            kind: "filter" | "wrong_book" | "review_due" | "starred" | "questions";
             filter?: components["schemas"]["QuestionFilter"];
             /** Question Ids */
             question_ids?: number[] | null;
@@ -1221,6 +1280,32 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** NoteIn */
+        NoteIn: {
+            /**
+             * Starred
+             * @default false
+             */
+            starred: boolean;
+            /** Note */
+            note?: string | null;
+        };
+        /** NoteOut */
+        NoteOut: {
+            /** Question Id */
+            question_id: number;
+            /** Starred */
+            starred: boolean;
+            /** Note */
+            note: string | null;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** NotedQuestion */
+        NotedQuestion: {
+            question: components["schemas"]["QuestionWithPaper"];
+            note: components["schemas"]["NoteOut"];
         };
         /** Overview */
         Overview: {
@@ -3474,6 +3559,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_notes_api_notes_questions_get: {
+        parameters: {
+            query?: {
+                ids?: number[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_note_api_notes_questions__question_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_note_api_notes_questions__question_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_noted_api_notes_list_get: {
+        parameters: {
+            query?: {
+                which?: "all" | "starred" | "noted";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotedQuestion"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { AiTutor } from '@/components/AiTutor'
 import { Button } from '@/components/Button'
 import { QuestionEditorDialog } from '@/components/QuestionEditorDialog'
 import { Icon } from '@/components/Icon'
+import { NoteControls } from '@/components/NoteControls'
 import { OptionBubble } from '@/components/OptionBubble'
 import { PageHeader } from '@/components/PageHeader'
 import { QuestionFigure, RichText } from '@/components/RichText'
@@ -12,6 +13,7 @@ import { ErrorState, Loading } from '@/components/States'
 import { Switch } from '@/components/Controls'
 import { api } from '@/lib/api'
 import { shortName } from '@/lib/format'
+import { prefetchNotes } from '@/lib/notes'
 import { emptyQuestion, type QuestionDraft } from '@/lib/questionEdit'
 import type { QuestionOut } from '@/lib/types'
 import { fetchPaper } from './api'
@@ -81,6 +83,7 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
           ) : (
             question.type !== 'essay' && <AiTutor questionId={question.id} />
           ))}
+        <NoteControls questionId={question.id} className="-ml-2" />
       </div>
     </li>
   )
@@ -92,6 +95,11 @@ export function PaperPage() {
   const [showAnswer, setShowAnswer] = useState(false)
   const [editing, setEditing] = useState<{ id: number | null; draft: QuestionDraft } | null>(null)
   const queryClient = useQueryClient()
+  const questionIds = paper.data?.questions.map((question) => question.id).join(',')
+  useEffect(() => {
+    // 一次取整份試卷的收藏與筆記，不要每題各發一次請求
+    if (questionIds) prefetchNotes(queryClient, questionIds.split(',').map(Number)).catch(() => {})
+  }, [queryClient, questionIds])
   const saveQuestion = async (draft: QuestionDraft) => {
     if (editing?.id) await api.put(`/bank/questions/${editing.id}`, draft)
     else await api.post(`/bank/papers/${id}/questions`, draft)

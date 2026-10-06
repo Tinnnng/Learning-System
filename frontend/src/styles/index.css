@@ -25,6 +25,7 @@
   --color-hl-soft: var(--hl-soft);
   --color-ok-hl: var(--ok-hl);
   --color-bad-hl: var(--bad-hl);
+  --color-star: var(--star);
 
   --font-sans: var(--font-sans);
   --font-hand: var(--font-hand);

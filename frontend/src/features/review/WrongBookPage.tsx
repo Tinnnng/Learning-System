@@ -7,6 +7,7 @@ import { AiTutor } from '@/components/AiTutor'
 import { Button } from '@/components/Button'
 import { ChipGroup, Segmented } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
+import { NoteControls } from '@/components/NoteControls'
 import { OptionBubble } from '@/components/OptionBubble'
 import { PageHeader } from '@/components/PageHeader'
 import { QuestionFigure, RichText } from '@/components/RichText'
@@ -111,6 +112,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
           ) : (
             <AiTutor questionId={question.id} />
           )}
+          <NoteControls questionId={question.id} className="-ml-2" />
           <History questionId={question.id} />
         </div>
       )}
