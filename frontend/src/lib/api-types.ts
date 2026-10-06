@@ -664,6 +664,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Subscriptions */
+        get: operations["list_subscriptions_api_calendar_subscriptions_get"];
+        put?: never;
+        /** Subscribe */
+        post: operations["subscribe_api_calendar_subscriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/subscriptions/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subscription Presets
+         * @description 可以直接訂閱的考試行事曆清單。
+         */
+        get: operations["subscription_presets_api_calendar_subscriptions_presets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/subscriptions/{subscription_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Subscription */
+        post: operations["sync_subscription_api_calendar_subscriptions__subscription_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unsubscribe */
+        delete: operations["unsubscribe_api_calendar_subscriptions__subscription_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/export.ics": {
         parameters: {
             query?: never;
@@ -897,7 +969,11 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "manual" | "photo";
+            source: "manual" | "photo" | "subscription";
+            /** Subscription Id */
+            subscription_id?: number | null;
+            /** Subscription Name */
+            subscription_name?: string | null;
             /** Days Until */
             days_until: number;
         };
@@ -1246,6 +1322,22 @@ export interface components {
             duration_minutes: number | null;
             /** Question Count */
             question_count: number;
+        };
+        /** PresetCalendar */
+        PresetCalendar: {
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Subscribed */
+            subscribed: boolean;
+        };
+        /** PresetList */
+        PresetList: {
+            /** Source */
+            source: string;
+            /** Calendars */
+            calendars: components["schemas"]["PresetCalendar"][];
         };
         /** ProgressOut */
         ProgressOut: {
@@ -1610,6 +1702,51 @@ export interface components {
             slide?: number | null;
             /** Note */
             note?: string | null;
+        };
+        /** SubscriptionIn */
+        SubscriptionIn: {
+            /**
+             * Url
+             * @description iCal 網址（https://、webcal://）或 Google 日曆 ID
+             */
+            url: string;
+            /**
+             * Name
+             * @description 不填就用行事曆本身的名稱
+             */
+            name?: string | null;
+            /**
+             * Include Deadlines
+             * @default true
+             */
+            include_deadlines: boolean;
+        };
+        /** SubscriptionOut */
+        SubscriptionOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Include Deadlines */
+            include_deadlines: boolean;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Last Error */
+            last_error: string | null;
+            /** Upcoming Count */
+            upcoming_count: number;
+        };
+        /** SyncResult */
+        SyncResult: {
+            subscription: components["schemas"]["SubscriptionOut"];
+            /** Added */
+            added: number;
+            /** Updated */
+            updated: number;
+            /** Removed */
+            removed: number;
         };
         /** TutorThread */
         TutorThread: {
@@ -2946,6 +3083,139 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExtractResult"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subscriptions_api_calendar_subscriptions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"][];
+                };
+            };
+        };
+    };
+    subscribe_api_calendar_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscription_presets_api_calendar_subscriptions_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetList"];
+                };
+            };
+        };
+    };
+    sync_subscription_api_calendar_subscriptions__subscription_id__sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_api_calendar_subscriptions__subscription_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

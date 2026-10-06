@@ -7,13 +7,24 @@ from zoneinfo import ZoneInfo
 
 import pymupdf
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.modules.ai import service as ai_service
-from app.modules.calendar.models import CalendarEvent
-from app.modules.calendar.schemas import Countdown, EventIn, EventOut, ExtractResult
+from app.modules.calendar import subscriptions
+from app.modules.calendar.models import CalendarEvent, CalendarSubscription
+from app.modules.calendar.schemas import (
+    Countdown,
+    EventIn,
+    EventOut,
+    ExtractResult,
+    PresetCalendar,
+    PresetList,
+    SubscriptionIn,
+    SubscriptionOut,
+    SyncResult,
+)
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 PDF_TYPE = "application/pdf"
@@ -56,8 +67,10 @@ def today() -> date:
     return datetime.now(ZoneInfo(get_settings().timezone)).date()
 
 
-def _out(event: CalendarEvent, reference: date) -> EventOut:
+def _out(event: CalendarEvent, reference: date, subscription_names: dict[int, str] | None = None) -> EventOut:
     return EventOut(
+        subscription_id=event.subscription_id,
+        subscription_name=(subscription_names or {}).get(event.subscription_id) if event.subscription_id else None,
         id=event.id,
         title=event.title,
         kind=event.kind,
@@ -79,7 +92,10 @@ def list_events(db: Session, start: date | None = None, end: date | None = None)
     if end is not None:
         query = query.where(CalendarEvent.date <= end)
     reference = today()
-    return [_out(event, reference) for event in db.scalars(query.order_by(CalendarEvent.date, CalendarEvent.time))]
+    names = {sub.id: sub.name for sub in db.scalars(select(CalendarSubscription))}
+    return [
+        _out(event, reference, names) for event in db.scalars(query.order_by(CalendarEvent.date, CalendarEvent.time))
+    ]
 
 
 def _apply(event: CalendarEvent, data: EventIn) -> None:
@@ -95,19 +111,24 @@ def create(db: Session, data: EventIn, source: str = "manual") -> EventOut:
     return _out(event, today())
 
 
-def update(db: Session, event_id: int, data: EventIn) -> EventOut:
+def _editable(db: Session, event_id: int) -> CalendarEvent:
     event = db.get(CalendarEvent, event_id)
     if event is None:
         raise CalendarError("找不到這個行程", status_code=404)
+    if event.subscription_id is not None:
+        raise CalendarError("這是訂閱的行程，下次同步會被覆蓋，所以不能個別修改；不需要的話請取消整個訂閱", status_code=409)
+    return event
+
+
+def update(db: Session, event_id: int, data: EventIn) -> EventOut:
+    event = _editable(db, event_id)
     _apply(event, data)
     db.commit()
     return _out(event, today())
 
 
 def remove(db: Session, event_id: int) -> None:
-    event = db.get(CalendarEvent, event_id)
-    if event is None:
-        raise CalendarError("找不到這個行程", status_code=404)
+    event = _editable(db, event_id)
     db.delete(event)
     db.commit()
 
@@ -242,6 +263,123 @@ def extract_from_file(db: Session, data: bytes, media_type: str, exams_only: boo
     if result.drafts:
         notices = [notice for notice in notices if "像素" not in notice]  # 讀得出來就不用提解析度
     return result.model_copy(update={"warnings": notices + result.warnings})
+
+
+# ---------- 訂閱 iCal ----------
+
+
+def _subscription_out(db: Session, subscription: CalendarSubscription) -> SubscriptionOut:
+    upcoming = db.scalar(
+        select(func.count(CalendarEvent.id)).where(
+            CalendarEvent.subscription_id == subscription.id,
+            or_(CalendarEvent.date >= today(), CalendarEvent.end_date >= today()),
+        )
+    )
+    return SubscriptionOut(
+        id=subscription.id,
+        name=subscription.name,
+        url=subscription.url,
+        include_deadlines=subscription.include_deadlines,
+        last_synced_at=subscription.last_synced_at,
+        last_error=subscription.last_error,
+        upcoming_count=upcoming or 0,
+    )
+
+
+def list_subscriptions(db: Session) -> list[SubscriptionOut]:
+    return [_subscription_out(db, sub) for sub in db.scalars(select(CalendarSubscription).order_by(CalendarSubscription.id))]
+
+
+def presets(db: Session) -> PresetList:
+    source, calendars = subscriptions.load_presets()
+    subscribed = set(db.scalars(select(CalendarSubscription.url)))
+    return PresetList(
+        source=source,
+        calendars=[PresetCalendar(name=c["name"], url=c["url"], subscribed=c["url"] in subscribed) for c in calendars],
+    )
+
+
+def sync(db: Session, subscription_id: int) -> SyncResult:
+    """下載並同步一個訂閱。失敗時保留原本的事件，只記錄錯誤。"""
+    subscription = db.get(CalendarSubscription, subscription_id)
+    if subscription is None:
+        raise CalendarError("找不到這個訂閱", status_code=404)
+    try:
+        _, remote = subscriptions.parse(subscriptions.fetch(subscription.url), get_settings().timezone, today())
+    except subscriptions.SubscriptionError as error:
+        subscription.last_error = str(error)
+        db.commit()
+        raise CalendarError(str(error), status_code=502) from error
+
+    if not subscription.include_deadlines:
+        remote = [event for event in remote if event.kind != "deadline"]
+    existing = {
+        event.external_uid: event
+        for event in db.scalars(select(CalendarEvent).where(CalendarEvent.subscription_id == subscription.id))
+    }
+    now = datetime.now(UTC).replace(tzinfo=None)
+    added = updated = 0
+    for item in remote:
+        event = existing.pop(item.uid, None)
+        if event is None:
+            event = CalendarEvent(
+                source="subscription", subscription_id=subscription.id, external_uid=item.uid, created_at=now
+            )
+            db.add(event)
+            added += 1
+        else:
+            updated += 1
+        event.title = item.title
+        event.kind = item.kind
+        event.date = item.date
+        event.end_date = item.end_date
+        event.time = item.time
+        event.location = item.location
+        event.note = item.note
+        event.subject = None
+
+    removed = 0
+    for event in existing.values():  # 來源已經沒有的事件：未來的刪掉，過去的留著當紀錄
+        if (event.end_date or event.date) >= today():
+            db.delete(event)
+            removed += 1
+    subscription.last_synced_at = now
+    subscription.last_error = None
+    db.commit()
+    return SyncResult(subscription=_subscription_out(db, subscription), added=added, updated=updated, removed=removed)
+
+
+def subscribe(db: Session, data: SubscriptionIn) -> SyncResult:
+    try:
+        url = subscriptions.normalize_url(data.url)
+    except subscriptions.SubscriptionError as error:
+        raise CalendarError(str(error)) from error
+    if db.scalar(select(CalendarSubscription.id).where(CalendarSubscription.url == url)):
+        raise CalendarError("已經訂閱過這個行事曆了", status_code=409)
+    try:
+        name, _ = subscriptions.parse(subscriptions.fetch(url), get_settings().timezone, today())
+    except subscriptions.SubscriptionError as error:
+        raise CalendarError(str(error), status_code=502) from error
+
+    subscription = CalendarSubscription(
+        name=(data.name or name or "訂閱的行事曆")[:100],
+        url=url,
+        include_deadlines=data.include_deadlines,
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    db.add(subscription)
+    db.commit()
+    return sync(db, subscription.id)
+
+
+def unsubscribe(db: Session, subscription_id: int) -> None:
+    """取消訂閱，連同它的事件一起刪除。"""
+    subscription = db.get(CalendarSubscription, subscription_id)
+    if subscription is None:
+        raise CalendarError("找不到這個訂閱", status_code=404)
+    db.execute(delete(CalendarEvent).where(CalendarEvent.subscription_id == subscription_id))
+    db.delete(subscription)
+    db.commit()
 
 
 def _ics_text(value: str) -> str:

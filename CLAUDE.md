@@ -150,6 +150,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 - AI 相關設定（`LS_AI_PROVIDER`、`LS_AI_MODEL`、`LS_AI_MONTHLY_BUDGET_USD`、`LS_CLAUDE_CLI`）也在 config.py；測試一律用 `ai.service.set_provider(FakeProvider())`，**不要在測試中呼叫真的模型**。
 - 可調參數在 `backend/app/core/config.py`，可用 `backend/.env` 覆寫（`LS_` 前綴，例如 `LS_MASTERY_STREAK=5`）。
 - `alembic.ini` 必須維持純 ASCII（Windows cp950 讀到中文會失敗）。
+- SQLite migration 用 batch 模式：新增的 ForeignKey／UniqueConstraint **一定要給 name**，否則升級失敗，而且 SQLite DDL 不在交易內，失敗前建好的資料表會殘留。
 - 截圖或測試要造假資料時，複製 `data/` 到暫存區並用 `LS_DATA_DIR` 指向副本，**不要寫進使用者真正的資料庫**。
 - uvicorn `--reload` 在 Windows 會留下 multiprocessing 子程序，關伺服器時要連子程序一起關，否則 8000 埠會被舊版程式佔住。
 - Write 工具會把原始碼裡的 Unicode 跳脫序列（反斜線 u 加 4 碼）轉成實際字元；私有區字元（選項標記）要用 Python 腳本寫成跳脫序列。

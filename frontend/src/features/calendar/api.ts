@@ -21,3 +21,14 @@ export function extractFromFile(file: File, examsOnly: boolean) {
 }
 
 export const ICS_URL = '/api/calendar/export.ics'
+
+export type Subscription = components['schemas']['SubscriptionOut']
+export type SyncResult = components['schemas']['SyncResult']
+export type PresetList = components['schemas']['PresetList']
+
+export const fetchSubscriptions = () => api.get<Subscription[]>('/calendar/subscriptions')
+export const fetchPresets = () => api.get<PresetList>('/calendar/subscriptions/presets')
+export const subscribe = (data: { url: string; name?: string | null; include_deadlines: boolean }) =>
+  api.post<SyncResult>('/calendar/subscriptions', data)
+export const syncSubscription = (id: number) => api.post<SyncResult>(`/calendar/subscriptions/${id}/sync`)
+export const unsubscribe = (id: number) => api.delete<null>(`/calendar/subscriptions/${id}`)

@@ -269,3 +269,103 @@ def test_claude_code_disables_thinking(monkeypatch):
     monkeypatch.setattr("subprocess.run", fake_run)
     ClaudeCodeProvider("claude", "claude-haiku-4-5", 60).complete("系統", "問題")
     assert captured["env"]["MAX_THINKING_TOKENS"] == "0"
+
+
+# ---------- 訂閱 iCal ----------
+
+
+def make_ics(events: list[tuple[str, str, str, str]], name: str = "普通考試") -> bytes:
+    """events: (uid, 開始 YYYYMMDD, 結束 YYYYMMDD（隔天）, 名稱)"""
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"X-WR-CALNAME:{name}", "X-WR-TIMEZONE:Asia/Taipei"]
+    for uid, start, end, title in events:
+        lines += ["BEGIN:VEVENT", f"UID:{uid}", f"DTSTART;VALUE=DATE:{start}", f"DTEND;VALUE=DATE:{end}", f"SUMMARY:{title}", "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines).encode()
+
+
+@pytest.fixture
+def remote_ics(monkeypatch):
+    from app.modules.calendar import subscriptions
+
+    state = {"data": b"", "urls": []}
+
+    def fake_fetch(url):
+        state["urls"].append(url)
+        return state["data"]
+
+    monkeypatch.setattr(subscriptions, "fetch", fake_fetch)
+    return state
+
+
+def test_subscribe_imports_future_events_and_classifies(db, remote_ics):
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    future = calendar_service.today() + timedelta(days=30)
+    fmt = lambda d: d.strftime("%Y%m%d")  # noqa: E731
+    remote_ics["data"] = make_ics(
+        [
+            ("old", "20240705", "20240711", "普通考試考試"),
+            ("signup", fmt(future), fmt(future + timedelta(days=1)), "普通考試報名截止日"),
+            ("exam", fmt(future + timedelta(days=90)), fmt(future + timedelta(days=94)), "普通考試考試"),
+        ]
+    )
+    result = calendar_service.subscribe(db, SubscriptionIn(url="c_abc123def456ghi789jkl@group.calendar.google.com"))
+    assert remote_ics["urls"][0].startswith("https://calendar.google.com/calendar/ical/c_abc123")
+    assert result.subscription.name == "普通考試"
+    assert result.added == 2  # 過去的不匯入
+
+    events = {event.title: event for event in calendar_service.list_events(db)}
+    assert events["普通考試報名截止日"].kind == "deadline"
+    exam = events["普通考試考試"]
+    assert exam.kind == "exam" and exam.end_date == exam.date + timedelta(days=3)  # DTEND 是隔天，要減一天
+    assert exam.source == "subscription" and exam.subscription_name == "普通考試"
+    assert calendar_service.countdown(db).next_exam.title == "普通考試考試"
+
+    with pytest.raises(calendar_service.CalendarError, match="不能個別修改"):
+        calendar_service.remove(db, exam.id)
+    with pytest.raises(calendar_service.CalendarError, match="已經訂閱過"):
+        calendar_service.subscribe(db, SubscriptionIn(url="c_abc123def456ghi789jkl@group.calendar.google.com"))
+
+    # 再同步：更新同一筆、來源刪掉的移除
+    remote_ics["data"] = make_ics([("exam", fmt(future + timedelta(days=91)), fmt(future + timedelta(days=95)), "普通考試考試")])
+    again = calendar_service.sync(db, result.subscription.id)
+    assert (again.added, again.updated, again.removed) == (0, 1, 1)
+    assert [e.date for e in calendar_service.list_events(db)] == [future + timedelta(days=91)]
+
+    calendar_service.unsubscribe(db, result.subscription.id)
+    assert calendar_service.list_events(db) == []
+
+
+def test_subscription_without_deadlines_and_errors(db, remote_ics):
+    from app.modules.calendar import subscriptions
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    future = calendar_service.today() + timedelta(days=10)
+    fmt = lambda d: d.strftime("%Y%m%d")  # noqa: E731
+    remote_ics["data"] = make_ics(
+        [("a", fmt(future), fmt(future + timedelta(days=1)), "報名開始日"), ("b", fmt(future), fmt(future + timedelta(days=2)), "期中考試")]
+    )
+    result = calendar_service.subscribe(db, SubscriptionIn(url="webcal://example.com/exams.ics", include_deadlines=False))
+    assert remote_ics["urls"][0] == "https://example.com/exams.ics"
+    assert [e.title for e in calendar_service.list_events(db)] == ["期中考試"]
+    assert result.subscription.upcoming_count == 1
+
+    remote_ics["data"] = b"<html>not a calendar</html>"
+    with pytest.raises(calendar_service.CalendarError, match="不是 iCal"):
+        calendar_service.sync(db, result.subscription.id)
+    assert calendar_service.list_subscriptions(db)[0].last_error
+    assert [e.title for e in calendar_service.list_events(db)] == ["期中考試"]  # 失敗時保留原本的事件
+
+    with pytest.raises(calendar_service.CalendarError, match="iCal 網址"):
+        calendar_service.subscribe(db, SubscriptionIn(url="not a url"))
+    assert subscriptions.classify("一般警察特考筆試") == "exam"
+    assert subscriptions.classify("放榜") == "deadline"
+    assert subscriptions._location("TW") is None and subscriptions._location("臺北考區") == "臺北考區"
+
+
+def test_presets_list(db):
+    presets = calendar_service.presets(db)
+    names = [preset.name for preset in presets.calendars]
+    assert "高等考試" in names and "普通考試" in names
+    assert all(preset.url.endswith("/public/basic.ics") for preset in presets.calendars)
+    assert "非官方" in presets.source

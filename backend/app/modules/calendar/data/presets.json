@@ -1,0 +1,137 @@
+{
+  "source": "TKB 考試行事曆（https://www.tkbgo.com.tw/examCalendar/toExamCalendarIndex）提供的公開 Google 日曆；非官方資料，日期請以考選部等主辦單位公告為準。",
+  "calendars": [
+    {
+      "name": "普通考試",
+      "calendar_id": "c_jdlh2u0iu4fqokph0uchbltc8g@group.calendar.google.com"
+    },
+    {
+      "name": "高等考試",
+      "calendar_id": "c_j5iejgn7081n5aguic6l95p07c@group.calendar.google.com"
+    },
+    {
+      "name": "國營就業",
+      "calendar_id": "c_upslrsgl0o11ismvthposls4n4@group.calendar.google.com"
+    },
+    {
+      "name": "台電養成班",
+      "calendar_id": "c_b7qgtjmuic97n0vhlk8pii6bv0@group.calendar.google.com"
+    },
+    {
+      "name": "台水評價",
+      "calendar_id": "c_6tul5991j806kbgibdpteeeq8k@group.calendar.google.com"
+    },
+    {
+      "name": "台北捷運(北捷)",
+      "calendar_id": "c_8f61vnjls6qgbt55dvqu3lims4@group.calendar.google.com"
+    },
+    {
+      "name": "桃園捷運",
+      "calendar_id": "c_rhjkgkbo06koiu37vu57kp61lc@group.calendar.google.com"
+    },
+    {
+      "name": "國營事業聯招",
+      "calendar_id": "c_vhl6fmv5hsonqve1bnok7tf4ps@group.calendar.google.com"
+    },
+    {
+      "name": "台鐵營運人員",
+      "calendar_id": "c_9c0e1e73a95d0a476e5993d8222e5b1814738f301aa5fdece64469d106da027d@group.calendar.google.com"
+    },
+    {
+      "name": "台中捷運",
+      "calendar_id": "c_t5gtib4iajmvj10e5ki7dsdkfg@group.calendar.google.com"
+    },
+    {
+      "name": "台北自來水",
+      "calendar_id": "c_aqdn2elr3v8gh01hfd31q1rh4s@group.calendar.google.com"
+    },
+    {
+      "name": "台灣糖業",
+      "calendar_id": "c_rq5jd80m83sqro11t7b5ldb6vo@group.calendar.google.com"
+    },
+    {
+      "name": "中油雇員",
+      "calendar_id": "c_kb9mapr0rqpmnkj2bt9gp11ta0@group.calendar.google.com"
+    },
+    {
+      "name": "銀行考試",
+      "calendar_id": "c_gqrav29lbhuohdmhggph3jttp4@group.calendar.google.com"
+    },
+    {
+      "name": "台灣銀行",
+      "calendar_id": "c_mj86ole5h339quqo6h0q7se2cg@group.calendar.google.com"
+    },
+    {
+      "name": "第一銀行",
+      "calendar_id": "c_s9rng0u3jf6adkm5mmni1c8et0@group.calendar.google.com"
+    },
+    {
+      "name": "華南銀行",
+      "calendar_id": "c_gm3qo3c7jinsnbq41s1ics3pck@group.calendar.google.com"
+    },
+    {
+      "name": "金融基測(FIT)",
+      "calendar_id": "c_mo9kaatrp7cl9ujkegu10qe9rk@group.calendar.google.com"
+    },
+    {
+      "name": "中國輸出入銀行",
+      "calendar_id": "c_q8sobp6s5tpnvu7fefmb0rm86g@group.calendar.google.com"
+    },
+    {
+      "name": "彰化銀行",
+      "calendar_id": "c_2d1l7m00f9iqcffmc712gufrlk@group.calendar.google.com"
+    },
+    {
+      "name": "土地銀行",
+      "calendar_id": "c_e0bf8073amsies7e2faev6mdg8@group.calendar.google.com"
+    },
+    {
+      "name": "合作金庫",
+      "calendar_id": "c_4ge6lo13v7717ie31n8dfdct50@group.calendar.google.com"
+    },
+    {
+      "name": "台灣中小企業銀行",
+      "calendar_id": "c_ckql94fp4r12p631b06lqojn2g@group.calendar.google.com"
+    },
+    {
+      "name": "兆豐銀行",
+      "calendar_id": "c_b831bqlovummq7ptss26e9d9ks@group.calendar.google.com"
+    },
+    {
+      "name": "律師執照",
+      "calendar_id": "c_susrhahge043f4ffgil0npk080@group.calendar.google.com"
+    },
+    {
+      "name": "語言",
+      "calendar_id": "c_5m90i496ojlchnlu9t3out7nfg@group.calendar.google.com"
+    },
+    {
+      "name": "高升大",
+      "calendar_id": "c_ankgd3tfdhl1pj2da5rnp31rm4@group.calendar.google.com"
+    },
+    {
+      "name": "個人申請",
+      "calendar_id": "c_l62ush8srcnbavjc32659nl3ek@group.calendar.google.com"
+    },
+    {
+      "name": "警專",
+      "calendar_id": "c_24iu7o64madm9g5k937v5h89ck@group.calendar.google.com"
+    },
+    {
+      "name": "警大",
+      "calendar_id": "c_dr0f6n9p6ub9ho4b58f7sriau4@group.calendar.google.com"
+    },
+    {
+      "name": "繁星入學",
+      "calendar_id": "c_r5rc5s9cb3asnj4m1sf7h9hq54@group.calendar.google.com"
+    },
+    {
+      "name": "國升高",
+      "calendar_id": "c_ejr1nibudk82iuo7q0fcnk6ths@group.calendar.google.com"
+    },
+    {
+      "name": "國中會考",
+      "calendar_id": "c_6o7no42u4eu63et4sc7lh0mnrs@group.calendar.google.com"
+    }
+  ]
+}

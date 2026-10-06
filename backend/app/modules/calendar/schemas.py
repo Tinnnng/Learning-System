@@ -27,7 +27,9 @@ class EventIn(BaseModel):
 
 class EventOut(EventIn):
     id: int
-    source: Literal["manual", "photo"]
+    source: Literal["manual", "photo", "subscription"]
+    subscription_id: int | None = None
+    subscription_name: str | None = None
     days_until: int
     """距離今天幾天（今天＝0，已過去為負數）"""
 
@@ -41,3 +43,37 @@ class ExtractResult(BaseModel):
 class Countdown(BaseModel):
     next_exam: EventOut | None
     upcoming: list[EventOut]
+
+
+class SubscriptionIn(BaseModel):
+    url: str = Field(min_length=5, max_length=500, description="iCal 網址（https://、webcal://）或 Google 日曆 ID")
+    name: str | None = Field(default=None, max_length=100, description="不填就用行事曆本身的名稱")
+    include_deadlines: bool = True
+
+
+class SubscriptionOut(BaseModel):
+    id: int
+    name: str
+    url: str
+    include_deadlines: bool
+    last_synced_at: dt.datetime | None
+    last_error: str | None
+    upcoming_count: int
+
+
+class SyncResult(BaseModel):
+    subscription: SubscriptionOut
+    added: int
+    updated: int
+    removed: int
+
+
+class PresetCalendar(BaseModel):
+    name: str
+    url: str
+    subscribed: bool
+
+
+class PresetList(BaseModel):
+    source: str
+    calendars: list[PresetCalendar]

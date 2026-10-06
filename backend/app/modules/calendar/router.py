@@ -5,7 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.calendar import service
-from app.modules.calendar.schemas import Countdown, EventIn, EventOut, ExtractResult
+from app.modules.calendar.schemas import (
+    Countdown,
+    EventIn,
+    EventOut,
+    ExtractResult,
+    PresetList,
+    SubscriptionIn,
+    SubscriptionOut,
+    SyncResult,
+)
 
 router = APIRouter(tags=["calendar"])
 
@@ -50,6 +59,33 @@ async def extract(
     """拍照或上傳 PDF 辨識：回傳 AI 找到的行程草稿（不會自動儲存）。"""
     data = await image.read()
     return _run(lambda: service.extract_from_file(db, data, image.content_type or "", exams_only))
+
+
+@router.get("/subscriptions", response_model=list[SubscriptionOut])
+def list_subscriptions(db: Session = Depends(get_db)) -> list[SubscriptionOut]:
+    return service.list_subscriptions(db)
+
+
+@router.get("/subscriptions/presets", response_model=PresetList)
+def subscription_presets(db: Session = Depends(get_db)) -> PresetList:
+    """可以直接訂閱的考試行事曆清單。"""
+    return service.presets(db)
+
+
+@router.post("/subscriptions", response_model=SyncResult, status_code=201)
+def subscribe(data: SubscriptionIn, db: Session = Depends(get_db)) -> SyncResult:
+    return _run(lambda: service.subscribe(db, data))
+
+
+@router.post("/subscriptions/{subscription_id}/sync", response_model=SyncResult)
+def sync_subscription(subscription_id: int, db: Session = Depends(get_db)) -> SyncResult:
+    return _run(lambda: service.sync(db, subscription_id))
+
+
+@router.delete("/subscriptions/{subscription_id}", status_code=204)
+def unsubscribe(subscription_id: int, db: Session = Depends(get_db)) -> Response:
+    _run(lambda: service.unsubscribe(db, subscription_id))
+    return Response(status_code=204)
 
 
 @router.get("/export.ics")

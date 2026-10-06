@@ -23,6 +23,7 @@ import {
 } from './api'
 import { EventForm } from './EventForm'
 import { emptyEvent, KIND_LABELS } from './eventDefaults'
+import { SubscriptionPanel } from './Subscriptions'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const pad = (value: number) => String(value).padStart(2, '0')
@@ -322,6 +323,11 @@ export function CalendarPage() {
           <span className="truncate font-medium">{event.title}</span>
           <span className="flex-none rounded-sm bg-print-faint px-1.5 text-[11px] text-print">{KIND_LABELS[event.kind ?? 'exam']}</span>
           {event.source === 'photo' && <Icon name="camera" size={14} className="flex-none text-muted" label="拍照加入" />}
+          {event.subscription_name && (
+            <span className="flex-none truncate text-[11px] text-muted" title="訂閱的行程，隨來源更新">
+              訂閱・{event.subscription_name}
+            </span>
+          )}
         </span>
         <span className="text-xs text-muted">
           {dateLabel(event)}
@@ -329,7 +335,7 @@ export function CalendarPage() {
           {event.subject && `・${event.subject}`}
         </span>
       </span>
-      <span className="flex gap-1">
+      <span className={cx('flex gap-1', event.subscription_id != null && 'invisible')}>
         <Button variant="ghost" size="sm" aria-label={`編輯 ${event.title}`} onClick={() => setEditing({ id: event.id, value: { ...event } })}>
           <Icon name="edit" size={16} />
         </Button>
@@ -386,6 +392,9 @@ export function CalendarPage() {
             ) : (
               <ul className="m-0 list-none rounded-lg bg-sheet px-4 p-0 shadow-sheet sm:px-6">{upcoming.map(row)}</ul>
             )}
+            <div className="mt-6">
+              <SubscriptionPanel />
+            </div>
             {past.length > 0 && (
               <details className="mt-4">
                 <summary className="cursor-pointer text-sm text-muted">已經過去的行程</summary>
