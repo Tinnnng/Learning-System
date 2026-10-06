@@ -1,0 +1,28 @@
+# 相依套件與建置產物
+node_modules/
+frontend/dist/
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 本機設定
+backend/.env
+
+# 個人資料：資料庫、原始檔案、轉檔結果、圖片
+data/learning.db
+data/learning.db-*
+data/inbox/*
+data/converted/*
+data/assets/*
+!data/**/.gitkeep
+
+# 編輯器與系統檔
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# 記錄檔
+*.log
+*.local

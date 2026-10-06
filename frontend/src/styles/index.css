@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* 以 class 切換夜間模式（html 上的 .dark），設計 tokens 於階段 5 建立 */
+@custom-variant dark (&:where(.dark, .dark *));

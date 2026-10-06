@@ -1,0 +1,86 @@
+"""產生單字題目。選項由亂數決定，傳入固定種子就能每次產生一樣的題目（每日複習重新整理不會變）。"""
+
+import random
+import re
+
+from app.modules.vocab.models import Word
+from app.modules.vocab.schemas import QuizItem, QuizType
+
+CHOICE_COUNT = 4
+BLANK = "{{blank}}"
+
+
+def _term_pattern(term: str) -> re.Pattern:
+    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+
+
+def can_cloze(word: Word) -> bool:
+    return bool(word.example and _term_pattern(word.term).search(word.example))
+
+
+def choose_quiz_type(word: Word, attempts: int, rng: random.Random, pool_size: int) -> QuizType:
+    """新單字先考認得（英選中）；學過的隨機換題型。單字太少湊不出選項時考拼字。"""
+    if pool_size < CHOICE_COUNT:
+        return "spelling"
+    if attempts == 0:
+        return "en_to_zh"
+    types: list[QuizType] = ["en_to_zh", "zh_to_en", "spelling"]
+    if can_cloze(word):
+        types.append("cloze")
+    return rng.choice(types)
+
+
+def _distractors(word: Word, pool: list[Word], rng: random.Random, field: str) -> list[str]:
+    correct = getattr(word, field)
+    same_pos = [w for w in pool if w.id != word.id and w.part_of_speech == word.part_of_speech]
+    others = [w for w in pool if w.id != word.id and w.part_of_speech != word.part_of_speech]
+    rng.shuffle(same_pos)
+    rng.shuffle(others)
+    picked: list[str] = []
+    for candidate in same_pos + others:
+        value = getattr(candidate, field)
+        if value != correct and value not in picked:
+            picked.append(value)
+        if len(picked) == CHOICE_COUNT - 1:
+            break
+    return picked
+
+
+def expected_answer(word: Word, quiz_type: QuizType) -> str:
+    return word.meaning if quiz_type == "en_to_zh" else word.term
+
+
+def build_item(word: Word, quiz_type: QuizType, pool: list[Word], rng: random.Random) -> QuizItem:
+    if quiz_type == "cloze" and not can_cloze(word):
+        quiz_type = "zh_to_en"
+
+    if quiz_type == "spelling":
+        letters = " ".join("_" for _ in word.term[1:])
+        return QuizItem(
+            word_id=word.id,
+            quiz_type=quiz_type,
+            prompt=word.meaning,
+            part_of_speech=word.part_of_speech,
+            options=None,
+            hint=f"{word.term[0]} {letters}（{len(word.term)} 個字母）",
+        )
+
+    field = "meaning" if quiz_type == "en_to_zh" else "term"
+    options = [getattr(word, field), *_distractors(word, pool, rng, field)]
+    rng.shuffle(options)
+    if quiz_type == "en_to_zh":
+        prompt = word.term
+    elif quiz_type == "zh_to_en":
+        prompt = word.meaning
+    else:
+        prompt = _term_pattern(word.term).sub(BLANK, word.example, count=1)
+    return QuizItem(
+        word_id=word.id, quiz_type=quiz_type, prompt=prompt, part_of_speech=word.part_of_speech, options=options
+    )
+
+
+def is_correct(word: Word, quiz_type: QuizType, response: str) -> bool:
+    expected = expected_answer(word, quiz_type)
+    if quiz_type == "spelling":
+        return response.strip().lower() == expected.strip().lower()
+    return response.strip() == expected.strip()

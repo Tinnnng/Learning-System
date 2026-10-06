@@ -1,0 +1,346 @@
+"""單字的公開介面。
+
+- 每日複習：每天抽 daily_vocab_count 個字（預設 5），優先抽間隔複習到期的，再補新單字，最後隨機補滿。
+- 答錯進「錯題單字」，連續答對 word_mastery_streak 次（預設 5）才移出。
+- 每次作答都交給 srs 排下次複習時間（不論對錯，長期記憶都需要複習）。
+"""
+
+import random
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Literal
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.modules.srs import service as srs_service
+from app.modules.vocab import quiz
+from app.modules.vocab.importer import parse_word_table
+from app.modules.vocab.models import DailySet, Word, WordAttempt, WordProgress
+from app.modules.vocab.schemas import (
+    AnswerIn,
+    AnswerResult,
+    BuiltinList,
+    DailyQuiz,
+    ImportResult,
+    QuizItem,
+    VocabStats,
+    WordIn,
+    WordOut,
+    WordPage,
+    WordProgressOut,
+    WordStatus,
+)
+
+BUILTIN_DIR = Path(__file__).parent / "data"
+BUILTIN_LISTS = {"toeic_core": "多益核心單字"}
+QuizSource = Literal["wrong", "due", "new", "all"]
+
+
+class VocabError(Exception):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _naive(moment: datetime) -> datetime:
+    return moment.astimezone(UTC).replace(tzinfo=None)
+
+
+def today(now: datetime | None = None) -> str:
+    """使用者時區的今天（YYYY-MM-DD）。"""
+    return (now or _utc_now()).astimezone(ZoneInfo(get_settings().timezone)).date().isoformat()
+
+
+def _term_key(term: str) -> str:
+    return " ".join(term.lower().split())
+
+
+# ---------- 匯入 ----------
+
+
+def upsert_words(db: Session, words: list[WordIn], source: str | None) -> ImportResult:
+    """同一個字（不分大小寫）已存在就更新內容，作答紀錄保留。"""
+    existing = {word.term_key: word for word in db.scalars(select(Word))}
+    created = updated = 0
+    for item in words:
+        key = _term_key(item.term)
+        word = existing.get(key)
+        if word is None:
+            word = Word(term_key=key, source=source)
+            db.add(word)
+            existing[key] = word
+            created += 1
+        else:
+            updated += 1
+        word.term = item.term.strip()
+        word.meaning = item.meaning
+        word.part_of_speech = item.part_of_speech
+        word.example = item.example
+        word.example_translation = item.example_translation
+        word.tags = sorted(set(word.tags or []) | set(item.tags))
+    db.commit()
+    return ImportResult(created=created, updated=updated, skipped=0, errors=[])
+
+
+def import_file(db: Session, filename: str, data: bytes, source: str | None = None) -> ImportResult:
+    words, errors = parse_word_table(filename, data)
+    result = upsert_words(db, words, source or Path(filename).stem)
+    return result.model_copy(update={"skipped": len(errors), "errors": errors})
+
+
+def list_builtin() -> list[BuiltinList]:
+    lists = []
+    for name, title in BUILTIN_LISTS.items():
+        path = BUILTIN_DIR / f"{name}.csv"
+        if path.exists():
+            words, _ = parse_word_table(path.name, path.read_bytes())
+            lists.append(BuiltinList(name=name, title=title, count=len(words)))
+    return lists
+
+
+def import_builtin(db: Session, name: str) -> ImportResult:
+    path = BUILTIN_DIR / f"{name}.csv"
+    if name not in BUILTIN_LISTS or not path.exists():
+        raise VocabError("找不到這份內建單字表", status_code=404)
+    return import_file(db, path.name, path.read_bytes(), source=BUILTIN_LISTS[name])
+
+
+# ---------- 查詢 ----------
+
+
+def _status(progress: WordProgress | None) -> WordStatus:
+    if progress is None:
+        return "new"
+    if progress.in_wrong_list:
+        return "wrong"
+    if progress.mastered_at is not None:
+        return "mastered"
+    return "learning"
+
+
+def _word_out(word: Word, progress: WordProgress | None, review_due: datetime | None) -> WordOut:
+    return WordOut(
+        id=word.id,
+        term=word.term,
+        meaning=word.meaning,
+        part_of_speech=word.part_of_speech,
+        example=word.example,
+        example_translation=word.example_translation,
+        tags=word.tags or [],
+        source=word.source,
+        status=_status(progress),
+        progress=WordProgressOut(
+            attempts=progress.attempts,
+            correct_count=progress.correct_count,
+            wrong_count=progress.wrong_count,
+            correct_streak=progress.correct_streak,
+            mastery_target=get_settings().word_mastery_streak,
+            in_wrong_list=progress.in_wrong_list,
+            last_answered_at=progress.last_answered_at,
+            mastered_at=progress.mastered_at,
+        )
+        if progress
+        else None,
+        review_due=review_due,
+    )
+
+
+def _words_out(db: Session, words: list[Word]) -> list[WordOut]:
+    ids = [word.id for word in words]
+    progress = {p.word_id: p for p in db.scalars(select(WordProgress).where(WordProgress.word_id.in_(ids)))}
+    cards = srs_service.get_cards(db, "word", ids)
+    return [
+        _word_out(word, progress.get(word.id), cards[word.id].due if word.id in cards else None) for word in words
+    ]
+
+
+def list_words(
+    db: Session,
+    search: str | None = None,
+    tag: str | None = None,
+    status: WordStatus | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> WordPage:
+    query = select(Word).outerjoin(WordProgress, WordProgress.word_id == Word.id)
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.where(or_(Word.term.ilike(pattern), Word.meaning.like(pattern)))
+    if status == "new":
+        query = query.where(WordProgress.word_id.is_(None))
+    elif status == "wrong":
+        query = query.where(WordProgress.in_wrong_list.is_(True))
+    elif status == "mastered":
+        query = query.where(WordProgress.in_wrong_list.is_(False), WordProgress.mastered_at.is_not(None))
+    elif status == "learning":
+        query = query.where(WordProgress.in_wrong_list.is_(False), WordProgress.mastered_at.is_(None))
+    words = list(db.scalars(query.order_by(Word.term_key)))
+    if tag:
+        words = [word for word in words if tag in (word.tags or [])]
+    return WordPage(total=len(words), items=_words_out(db, words[offset : offset + limit]))
+
+
+def wrong_words(db: Session) -> list[WordOut]:
+    words = db.scalars(
+        select(Word)
+        .join(WordProgress, WordProgress.word_id == Word.id)
+        .where(WordProgress.in_wrong_list.is_(True))
+        .order_by(WordProgress.last_wrong_at.desc())
+    )
+    return _words_out(db, list(words))
+
+
+# ---------- 出題與作答 ----------
+
+
+def _attempt_counts(db: Session) -> dict[int, int]:
+    return {p.word_id: p.attempts for p in db.scalars(select(WordProgress))}
+
+
+def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
+    now = now or _utc_now()
+    day = today(now)
+    pool = list(db.scalars(select(Word).order_by(Word.id)))
+    if not pool:
+        return DailyQuiz(day=day, items=[], done=0, total=0)
+    words = {word.id: word for word in pool}
+
+    daily = db.get(DailySet, day)
+    if daily is None:
+        rng = random.Random(day)
+        count = get_settings().daily_vocab_count
+        attempts = _attempt_counts(db)
+        chosen = [wid for wid in srs_service.due_item_ids(db, "word", now=now) if wid in words][:count]
+        new_words = [wid for wid in words if wid not in attempts and wid not in chosen]
+        rng.shuffle(new_words)
+        chosen += new_words[: count - len(chosen)]
+        rest = [wid for wid in words if wid not in chosen]
+        rng.shuffle(rest)
+        chosen += rest[: count - len(chosen)]
+        types = [quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)) for wid in chosen]
+        daily = DailySet(day=day, word_ids=chosen, quiz_types=types)
+        db.add(daily)
+        db.commit()
+
+    answered = {
+        attempt.word_id: attempt.is_correct
+        for attempt in db.scalars(
+            select(WordAttempt).where(WordAttempt.context == "daily", WordAttempt.daily_day == day)
+        )
+    }
+    items = []
+    for word_id, quiz_type in zip(daily.word_ids, daily.quiz_types, strict=True):
+        if word_id not in words:
+            continue  # 單字被刪除
+        item = quiz.build_item(words[word_id], quiz_type, pool, random.Random(f"{day}-{word_id}"))
+        if word_id in answered:
+            item = item.model_copy(update={"answered": True, "is_correct": answered[word_id]})
+        items.append(item)
+    return DailyQuiz(day=day, items=items, done=sum(1 for item in items if item.answered), total=len(items))
+
+
+def build_quiz(db: Session, source: QuizSource, count: int = 10, seed: int | None = None) -> list[QuizItem]:
+    """自由練習／錯題單字集中複習的題目（不會保存，每次產生都不同）。"""
+    rng = random.Random(seed)
+    pool = list(db.scalars(select(Word).order_by(Word.id)))
+    words = {word.id: word for word in pool}
+    attempts = _attempt_counts(db)
+    if source == "wrong":
+        ids = [word.id for word in wrong_words(db)]
+    elif source == "due":
+        ids = [wid for wid in srs_service.due_item_ids(db, "word") if wid in words]
+    elif source == "new":
+        ids = [wid for wid in words if wid not in attempts]
+    else:
+        ids = list(words)
+    rng.shuffle(ids)
+    return [
+        quiz.build_item(words[wid], quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)), pool, rng)
+        for wid in ids[:count]
+    ]
+
+
+def _update_progress(db: Session, word_id: int, correct: bool, answered_at: datetime) -> None:
+    progress = db.get(WordProgress, word_id)
+    if progress is None:
+        progress = WordProgress(
+            word_id=word_id, attempts=0, correct_count=0, wrong_count=0, correct_streak=0, in_wrong_list=False
+        )
+        db.add(progress)
+    progress.attempts += 1
+    progress.last_answered_at = answered_at
+    if correct:
+        progress.correct_count += 1
+        progress.correct_streak += 1
+        if progress.in_wrong_list and progress.correct_streak >= get_settings().word_mastery_streak:
+            progress.in_wrong_list = False
+            progress.mastered_at = answered_at
+    else:
+        progress.wrong_count += 1
+        progress.correct_streak = 0
+        progress.in_wrong_list = True
+        progress.mastered_at = None
+        progress.last_wrong_at = answered_at
+
+
+def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerResult:
+    now = now or _utc_now()
+    word = db.get(Word, data.word_id)
+    if word is None:
+        raise VocabError("找不到這個單字", status_code=404)
+
+    day = today(now) if data.context == "daily" else None
+    if day is not None:
+        already = db.scalar(
+            select(WordAttempt.id).where(
+                WordAttempt.word_id == word.id, WordAttempt.context == "daily", WordAttempt.daily_day == day
+            )
+        )
+        if already:
+            raise VocabError("今天的每日複習已經作答過這個單字", status_code=409)
+
+    correct = quiz.is_correct(word, data.quiz_type, data.response)
+    db.add(
+        WordAttempt(
+            word_id=word.id,
+            quiz_type=data.quiz_type,
+            context=data.context,
+            daily_day=day,
+            response=data.response,
+            is_correct=correct,
+            answered_at=_naive(now),
+        )
+    )
+    _update_progress(db, word.id, correct, _naive(now))
+    srs_service.review(db, "word", word.id, "good" if correct else "again", now=now)
+    db.commit()
+    return AnswerResult(
+        is_correct=correct,
+        expected=quiz.expected_answer(word, data.quiz_type),
+        word=_words_out(db, [word])[0],
+    )
+
+
+def stats(db: Session, now: datetime | None = None) -> VocabStats:
+    now = now or _utc_now()
+    progress = list(db.scalars(select(WordProgress)))
+    daily = db.get(DailySet, today(now))
+    daily_done = db.scalar(
+        select(func.count(WordAttempt.id)).where(WordAttempt.context == "daily", WordAttempt.daily_day == today(now))
+    )
+    return VocabStats(
+        total=db.scalar(select(func.count(Word.id))) or 0,
+        studied=len(progress),
+        wrong_list=sum(1 for p in progress if p.in_wrong_list),
+        mastered=sum(1 for p in progress if p.mastered_at is not None and not p.in_wrong_list),
+        due_today=srs_service.summary(db, "word", now=now).due_now,
+        daily_done=daily_done or 0,
+        daily_total=len(daily.word_ids) if daily else get_settings().daily_vocab_count,
+    )
