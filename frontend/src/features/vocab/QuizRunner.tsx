@@ -131,8 +131,8 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
               <span
                 key={`${entry.word_id}-${position}`}
                 className={cx(
-                  'h-[16px] w-[11px] rounded-full border-[1.5px] transition-colors duration-[var(--dur)]',
-                  done ? (done.is_correct ? 'border-ok bg-ok' : 'border-bad bg-bad') : position === index ? 'border-ink' : 'border-accent',
+                  'h-2.5 w-6 rounded-[var(--radius-marker)] transition-colors duration-[var(--dur)]',
+                  done ? (done.is_correct ? 'bg-ok-hl' : 'bg-bad-hl') : position === index ? 'bg-hl' : 'bg-line',
                 )}
               />
             )

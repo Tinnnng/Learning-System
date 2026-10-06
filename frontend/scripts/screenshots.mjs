@@ -1,13 +1,16 @@
 // 設計自檢用：把主要頁面在桌機／手機、日間／夜間各截一張圖。
-// 用法：先 npm run dev，再執行 node scripts/screenshots.mjs <輸出資料夾> [頁面路徑...]
+// 用法：先 npm run dev，再執行 node scripts/screenshots.mjs <輸出資料夾> [--viewport] [頁面路徑...]
+// --viewport 只截第一個畫面（長頁面整頁截圖縮小後看不清楚時用）
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from '@playwright/test'
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:5173'
 const outDir = process.argv[2] ?? 'screenshots'
-const pages = process.argv.slice(3).length
-  ? process.argv.slice(3)
+const viewportOnly = process.argv.includes('--viewport')
+const args = process.argv.slice(3).filter((arg) => arg !== '--viewport')
+const pages = args.length
+  ? args
   : ['/', '/bank', '/review', '/overview', '/vocab', '/vocab/words', '/import']
 
 const viewports = {
@@ -24,9 +27,10 @@ for (const [device, viewport] of Object.entries(viewports)) {
     const page = await context.newPage()
     for (const path of pages) {
       await page.goto(BASE + path, { waitUntil: 'networkidle' })
-      await page.waitForTimeout(500)
+      await page.evaluate(() => document.fonts.ready)
+      await page.waitForTimeout(700)
       const name = `${path.replace(/[/:]+/g, '_').replace(/^_|_$/g, '') || 'home'}-${device}-${theme}.png`
-      await page.screenshot({ path: join(outDir, name), fullPage: true })
+      await page.screenshot({ path: join(outDir, name), fullPage: !viewportOnly })
       console.log(name)
     }
     await context.close()

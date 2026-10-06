@@ -49,7 +49,7 @@ function FileRow({ file }: { file: ConvertedFile }) {
     <li className="grid gap-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 flex-col gap-1">
         <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-hand text-[17px] font-semibold text-ink hover:text-accent">
-          {report?.subject ?? file.name}
+          {report ? shortName(report.subject) : file.name}
         </Link>
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
           <span className="font-mono">{file.name}</span>

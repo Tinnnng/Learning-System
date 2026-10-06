@@ -37,10 +37,10 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
           return (
             <div key={day} className="group relative flex h-full flex-1 flex-col justify-end" title={`${day.slice(5)}：${attempts} 題，答對 ${correct}`}>
               <div
-                className="flex w-full flex-col justify-end overflow-hidden rounded-t-[3px] bg-rule transition-[height] duration-[var(--dur-slow)]"
+                className="flex w-full flex-col justify-end overflow-hidden rounded-t-[3px] bg-bad-hl transition-[height] duration-[var(--dur-slow)]"
                 style={{ height: `${(attempts / max) * 100}%`, minHeight: attempts ? 3 : 0 }}
               >
-                <div className="w-full bg-ink" style={{ height: attempts ? `${(correct / attempts) * 100}%` : 0 }} />
+                <div className="w-full bg-ok-hl" style={{ height: attempts ? `${(correct / attempts) * 100}%` : 0 }} />
               </div>
               {attempts === 0 && <div className="h-[3px] w-full rounded-full bg-line" />}
             </div>
@@ -51,10 +51,10 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
         <span>{days[0].slice(5).replace('-', '/')}</span>
         <span className="flex gap-4">
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-[2px] bg-ink" /> 答對
+            <span className="h-2.5 w-4 rounded-[var(--radius-marker)] bg-ok-hl" /> 答對
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-[2px] bg-rule" /> 答錯
+            <span className="h-2.5 w-4 rounded-[var(--radius-marker)] bg-bad-hl" /> 答錯
           </span>
         </span>
         <span>今天</span>
@@ -74,10 +74,10 @@ function AccuracyList({ title, stats }: { title: string; stats: Overview['by_sub
           return (
             <li key={stat.name} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5">
               <span className="truncate text-sm text-ink">{shortName(stat.name)}</span>
-              <span className={cx('tabular text-sm', weak ? 'text-accent' : 'text-ink')}>{percent(stat.accuracy)}</span>
+              <span className={cx('tabular text-sm', weak ? 'text-bad' : 'text-ok')}>{percent(stat.accuracy)}</span>
               <span className="col-span-2 h-[6px] overflow-hidden rounded-full bg-line">
                 <span
-                  className={cx('block h-full rounded-full transition-[width] duration-[var(--dur-slow)]', weak ? 'bg-accent' : 'bg-ink')}
+                  className={cx('block h-full rounded-full transition-[width] duration-[var(--dur-slow)]', weak ? 'bg-bad' : 'bg-ok')}
                   style={{ width: percent(stat.accuracy) }}
                 />
               </span>
