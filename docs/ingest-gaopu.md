@@ -1,6 +1,8 @@
 # 高普考題目轉檔流程（給 Claude Code 照著做）
 
-所有指令都在 `backend/` 執行，`<資料夾>` 是放高普考 PDF 的資料夾（子資料夾命名為 `115普考QA-一般行政` 這種格式）。
+所有指令都在 `backend/` 執行，`<資料夾>` 是放高普考 PDF 的資料夾，預設放在 `data/inbox/gaopu/`（子資料夾命名為 `115普考QA-一般行政` 這種格式）。
+
+資料夾分工：原始 PDF 放 `data/inbox/`，草稿在 `data/drafts/`，解析完成的匯入檔在 `data/converted/`，三者不要混放。
 
 ```bash
 uv run python -m app.modules.ingest.cli scan  <資料夾>                 # 1. 看有哪些試卷、哪些是選擇題
@@ -12,7 +14,7 @@ uv run python -m app.modules.ingest.cli import ../data/converted/<source_key>.js
 
 - 答案、配分、考試時間、試題代號都由程式從 PDF 解析，**校對時不要動答案**。
 - 申論題（scan 顯示 `[申論]`）第一版不轉。`[混合]` 的試卷只轉選擇題部分（草稿已自動只取選擇題）。
-- 草稿位置：`data/converted/drafts/<source_key>.draft.json`。已存在的草稿不會被 `draft` 覆蓋（除非加 `--force`），避免校對成果被蓋掉。
+- 草稿位置：`data/drafts/<source_key>.draft.json`。已存在的草稿不會被 `draft` 覆蓋（除非加 `--force`），避免校對成果被蓋掉。
 
 ## 草稿格式
 

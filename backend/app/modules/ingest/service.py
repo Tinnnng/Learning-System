@@ -12,6 +12,21 @@ from app.modules.ingest.schemas import CheckReport, ConvertedFile, ImportBundle,
 from app.modules.ingest.validation import check_bundle
 
 
+# 資料夾分工（不要混放）：
+#   inbox/      使用者給的原始檔（考試題目、答案、教材、題目文字檔）
+#   drafts/     轉檔中間產物（題目草稿、教材抽出的文字）
+#   converted/  解析完成、可以匯入的檔案（匯入頁只看這裡）
+#   assets/     題目圖片、頁面截圖
+
+
+def inbox_dir() -> Path:
+    return get_settings().data_dir / "inbox"
+
+
+def drafts_dir() -> Path:
+    return get_settings().data_dir / "drafts"
+
+
 def converted_dir() -> Path:
     return get_settings().data_dir / "converted"
 
@@ -42,6 +57,8 @@ def import_file(db: Session, path: Path) -> ImportOutcome:
 
 def list_converted(db: Session) -> list[ConvertedFile]:
     files = []
+    if not converted_dir().exists():
+        return []
     paths = sorted(p for p in converted_dir().iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES)
     for path in paths:
         try:

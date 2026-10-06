@@ -1,12 +1,12 @@
 # 由上課教材出題（給 Claude Code 照著做）
 
-使用者把教材（PPTX／DOCX／PDF）放進 `data/inbox/`，請 Claude Code 出題。所有指令在 `backend/` 執行。
+使用者把教材（PPTX／DOCX／PDF）放進 `data/inbox/lecture/`，請 Claude Code 出題。抽出的文字放 `data/drafts/lecture/`，出好的題目放 `data/converted/`。所有指令在 `backend/` 執行。
 
 ## 步驟
 
 1. **抽出教材文字**（標示投影片編號或頁碼）：
    ```bash
-   uv run python -m app.modules.ingest.cli extract ../data/inbox/第3章.pptx --out ../data/converted/lecture/第3章.md
+   uv run python -m app.modules.ingest.cli extract ../data/inbox/lecture/第3章.pptx --out ../data/drafts/lecture/第3章.md
    ```
    有 `[圖片]` 標記的投影片，若圖片內容重要，用 PyMuPDF 或請使用者提供截圖確認。舊版 `.ppt`／`.doc` 請使用者先另存成新格式。
 2. **詢問使用者**（沒說的話）：出幾題、難度、要涵蓋哪些章節。預設每份教材 10–20 題，均勻涵蓋各主題。

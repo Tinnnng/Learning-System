@@ -1,10 +1,10 @@
 # 題目文字檔格式
 
-照這個格式寫的 `.txt` 或 `.md` 檔，放進 `data/converted/` 後可以直接匯入，不需要 AI。範例：[`examples/sample-questions.txt`](examples/sample-questions.txt)。
+照這個格式寫的 `.txt` 或 `.md` 檔不需要 AI 就能匯入。原始檔放 `data/inbox/text/`；用 `check` 確認格式沒問題後，複製到 `data/converted/`（解析完成區）就會出現在匯入頁。範例：[`examples/sample-questions.txt`](examples/sample-questions.txt)。
 
 ```bash
 cd backend
-uv run python -m app.modules.ingest.cli check ../data/converted/我的題目.txt    # 先檢查
+uv run python -m app.modules.ingest.cli check ../data/inbox/text/我的題目.txt    # 先檢查原始檔
 uv run python -m app.modules.ingest.cli import ../data/converted/我的題目.txt   # 匯入
 ```
 

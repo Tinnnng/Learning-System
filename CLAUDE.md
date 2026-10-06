@@ -61,8 +61,9 @@ frontend/
     lib/               API client、自動產生的型別、格式化、主題
     styles/            design tokens（tokens.css）與全域樣式
 data/
-  inbox/               待轉換的原始檔（PDF／PPT／DOCX／TXT）
-  converted/           Claude Code 轉出的 JSON（匯入前的中介檔）
+  inbox/               原始檔：gaopu/（高普考題目與答案 PDF）、lecture/（教材）、text/（題目文字檔）
+  drafts/              轉檔中間產物：題目草稿、教材抽出的文字（不能直接匯入）
+  converted/           解析完成、可以匯入的檔案（匯入頁只看這裡）
   assets/              題目圖片、頁面截圖
   learning.db
 docs/                  轉檔流程說明（給 Claude Code 照著做）
@@ -104,7 +105,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 
 - **教材出題**（PPT／PDF／DOCX）：Claude Code 讀教材後出選擇題，每題必須附上正確答案、詳解，以及**出處**（第幾張投影片或第幾頁），讓使用者可以回頭查證。題目標記 `origin: "generated"`，與官方考古題（`origin: "official"`）區分。
 - **題目文字檔**：格式見 `docs/text-question-format.md`，符合格式的系統直接解析匯入，不需要 AI；格式不符的交給 Claude Code 轉成 JSON。題目文字檔匯入為 `origin: "manual"`。
-- 原始教材放 `data/inbox/`，轉出的 JSON 放 `data/converted/`，與高普考流程相同。
+- 原始檔、草稿、解析完成的檔案**分三個資料夾放，不要混在一起**：`inbox/` → `drafts/` → `converted/`。
 
 ## 前端設計標準
 

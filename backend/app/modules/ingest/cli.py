@@ -2,7 +2,7 @@
 
 高普考流程：
   scan   <資料夾>                     列出試卷分組、是否有選擇題、草稿與匯入檔狀態
-  draft  <資料夾> <source_key...>    由題目 PDF 自動產生草稿 → data/converted/drafts/（之後要校對）
+  draft  <資料夾> <source_key...>    由題目 PDF 自動產生草稿 → data/drafts/（之後要校對）
   layout <pdf> [--page N]             列出頁面文字與圖形座標（決定圖片裁切範圍）
   answers <pdf>                       解析答案 PDF
   build  <資料夾> <source_key|--all>  草稿 + 答案 + 截圖 → data/converted/<source_key>.json
@@ -28,12 +28,8 @@ from app.modules.ingest.gaopu.manifest import scan
 from app.modules.ingest.schemas import CheckReport, QuestionDraftFile
 
 
-def drafts_dir() -> Path:
-    return service.converted_dir() / "drafts"
-
-
 def draft_path(source_key: str) -> Path:
-    return drafts_dir() / f"{source_key}.draft.json"
+    return service.drafts_dir() / f"{source_key}.draft.json"
 
 
 def bundle_path(source_key: str) -> Path:

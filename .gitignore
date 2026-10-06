@@ -14,6 +14,7 @@ data/learning.db
 data/learning.db-*
 data/inbox/*
 data/converted/*
+data/drafts/*
 data/assets/*
 !data/**/.gitkeep
 
