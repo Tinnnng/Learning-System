@@ -14,6 +14,8 @@
 | 前端 | React + TypeScript + Vite + Tailwind CSS |
 | 後端 | Python + FastAPI + SQLAlchemy + SQLite（單一 `.db` 檔） |
 | PDF 處理 | PyMuPDF（裁切圖片、產生頁面截圖） |
+| 視覺方向 | **A 答案卡**：仿 2B 鉛筆劃記的電腦答案卡（粉紅印刷格線、可塗滿的橢圓選項格、題目用明體），錯題掌握進度用「正」字筆畫表示。提案頁：https://claude.ai/artifact/Svn3CjyBqNR9zpoaNdPLBG |
+| Git | 獨立存放庫 https://github.com/Tinnnng/Learning-System （private），不要和其他專案混在一起 |
 
 ## 工作流程規則
 
@@ -55,8 +57,9 @@ frontend/
   src/
     app/registry.ts    收集各 feature 的路由與導覽項目
     features/          與後端模組一一對應，各自匯出路由
-    components/        共用 UI 元件
-    styles/            design tokens（色彩、字級、間距、動效）
+    components/        共用 UI 元件（OptionBubble 答案卡選項格、AnswerGrid 題號劃記區、ZhengTally 正字進度、RichText 題目顯示…）
+    lib/               API client、自動產生的型別、格式化、主題
+    styles/            design tokens（tokens.css）與全域樣式
 data/
   inbox/               待轉換的原始檔（PDF／PPT／DOCX／TXT）
   converted/           Claude Code 轉出的 JSON（匯入前的中介檔）
@@ -133,11 +136,16 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 | `npm run migrate` | 套用資料庫 migration |
 | `cd backend && uv run alembic revision --autogenerate -m "說明"` | 改了 models 後產生 migration |
 | `cd frontend && npm run build` / `npm run lint` | 型別檢查＋建置 / oxlint |
+| `npm run gen:api` | 後端 API 改了之後，重新產生前端型別 `frontend/src/lib/api-types.ts`（不要手改） |
+| `cd frontend && MSYS_NO_PATHCONV=1 node scripts/screenshots.mjs <輸出資料夾> / /bank ...` | 設計自檢截圖（桌機／手機 × 日／夜），需先 npm run dev |
 
 - 後端 API 文件：http://127.0.0.1:8000/docs
 - 前端一律用 `@/lib/api` 以 `/api/...` 相對路徑呼叫後端，開發時由 Vite proxy 轉送。
 - 可調參數在 `backend/app/core/config.py`，可用 `backend/.env` 覆寫（`LS_` 前綴，例如 `LS_MASTERY_STREAK=5`）。
 - `alembic.ini` 必須維持純 ASCII（Windows cp950 讀到中文會失敗）。
+- 截圖或測試要造假資料時，複製 `data/` 到暫存區並用 `LS_DATA_DIR` 指向副本，**不要寫進使用者真正的資料庫**。
+- uvicorn `--reload` 在 Windows 會留下 multiprocessing 子程序，關伺服器時要連子程序一起關，否則 8000 埠會被舊版程式佔住。
+- Write 工具會把原始碼裡的 Unicode 跳脫序列（反斜線 u 加 4 碼）轉成實際字元；私有區字元（選項標記）要用 Python 腳本寫成跳脫序列。
 
 ### 新增一個功能模組
 

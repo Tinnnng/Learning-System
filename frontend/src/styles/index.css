@@ -1,4 +1,220 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+@import './tokens.css';
+@import 'katex/dist/katex.min.css';
 
-/* 以 class 切換夜間模式（html 上的 .dark），設計 tokens 於階段 5 建立 */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* 把 tokens 接到 Tailwind：bg-paper、text-ink、border-print-rule、font-serif… */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-sheet-tint: var(--sheet-tint);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-print: var(--print);
+  --color-print-strong: var(--print-strong);
+  --color-print-rule: var(--print-rule);
+  --color-print-faint: var(--print-faint);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-line: var(--line);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-question: var(--text-question);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+  --shadow-sheet: var(--shadow-sheet);
+  --shadow-pop: var(--shadow-pop);
+  --ease-out: var(--ease-out);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    line-height: 1.3;
+  }
+  :focus-visible {
+    outline: 2px solid var(--print);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--print-faint);
+    color: var(--ink);
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+}
+
+@layer components {
+  /* 答案卡的印刷橫線，用在題目紙背景 */
+  .ruled {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0 31px,
+      color-mix(in srgb, var(--print-rule) 55%, transparent) 31px 32px
+    );
+  }
+
+  /* 數字對齊 */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 小標：印刷體的欄位名稱 */
+  .eyebrow {
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    color: var(--print);
+    font-weight: 500;
+  }
+
+  /* 題目內容（Markdown 渲染結果） */
+  .prose-question {
+    font-family: var(--font-serif);
+    font-size: var(--text-question);
+    line-height: 1.85;
+    color: var(--ink);
+  }
+  .prose-question p {
+    margin: 0 0 0.6em;
+  }
+  .prose-question p:last-child {
+    margin-bottom: 0;
+  }
+  .prose-question code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--sheet-tint);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 0.05em 0.35em;
+  }
+  .prose-question pre {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    background: var(--sheet-tint);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    overflow-x: auto;
+    margin: 0.6em 0;
+  }
+  .prose-question pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: inherit;
+  }
+  .prose-question table {
+    border-collapse: collapse;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    margin: 0.6em 0;
+    display: block;
+    overflow-x: auto;
+  }
+  .prose-question th,
+  .prose-question td {
+    border: 1px solid var(--print-rule);
+    padding: 4px 10px;
+    text-align: left;
+  }
+  .prose-question th {
+    background: var(--print-faint);
+    font-weight: 500;
+  }
+  .prose-question strong {
+    font-weight: 700;
+  }
+  .prose-question .katex {
+    font-size: 1.02em;
+  }
+
+  /* 填空格 {{blank}} */
+  .blank {
+    display: inline-block;
+    min-width: 4.5em;
+    border-bottom: 1.5px solid var(--ink);
+    margin: 0 0.2em;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    color: var(--print);
+    line-height: 1.2;
+    vertical-align: baseline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0.001;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.35) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.96) rotate(-4deg);
+  }
+  100% {
+    transform: scale(1) rotate(-4deg);
+  }
+}

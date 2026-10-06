@@ -72,7 +72,8 @@ class UpsertResult(BaseModel):
 
 
 class QuestionOut(QuestionIn):
-    model_config = ConfigDict(from_attributes=True)
+    # 輸出時有預設值的欄位一定存在，讓前端產生的型別不是 optional
+    model_config = ConfigDict(from_attributes=True, json_schema_serialization_defaults_required=True)
 
     id: int
     paper_id: int

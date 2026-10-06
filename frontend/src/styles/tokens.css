@@ -1,0 +1,90 @@
+/*
+ * Design tokens — 方向 A「答案卡」
+ * 元件只能使用這裡的變數（透過 Tailwind 的 bg-paper、text-ink… 或 var(--…)），不寫死顏色與數值。
+ * 日間：白紙＋粉紅印刷墨＋2B 鉛筆石墨；夜間：石墨板＋柔和玫瑰色，各自調色而不是直接反轉。
+ */
+
+:root {
+  /* 色彩 */
+  --paper: #f6f7f5; /* 頁面底色：略帶冷調的紙 */
+  --sheet: #ffffff; /* 答案卡、題目紙 */
+  --sheet-tint: #fcf8f9; /* 帶一點印刷粉的區塊 */
+  --ink: #1d2129; /* 2B 鉛筆石墨：主要文字、塗滿的選項格 */
+  --ink-soft: #3b404b;
+  --muted: #66626c; /* 次要文字（對 --paper 5.6:1） */
+  --print: #c4375b; /* 答案卡印刷粉紅：品牌強調色、格線、焦點 */
+  --print-strong: #a82c4c;
+  --print-rule: #ecc9d2; /* 印刷格線 */
+  --print-faint: #f8e8ec;
+  --ok: #1f7a55;
+  --ok-soft: #dcefe5;
+  --bad: #c2410c;
+  --bad-soft: #fbe6da;
+  --line: #e4e2e5; /* 一般分隔線 */
+  --overlay: rgb(29 33 41 / 0.42);
+
+  /* 字體 */
+  --font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  --font-serif: 'Noto Serif TC', 'PMingLiU', 'Songti TC', serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  /* 字級（1.2 比例，基準 15px；題目 17px） */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-question: 17px;
+  --text-lg: 20px;
+  --text-xl: 26px;
+  --text-2xl: 34px;
+
+  /* 間距（4px 節奏） */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+
+  /* 形狀 */
+  --radius-sm: 4px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow-sheet: 0 1px 0 rgb(29 33 41 / 0.04), 0 12px 32px -24px rgb(29 33 41 / 0.35);
+  --shadow-pop: 0 18px 48px -18px rgb(29 33 41 / 0.45);
+
+  /* 動效 */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-draw: cubic-bezier(0.6, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+
+  --content-width: 1120px;
+  --reading-width: 720px;
+  color-scheme: light;
+}
+
+:root.dark {
+  --paper: #15171b;
+  --sheet: #1c1f25;
+  --sheet-tint: #211d23;
+  --ink: #e8e6e3;
+  --ink-soft: #cbc8c5;
+  --muted: #a39fa9;
+  --print: #f0839c;
+  --print-strong: #f6a3b6;
+  --print-rule: #4b2e39;
+  --print-faint: #2b2027;
+  --ok: #5bc596;
+  --ok-soft: #1c3a2d;
+  --bad: #f2925f;
+  --bad-soft: #3d271c;
+  --line: #2c2f37;
+  --overlay: rgb(0 0 0 / 0.6);
+  --shadow-sheet: 0 1px 0 rgb(0 0 0 / 0.2), 0 16px 36px -24px rgb(0 0 0 / 0.8);
+  --shadow-pop: 0 18px 48px -18px rgb(0 0 0 / 0.85);
+  color-scheme: dark;
+}
