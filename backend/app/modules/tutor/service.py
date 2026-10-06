@@ -153,3 +153,13 @@ def has_explanation(db: Session, question_ids: list[int]) -> set[int]:
         )
     )
     return set(rows)
+
+
+def explanations(db: Session, question_ids: list[int]) -> dict[int, str]:
+    """已經產生過的 AI 詳解（題號 → 內容），給匯出 PDF 等批次用途；不會呼叫 AI。"""
+    rows = db.scalars(
+        select(TutorMessage)
+        .where(TutorMessage.question_id.in_(question_ids), TutorMessage.kind == "explanation")
+        .order_by(TutorMessage.id)
+    )
+    return {row.question_id: row.content for row in rows}

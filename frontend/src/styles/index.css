@@ -255,3 +255,45 @@
     transform: scaleX(0);
   }
 }
+
+/* 列印（錯題匯出 PDF）：白底黑字、隱藏導覽、題目不要被切在兩頁 */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+  :root,
+  :root.dark {
+    --paper: #ffffff;
+    --sheet: #ffffff;
+    --sheet-tint: #f6f8ff;
+    --ink: #111827;
+    --muted: #4b5563;
+    --accent: #1f3fbf;
+    --rule: #d9deea;
+    --line: #d9deea;
+    --hl: #ffe34d;
+    --hl-soft: #fff4b0;
+    --ok-hl: #9bf0bd;
+    color-scheme: light;
+  }
+  header.sticky,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+  .print-page-break {
+    break-before: page;
+  }
+  .marker::before {
+    transform: scaleX(1) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

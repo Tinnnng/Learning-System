@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { AiTutor } from '@/components/AiTutor'
-import { Button } from '@/components/Button'
+import { Button, ButtonLink } from '@/components/Button'
 import { ChipGroup, Segmented } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { NoteControls } from '@/components/NoteControls'
@@ -159,6 +159,15 @@ export function WrongBookPage() {
               >
                 複習今天到期的 {dueCount} 題
               </Button>
+            )}
+            {entries.length > 0 && (
+              <ButtonLink
+                variant="ghost"
+                to={`/review/print?${new URLSearchParams({ status, ...(subject ? { subject } : {}) })}`}
+              >
+                <Icon name="import" size={18} />
+                匯出 PDF
+              </ButtonLink>
             )}
             {activeIds.length > 0 && (
               <Button

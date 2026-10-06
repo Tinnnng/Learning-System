@@ -113,6 +113,7 @@ def test_follow_up_and_limits(db, fake_ai, question_id):
 
     regenerated = tutor_service.explain(db, question_id, regenerate=True)
     assert len(regenerated.messages) == 1  # 重新產生會清掉舊的對話
+    assert tutor_service.explanations(db, [question_id, 999]) == {question_id: regenerated.messages[0].content}
 
 
 def test_tutor_api_reports_ai_unavailable(client, db, question_id, monkeypatch):

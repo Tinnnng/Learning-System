@@ -565,6 +565,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tutor/explanations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Explanations
+         * @description 一次取多題已產生的 AI 詳解，例如 ?ids=1&ids=2（不會呼叫 AI）。
+         */
+        get: operations["explanations_api_tutor_explanations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tutor/questions/{question_id}": {
         parameters: {
             query?: never;
@@ -3090,6 +3110,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiStatus"];
+                };
+            };
+        };
+    };
+    explanations_api_tutor_explanations_get: {
+        parameters: {
+            query?: {
+                ids?: number[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

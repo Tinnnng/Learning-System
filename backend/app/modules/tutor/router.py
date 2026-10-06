@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,6 +13,12 @@ def _run(action):
         return action()
     except service.TutorError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get("/explanations", response_model=dict[int, str])
+def explanations(ids: list[int] = Query(default_factory=list), db: Session = Depends(get_db)) -> dict[int, str]:
+    """一次取多題已產生的 AI 詳解，例如 ?ids=1&ids=2（不會呼叫 AI）。"""
+    return service.explanations(db, ids)
 
 
 @router.get("/questions/{question_id}", response_model=TutorThread)
