@@ -27,7 +27,7 @@ function Prompt({ item }: { item: QuizItem }) {
   if (item.quiz_type === 'cloze') {
     return <RichText className="font-sans! text-xl! leading-relaxed">{item.prompt}</RichText>
   }
-  return <p className="m-0 font-serif text-2xl font-bold leading-snug text-ink sm:text-3xl">{item.prompt}</p>
+  return <p className="m-0 font-hand text-2xl font-bold leading-snug text-ink sm:text-3xl">{item.prompt}</p>
 }
 
 function WordReveal({ result }: { result: VocabAnswerResult }) {
@@ -44,7 +44,7 @@ function WordReveal({ result }: { result: VocabAnswerResult }) {
       <p className="m-0 font-medium">{result.is_correct ? '答對了。' : `答錯了，答案是「${result.expected}」。`}</p>
       <div className="flex flex-wrap items-baseline gap-x-3">
         <span className="font-mono text-2xl font-medium">{word.term}</span>
-        {word.part_of_speech && <span className="text-sm text-print">{word.part_of_speech}</span>}
+        {word.part_of_speech && <span className="text-sm text-accent">{word.part_of_speech}</span>}
         <span className="text-ink">{word.meaning}</span>
       </div>
       {word.example && (
@@ -132,7 +132,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
                 key={`${entry.word_id}-${position}`}
                 className={cx(
                   'h-[16px] w-[11px] rounded-full border-[1.5px] transition-colors duration-[var(--dur)]',
-                  done ? (done.is_correct ? 'border-ok bg-ok' : 'border-bad bg-bad') : position === index ? 'border-ink' : 'border-print',
+                  done ? (done.is_correct ? 'border-ok bg-ok' : 'border-bad bg-bad') : position === index ? 'border-ink' : 'border-accent',
                 )}
               />
             )
@@ -142,7 +142,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
 
       <div key={index} className="flex min-h-[120px] flex-col justify-center gap-2 animate-[rise-in_var(--dur)_var(--ease-out)]">
         <Prompt item={item} />
-        {item.part_of_speech && item.quiz_type !== 'cloze' && <span className="text-sm text-print">{item.part_of_speech}</span>}
+        {item.part_of_speech && item.quiz_type !== 'cloze' && <span className="text-sm text-accent">{item.part_of_speech}</span>}
       </div>
 
       {item.options ? (
@@ -192,7 +192,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="h-12 min-w-0 flex-1 rounded-md border border-print-rule bg-sheet px-4 font-mono text-lg text-ink outline-none transition-colors focus:border-ink"
+              className="h-12 min-w-0 flex-1 rounded-md border border-rule bg-sheet px-4 font-mono text-lg text-ink outline-none transition-colors focus:border-ink"
               placeholder="輸入英文"
             />
             {!result && (

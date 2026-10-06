@@ -17,14 +17,14 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
     <li>
       <Link
         to={`/bank/papers/${paper.id}`}
-        className="group grid grid-cols-[3.5rem_1fr_auto] items-center gap-4 border-b border-print-rule px-2 py-4 transition-colors hover:bg-sheet-tint sm:px-4"
+        className="group grid grid-cols-[3.5rem_1fr_auto] items-center gap-4 border-b border-rule px-2 py-4 transition-colors hover:bg-sheet-tint sm:px-4"
       >
         <span className="flex flex-col items-start leading-tight">
           <span className="tabular text-lg text-ink">{paper.year ?? '—'}</span>
-          <span className="text-xs text-print">{paper.exam_type}</span>
+          <span className="text-xs text-accent">{paper.exam_type}</span>
         </span>
         <span className="flex min-w-0 flex-col gap-1">
-          <span className="font-serif text-[17px] font-semibold leading-snug text-ink">{shortName(paper.subject)}</span>
+          <span className="font-hand text-[17px] font-semibold leading-snug text-ink">{shortName(paper.subject)}</span>
           <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
             {paper.categories.length > 0 && <span>{paper.categories.join('、')}</span>}
             <span>{ORIGIN_LABELS[paper.origin] ?? paper.origin}</span>
@@ -33,7 +33,7 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         </span>
         <span className="flex items-center gap-3 text-sm text-muted">
           <span className="tabular">{paper.question_count} 題</span>
-          <Icon name="arrow" size={18} className="text-print transition-transform duration-[var(--dur)] group-hover:translate-x-1" />
+          <Icon name="arrow" size={18} className="text-accent transition-transform duration-[var(--dur)] group-hover:translate-x-1" />
         </span>
       </Link>
     </li>
@@ -136,7 +136,7 @@ export function BankPage() {
               {hasFilter ? '換個條件試試看。' : '把試卷 PDF 交給 Claude Code 轉檔後，到「匯入」頁匯入。'}
             </EmptyState>
           ) : (
-            <ul className="m-0 list-none border-t border-print-rule p-0">
+            <ul className="m-0 list-none border-t border-rule p-0">
               {list.map((paper) => (
                 <PaperRow key={paper.id} paper={paper} />
               ))}
@@ -145,7 +145,7 @@ export function BankPage() {
         </section>
 
         <aside className="rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24">
-          <h2 className="m-0 mb-1 font-serif text-lg font-bold">{hasFilter ? '用這些條件出題' : '從整個題庫出題'}</h2>
+          <h2 className="m-0 mb-1 font-hand text-lg font-bold">{hasFilter ? '用這些條件出題' : '從整個題庫出題'}</h2>
           <p className="m-0 mb-5 text-sm text-muted">
             {list.length} 份試卷，共 <span className="tabular text-ink">{questionCount}</span> 題選擇題
           </p>

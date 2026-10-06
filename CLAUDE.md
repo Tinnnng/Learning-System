@@ -16,7 +16,7 @@
 | 前端 | React + TypeScript + Vite + Tailwind CSS |
 | 後端 | Python + FastAPI + SQLAlchemy + SQLite（單一 `.db` 檔） |
 | PDF 處理 | PyMuPDF（裁切圖片、產生頁面截圖） |
-| 視覺方向 | **A 答案卡**：仿 2B 鉛筆劃記的電腦答案卡（粉紅印刷格線、可塗滿的橢圓選項格、題目用明體），錯題掌握進度用「正」字筆畫表示。提案頁：https://claude.ai/artifact/Svn3CjyBqNR9zpoaNdPLBG |
+| 視覺方向 | **B 螢光筆與原子筆**（2026-10-07 使用者改選，原本的 A 答案卡已停用）：白紙＋藍色原子筆＋黃色螢光筆；選取＝螢光筆從左刷到右，答對綠色、答錯粉紅；標題與批註用霞鶩文楷（`font-hand`），題目內文用 Noto Sans TC；品牌名「劃重點」；錯題掌握進度仍用「正」字筆畫。提案頁：https://claude.ai/artifact/Svn3CjyBqNR9zpoaNdPLBG |
 | Git | 獨立存放庫 https://github.com/Tinnnng/Learning-System （private），不要和其他專案混在一起 |
 
 ## 工作流程規則
@@ -62,7 +62,7 @@ frontend/
   src/
     app/registry.ts    收集各 feature 的路由與導覽項目
     features/          與後端模組一一對應，各自匯出路由
-    components/        共用 UI 元件（OptionBubble 答案卡選項格、AnswerGrid 題號劃記區、ZhengTally 正字進度、RichText 題目顯示…）
+    components/        共用 UI 元件（OptionBubble 螢光筆選項、AnswerGrid 題號導覽、ZhengTally 正字進度、RichText 題目顯示…）
     lib/               API client、自動產生的型別、格式化、主題
     styles/            design tokens（tokens.css）與全域樣式
 data/
@@ -116,6 +116,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 
 品質目標：**Awwwards / Webby Awards / FWA 獲獎網站等級**，不是一般後台模板。
 
+- 螢光筆效果統一用 `.marker` class（`--marker-color`、`--marker-scale` 控制顏色與長度），螢光色只當底色，文字一律用 `--ink`。
 - 先在 `frontend/src/styles/` 定義 design tokens（色彩、字級比例、間距、圓角、陰影、動效時間與曲線），所有元件只用 token，不寫死數值。
 - 日間／夜間模式：兩套都要獨立調色，夜間不是單純反轉顏色；預設跟隨系統，可手動切換並記住。
 - 動效要有意義（引導注意力、回饋操作結果），並遵守 `prefers-reduced-motion`。

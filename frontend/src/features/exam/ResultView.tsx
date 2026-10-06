@@ -1,6 +1,6 @@
-/** 交卷後：得分、答案卡對錯一覽、每題詳解、錯題重寫。 */
+/** 交卷後：得分、題號對錯一覽、每題詳解、錯題重寫。 */
 
-import { useMemo, useState } from 'react'
+import { type CSSProperties, useMemo, useState } from 'react'
 import { AnswerGrid } from '@/components/AnswerGrid'
 import { Button, ButtonLink } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
@@ -36,12 +36,12 @@ export function ResultView({ session }: { session: SessionOut }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="grid gap-6 border-b border-print pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
+      <header className="grid gap-6 border-b border-line pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
         <div className="flex flex-col gap-1">
           <span className="eyebrow">
             {session.mode === 'mock' ? '模擬考' : '練習'}・{formatDateTime(session.started_at)}
           </span>
-          <h1 className="m-0 font-serif text-xl font-bold sm:text-2xl">{shortName(session.title)}</h1>
+          <h1 className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
           <dl className="m-0 mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
             <div className="flex gap-1.5">
               <dt>答對</dt>
@@ -61,14 +61,18 @@ export function ResultView({ session }: { session: SessionOut }) {
             </div>
           </dl>
         </div>
-        {/* 得分：像老師用紅筆寫在試卷上的分數 */}
+        {/* 得分：原子筆手寫的分數，下面用螢光筆劃一道 */}
         <div
-          className="flex h-28 w-36 flex-none flex-col items-center justify-center rounded-[50%] border-[2.5px] border-print text-print animate-[stamp_520ms_var(--ease-out)_both] sm:mr-4"
-          style={{ transform: 'rotate(-4deg)' }}
+          className="flex flex-none items-baseline gap-1.5 text-accent sm:mr-2"
           aria-label={`得分 ${score(result.score)}，滿分 ${score(result.max_score)}`}
         >
-          <span className="font-serif text-4xl font-bold leading-none">{score(result.score)}</span>
-          <span className="tabular mt-1 text-xs">／{score(result.max_score)} 分</span>
+          <span
+            className="marker font-hand text-[64px] font-bold leading-none [&::before]:inset-x-[-6px] [&::before]:top-[55%] [&::before]:bottom-[2%] [&::before]:animate-[swipe_var(--dur-marker)_var(--ease-marker)_both] [&::before]:delay-200"
+            style={{ '--marker-color': ratio >= 0.6 ? 'var(--ok-hl)' : 'var(--hl)' } as CSSProperties}
+          >
+            {score(result.score)}
+          </span>
+          <span className="font-hand text-lg text-muted">／{score(result.max_score)} 分</span>
         </div>
       </header>
 
@@ -123,7 +127,7 @@ export function ResultView({ session }: { session: SessionOut }) {
           ) : (
             <ol className="m-0 flex list-none flex-col p-0">
               {visible.map((item) => (
-                <li key={item.position} id={`item-${item.position}`} className="scroll-mt-24 border-b border-print-rule py-8 first:pt-0 last:border-b-0">
+                <li key={item.position} id={`item-${item.position}`} className="scroll-mt-24 border-b border-rule py-8 first:pt-0 last:border-b-0">
                   <QuestionBlock item={item} selection={item.response ?? []} onToggle={() => {}} />
                 </li>
               ))}
@@ -132,7 +136,7 @@ export function ResultView({ session }: { session: SessionOut }) {
         </section>
 
         <aside className="flex flex-col gap-4 rounded-lg bg-sheet p-5 shadow-sheet lg:sticky lg:top-24">
-          <h2 className="eyebrow m-0">答案卡</h2>
+          <h2 className="eyebrow m-0">題號一覽</h2>
           <AnswerGrid
             cells={session.items.map((item) => ({
               position: item.position,
@@ -149,13 +153,13 @@ export function ResultView({ session }: { session: SessionOut }) {
           />
           <div className="flex flex-col gap-1 text-xs text-muted">
             <span className="flex items-center gap-2">
-              <span className="h-[13px] w-[9px] rounded-full bg-ok" /> 答對
+              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-ok-hl" /> 答對
             </span>
             <span className="flex items-center gap-2">
-              <span className="h-[13px] w-[9px] rounded-full bg-bad" /> 答錯（已收進錯題本）
+              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-bad-hl" /> 答錯（已收進錯題本）
             </span>
             <span className="flex items-center gap-2">
-              <span className="h-[13px] w-[9px] rounded-full border border-print" /> 未作答
+              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] border border-dashed border-muted" /> 未作答
             </span>
           </div>
           <p className="m-0 text-xs text-muted">得分率 {(ratio * 100).toFixed(0)}%</p>

@@ -47,7 +47,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
   const due = entry.review_due
   const isDue = due ? parseUtc(due).getTime() <= now : false
   return (
-    <li className="border-b border-print-rule last:border-b-0">
+    <li className="border-b border-rule last:border-b-0">
       <button
         type="button"
         aria-expanded={open}
@@ -59,7 +59,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
             {question.paper.year && `${question.paper.year} 年`}
             {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.number} 題
           </span>
-          <span className={cx('font-serif text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>
+          <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>
             {plainText(question.stem)}
           </span>
         </span>
@@ -72,7 +72,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
         </span>
         <span className="text-xs text-muted sm:w-24 sm:text-right">
           {progress.in_wrong_book && due ? (
-            <span className={cx(isDue && 'font-medium text-print')}>{isDue ? '今天該複習' : `${relativeDay(due)}複習`}</span>
+            <span className={cx(isDue && 'font-medium text-accent')}>{isDue ? '今天該複習' : `${relativeDay(due)}複習`}</span>
           ) : (
             '已移出錯題本'
           )}
@@ -84,7 +84,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
         <div className="flex flex-col gap-4 px-1 pb-6 animate-[rise-in_var(--dur)_var(--ease-out)] sm:px-3">
           {question.passage && (
             <details className="rounded-md bg-sheet-tint px-4 py-2 text-sm">
-              <summary className="cursor-pointer text-print">題組文章</summary>
+              <summary className="cursor-pointer text-accent">題組文章</summary>
               <RichText className="mt-2 text-[15px]">{question.passage}</RichText>
             </details>
           )}
@@ -211,7 +211,7 @@ export function WrongBookPage() {
         </EmptyState>
       ) : (
         <section aria-label="錯題列表" className="rounded-lg bg-sheet px-3 shadow-sheet sm:px-5">
-          <p className="m-0 border-b border-print py-3 text-sm text-muted">
+          <p className="m-0 border-b border-accent py-3 text-sm text-muted">
             共 <span className="tabular text-ink">{entries.length}</span> 題，點題目展開正確答案與作答紀錄
           </p>
           <ul className="m-0 list-none p-0">

@@ -43,16 +43,16 @@ function FileRow({ file }: { file: ConvertedFile }) {
   const errors = report?.issues.filter((issue) => issue.level === 'error').length ?? 0
   const warnings = report?.issues.filter((issue) => issue.level === 'warning').length ?? 0
   return (
-    <li className="grid gap-3 border-b border-print-rule py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <li className="grid gap-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 flex-col gap-1">
-        <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-serif text-[17px] font-semibold text-ink hover:text-print">
+        <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-hand text-[17px] font-semibold text-ink hover:text-accent">
           {report?.subject ?? file.name}
         </Link>
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
           <span className="font-mono">{file.name}</span>
           {report && <span>{report.question_count} 題</span>}
           {errors > 0 && <span className="text-bad">{errors} 個錯誤</span>}
-          {warnings > 0 && <span className="text-print">{warnings} 個提醒</span>}
+          {warnings > 0 && <span className="text-accent">{warnings} 個提醒</span>}
           {file.imported_paper_id && (
             <Link to={`/bank/papers/${file.imported_paper_id}`} className="text-ok underline underline-offset-2">
               已在題庫
@@ -65,7 +65,7 @@ function FileRow({ file }: { file: ConvertedFile }) {
       <div className="flex gap-2">
         <Link
           to={`/import/${encodeURIComponent(file.name)}`}
-          className="inline-flex h-9 items-center rounded-md px-3 text-sm text-ink-soft hover:bg-print-faint"
+          className="inline-flex h-9 items-center rounded-md px-3 text-sm text-ink-soft hover:bg-accent-faint"
         >
           對照預覽
         </Link>
@@ -140,7 +140,7 @@ export function ImportPreviewPage() {
       />
       {run.data && <OutcomeNote outcome={run.data} />}
       {paperIssues.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-1 rounded-md bg-print-faint px-4 py-3 text-sm">
+        <ul className="m-0 flex list-none flex-col gap-1 rounded-md bg-accent-faint px-4 py-3 text-sm">
           {paperIssues.map((issue) => (
             <li key={issue.message} className={issue.level === 'error' ? 'text-bad' : 'text-ink-soft'}>
               {issue.message}
@@ -160,9 +160,9 @@ export function ImportPreviewPage() {
               aria-current={position === index ? 'true' : undefined}
               className={cx(
                 'tabular h-8 min-w-8 rounded-sm border px-1.5 text-xs transition-colors',
-                position === index ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet hover:border-print-rule',
+                position === index ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet hover:border-rule',
                 issues.some((issue) => issue.level === 'error') && position !== index && 'border-bad text-bad',
-                issues.length > 0 && issues.every((issue) => issue.level === 'warning') && position !== index && 'border-print text-print',
+                issues.length > 0 && issues.every((issue) => issue.level === 'warning') && position !== index && 'border-accent text-accent',
               )}
             >
               {entry.number}
@@ -176,13 +176,13 @@ export function ImportPreviewPage() {
           <section aria-label="解析結果" className="flex flex-col gap-4 rounded-lg bg-sheet px-5 py-6 shadow-sheet sm:px-7">
             <h2 className="eyebrow m-0">解析結果・第 {question.number} 題</h2>
             {issuesFor(question.number).map((issue) => (
-              <p key={issue.message} className={cx('m-0 text-sm', issue.level === 'error' ? 'text-bad' : 'text-print')}>
+              <p key={issue.message} className={cx('m-0 text-sm', issue.level === 'error' ? 'text-bad' : 'text-accent')}>
                 {issue.message}
               </p>
             ))}
             {question.passage && (
               <details className="rounded-md bg-sheet-tint px-4 py-2 text-sm">
-                <summary className="cursor-pointer text-print">題組文章</summary>
+                <summary className="cursor-pointer text-accent">題組文章</summary>
                 <RichText className="mt-2 text-[15px]">{question.passage}</RichText>
               </details>
             )}
@@ -207,7 +207,7 @@ export function ImportPreviewPage() {
               {question.points !== null && question.points !== undefined && `・配分 ${question.points}`}
               {question.tags && question.tags.length > 0 && `・標籤 ${question.tags.join('、')}`}
             </p>
-            <div className="flex justify-between border-t border-print-rule pt-4">
+            <div className="flex justify-between border-t border-rule pt-4">
               <Button variant="ghost" size="sm" onClick={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}>
                 <Icon name="back" size={16} />
                 上一題

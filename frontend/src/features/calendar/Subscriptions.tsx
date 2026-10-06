@@ -74,11 +74,11 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
                     'flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-left text-sm transition-colors',
                     preset.subscribed
                       ? 'border-ok/40 bg-ok-soft/40 text-ok'
-                      : 'border-line bg-sheet text-ink hover:border-print-rule hover:bg-print-faint',
+                      : 'border-line bg-sheet text-ink hover:border-rule hover:bg-accent-faint',
                   )}
                 >
                   <span className="truncate">{preset.name}</span>
-                  {preset.subscribed ? <Icon name="check" size={16} /> : <Icon name="plus" size={16} className="text-print" />}
+                  {preset.subscribed ? <Icon name="check" size={16} /> : <Icon name="plus" size={16} className="text-accent" />}
                 </button>
               </li>
             ))}
@@ -87,7 +87,7 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
         </section>
 
         <form
-          className="flex flex-col gap-2 border-t border-print-rule pt-4"
+          className="flex flex-col gap-2 border-t border-rule pt-4"
           onSubmit={(event) => {
             event.preventDefault()
             if (url.trim()) add.mutate({ url: url.trim(), include_deadlines: includeDeadlines })

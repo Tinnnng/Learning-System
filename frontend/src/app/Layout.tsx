@@ -5,23 +5,16 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { cx } from '@/lib/cx'
 import { navItems } from './registry'
 
-/** 答案卡左緣的定位黑塊（timing marks），當作品牌記號 */
+/** 品牌：「劃重點」，重點兩個字被螢光筆劃過；滑過時重新刷一次 */
 function Wordmark() {
   return (
-    <NavLink to="/" className="group flex items-center gap-2.5" aria-label="Learning-System 首頁">
-      <span aria-hidden="true" className="flex flex-col gap-[3px]">
-        {[0, 1, 2].map((index) => (
-          <span
-            key={index}
-            className={cx(
-              'block h-[4px] rounded-[1px] bg-ink transition-[width] duration-[var(--dur)] ease-out',
-              index === 1 ? 'w-3 group-hover:w-4' : 'w-4',
-            )}
-          />
-        ))}
-      </span>
-      <span className="font-serif text-[17px] font-bold tracking-wide text-ink">
-        學習<span className="text-print">答案卡</span>
+    <NavLink to="/" className="group flex items-center gap-2" aria-label="劃重點 首頁">
+      <Icon name="edit" size={20} className="text-accent transition-transform duration-[var(--dur)] group-hover:-rotate-12" />
+      <span className="font-hand text-xl font-bold tracking-wide text-ink">
+        劃
+        <span className="marker [&::before]:animate-[swipe_var(--dur-marker)_var(--ease-marker)_both] group-hover:[&::before]:animate-none">
+          重點
+        </span>
       </span>
     </NavLink>
   )
@@ -58,14 +51,21 @@ export function Layout() {
                     end={item.path === '/'}
                     className={({ isActive }) =>
                       cx(
-                        'relative flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-[var(--dur)]',
+                        'group flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-[var(--dur)]',
                         isActive ? 'font-medium text-ink' : 'text-muted hover:text-ink',
-                        isActive &&
-                          'after:absolute after:inset-x-3 after:-bottom-[13px] after:h-[2px] after:rounded-full after:bg-print',
                       )
                     }
                   >
-                    {item.label}
+                    {({ isActive }) => (
+                      <span
+                        className={cx(
+                          'marker',
+                          isActive ? '[--marker-scale:1]' : '[--marker-scale:0] group-hover:[--marker-scale:0.35]',
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                    )}
                   </NavLink>
                 </li>
               ))}
@@ -97,7 +97,7 @@ export function Layout() {
                 className={({ isActive }) =>
                   cx(
                     'flex h-16 flex-col items-center justify-center gap-1 text-[11px] transition-colors',
-                    isActive ? 'text-print' : 'text-muted',
+                    isActive ? 'text-accent' : 'text-muted',
                   )
                 }
               >

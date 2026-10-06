@@ -29,13 +29,13 @@ export function ZhengTally({ count, target = 5, size = 32, showLabel = true, cla
         aria-label={done ? '已掌握' : `連續答對 ${count} 次，共需 ${target} 次`}
         className="flex-none"
       >
-        <rect x="1" y="1" width="38" height="38" fill="none" stroke="var(--print-rule)" strokeDasharray="2 3" />
+        <rect x="1" y="1" width="38" height="38" fill="none" stroke="var(--rule)" strokeDasharray="2 3" />
         {STROKES.map((d, index) => (
           <path
             key={d}
             d={d}
             fill="none"
-            stroke={done ? 'var(--ok)' : 'var(--ink)'}
+            stroke={done ? 'var(--ok)' : 'var(--accent)'}
             strokeWidth={3.2}
             strokeLinecap="round"
             pathLength={1}

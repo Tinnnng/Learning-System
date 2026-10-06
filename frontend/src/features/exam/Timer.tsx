@@ -38,7 +38,7 @@ export function Timer({ remainingSeconds, onExpire }: TimerProps) {
       aria-label={`剩餘時間 ${clock(left)}`}
       className={cx(
         'tabular inline-flex items-center gap-1.5 text-lg transition-colors duration-[var(--dur)]',
-        warning ? 'text-print' : 'text-ink',
+        warning ? 'text-accent' : 'text-ink',
         urgent && 'animate-pulse',
       )}
     >

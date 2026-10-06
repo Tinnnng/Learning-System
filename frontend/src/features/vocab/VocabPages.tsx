@@ -41,7 +41,7 @@ function VocabTabs() {
           className={({ isActive }) =>
             cx(
               '-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors',
-              isActive ? 'border-print font-medium text-ink' : 'border-transparent text-muted hover:text-ink',
+              isActive ? 'border-accent font-medium text-ink' : 'border-transparent text-muted hover:text-ink',
             )
           }
         >
@@ -92,7 +92,7 @@ export function DailyPage() {
                 ['錯題單字', stats.data.wrong_list],
                 ['今天到期', stats.data.due_today],
               ].map(([label, value]) => (
-                <div key={label} className="flex items-baseline justify-between gap-3 border-b border-print-rule pb-2">
+                <div key={label} className="flex items-baseline justify-between gap-3 border-b border-rule pb-2">
                   <dt className="text-sm text-muted">{label}</dt>
                   <dd className="tabular m-0 text-lg">{value}</dd>
                 </div>
@@ -112,8 +112,8 @@ function DailyDone() {
   return (
     <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
       <span className="eyebrow">今天完成了</span>
-      <p className="m-0 font-serif text-2xl font-bold">
-        {total} 個單字答對 <span className="tabular text-print">{correct}</span> 個
+      <p className="m-0 font-hand text-2xl font-bold">
+        {total} 個單字答對 <span className="tabular text-accent">{correct}</span> 個
       </p>
       <p className="m-0 text-muted">
         {correct < total ? '答錯的字已經收進錯題單字，明天會優先再出現。' : '全對！明天見。'}
@@ -130,10 +130,10 @@ function DailyDone() {
 
 function WordLine({ word, extra }: { word: WordOut; extra?: ReactNode }) {
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-print-rule py-3.5 last:border-b-0">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-rule py-3.5 last:border-b-0">
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
         <span className="font-mono text-lg">{word.term}</span>
-        {word.part_of_speech && <span className="text-xs text-print">{word.part_of_speech}</span>}
+        {word.part_of_speech && <span className="text-xs text-accent">{word.part_of_speech}</span>}
         <span className="text-sm text-ink-soft">{word.meaning}</span>
       </span>
       {extra}
@@ -213,7 +213,7 @@ function ImportPanel() {
 
   return (
     <aside className="flex flex-col gap-5 rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24">
-      <h2 className="m-0 font-serif text-lg font-bold">匯入單字</h2>
+      <h2 className="m-0 font-hand text-lg font-bold">匯入單字</h2>
       <div className="flex flex-col gap-2">
         <p className="m-0 text-sm text-muted">
           CSV 或 Excel，第一列放欄位名稱：<span className="text-ink">單字、中文</span> 必填，可加 詞性、例句、例句翻譯、標籤。同一個字重新匯入會更新。
@@ -236,7 +236,7 @@ function ImportPanel() {
         </Button>
       </div>
       {builtin.data && builtin.data.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-print-rule pt-4">
+        <div className="flex flex-col gap-2 border-t border-rule pt-4">
           <span className="text-sm text-muted">內建單字表</span>
           {builtin.data.map((list) => (
             <Button
@@ -310,7 +310,7 @@ export function WordsPage() {
             </EmptyState>
           ) : (
             <section className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
-              <p className="m-0 border-b border-print py-3 text-sm text-muted">
+              <p className="m-0 border-b border-accent py-3 text-sm text-muted">
                 共 <span className="tabular text-ink">{words.data.total}</span> 個單字
               </p>
               <ul className="m-0 list-none p-0">
@@ -333,7 +333,7 @@ export function WordsPage() {
                 ))}
               </ul>
               {words.data.total > words.data.items.length && (
-                <div className="flex justify-center border-t border-print-rule py-4">
+                <div className="flex justify-center border-t border-rule py-4">
                   <Button variant="ghost" onClick={() => setLimit(limit + 40)}>
                     再顯示 40 個
                   </Button>

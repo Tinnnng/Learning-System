@@ -93,10 +93,10 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   return (
     <section
       aria-label="AI 助教"
-      className={cx('flex flex-col gap-4 rounded-md border border-print-rule bg-sheet-tint px-4 py-4 sm:px-5', className)}
+      className={cx('flex flex-col gap-4 rounded-md border border-rule bg-sheet-tint px-4 py-4 sm:px-5', className)}
     >
       <header className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-1.5 text-sm font-medium text-print">
+        <span className="flex items-center gap-1.5 text-sm font-medium text-accent">
           <Icon name="spark" size={17} />
           AI 助教
           <span className="font-normal text-muted">・僅供參考，以官方答案為準</span>
@@ -108,7 +108,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
 
       {messages.length === 0 && busy && (
         <p className="m-0 flex items-center gap-2 text-sm text-muted" role="status">
-          <span className="h-3 w-2 animate-pulse rounded-full border border-print" />
+          <span className="h-3 w-2 animate-pulse rounded-full border border-accent" />
           AI 正在看這一題，大約 10 秒…
         </p>
       )}

@@ -9,7 +9,7 @@ export function Loading({ label = '載入中', className }: { label?: string; cl
         {[0, 1, 2].map((index) => (
           <span
             key={index}
-            className="h-3 w-2 animate-pulse rounded-full border border-print"
+            className="h-3 w-2 animate-pulse rounded-full border border-accent"
             style={{ animationDelay: `${index * 160}ms` }}
           />
         ))}
@@ -30,7 +30,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
     <div role="alert" className="flex flex-col items-start gap-3 rounded-md border border-bad/40 bg-bad-soft/50 p-5">
       <p className="m-0 text-ink">{message}</p>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="text-sm font-medium text-print underline underline-offset-4">
+        <button type="button" onClick={onRetry} className="text-sm font-medium text-accent underline underline-offset-4">
           重新載入
         </button>
       )}
@@ -40,8 +40,8 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="ruled flex flex-col items-start gap-3 rounded-lg border border-dashed border-print-rule px-6 py-10">
-      <h2 className="m-0 font-serif text-lg font-bold">{title}</h2>
+    <div className="ruled flex flex-col items-start gap-3 rounded-lg border border-dashed border-rule px-6 py-10">
+      <h2 className="m-0 font-hand text-lg font-bold">{title}</h2>
       {children && <div className="max-w-[56ch] text-muted">{children}</div>}
       {action}
     </div>

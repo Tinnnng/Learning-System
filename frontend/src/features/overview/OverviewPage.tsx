@@ -37,7 +37,7 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
           return (
             <div key={day} className="group relative flex h-full flex-1 flex-col justify-end" title={`${day.slice(5)}：${attempts} 題，答對 ${correct}`}>
               <div
-                className="flex w-full flex-col justify-end overflow-hidden rounded-t-[3px] bg-print-rule transition-[height] duration-[var(--dur-slow)]"
+                className="flex w-full flex-col justify-end overflow-hidden rounded-t-[3px] bg-rule transition-[height] duration-[var(--dur-slow)]"
                 style={{ height: `${(attempts / max) * 100}%`, minHeight: attempts ? 3 : 0 }}
               >
                 <div className="w-full bg-ink" style={{ height: attempts ? `${(correct / attempts) * 100}%` : 0 }} />
@@ -54,7 +54,7 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
             <span className="h-2.5 w-2.5 rounded-[2px] bg-ink" /> 答對
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-[2px] bg-print-rule" /> 答錯
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-rule" /> 答錯
           </span>
         </span>
         <span>今天</span>
@@ -74,10 +74,10 @@ function AccuracyList({ title, stats }: { title: string; stats: Overview['by_sub
           return (
             <li key={stat.name} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5">
               <span className="truncate text-sm text-ink">{shortName(stat.name)}</span>
-              <span className={cx('tabular text-sm', weak ? 'text-print' : 'text-ink')}>{percent(stat.accuracy)}</span>
+              <span className={cx('tabular text-sm', weak ? 'text-accent' : 'text-ink')}>{percent(stat.accuracy)}</span>
               <span className="col-span-2 h-[6px] overflow-hidden rounded-full bg-line">
                 <span
-                  className={cx('block h-full rounded-full transition-[width] duration-[var(--dur-slow)]', weak ? 'bg-print' : 'bg-ink')}
+                  className={cx('block h-full rounded-full transition-[width] duration-[var(--dur-slow)]', weak ? 'bg-accent' : 'bg-ink')}
                   style={{ width: percent(stat.accuracy) }}
                 />
               </span>
@@ -107,7 +107,7 @@ export function OverviewPage() {
         </EmptyState>
       ) : (
         <>
-          <dl className="m-0 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-print-rule bg-print-rule sm:grid-cols-3 lg:grid-cols-6">
+          <dl className="m-0 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-rule bg-rule sm:grid-cols-3 lg:grid-cols-6">
             {[
               ['整體正確率', percent(data.accuracy), true],
               ['作答次數', String(data.attempts), false],
@@ -118,7 +118,7 @@ export function OverviewPage() {
             ].map(([label, value, emphasis]) => (
               <div key={String(label)} className="flex flex-col gap-1 bg-sheet px-5 py-4">
                 <dt className="text-xs text-muted">{label}</dt>
-                <dd className={cx('tabular m-0 text-2xl', emphasis ? 'text-print' : 'text-ink')}>{value}</dd>
+                <dd className={cx('tabular m-0 text-2xl', emphasis ? 'text-accent' : 'text-ink')}>{value}</dd>
               </div>
             ))}
           </dl>

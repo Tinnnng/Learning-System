@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 把 tokens 接到 Tailwind：bg-paper、text-ink、border-print-rule、font-serif… */
+/* 把 tokens 接到 Tailwind：bg-paper、text-ink、bg-hl、border-rule、font-hand… */
 @theme inline {
   --color-paper: var(--paper);
   --color-sheet: var(--sheet);
@@ -12,18 +12,22 @@
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
-  --color-print: var(--print);
-  --color-print-strong: var(--print-strong);
-  --color-print-rule: var(--print-rule);
-  --color-print-faint: var(--print-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-rule: var(--rule);
+  --color-accent-faint: var(--accent-faint);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
   --color-line: var(--line);
+  --color-hl: var(--hl);
+  --color-hl-soft: var(--hl-soft);
+  --color-ok-hl: var(--ok-hl);
+  --color-bad-hl: var(--bad-hl);
 
   --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
+  --font-hand: var(--font-hand);
   --font-mono: var(--font-mono);
 
   --text-xs: var(--text-xs);
@@ -63,11 +67,11 @@
     line-height: 1.3;
   }
   :focus-visible {
-    outline: 2px solid var(--print);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
   ::selection {
-    background: var(--print-faint);
+    background: var(--accent-faint);
     color: var(--ink);
   }
   button {
@@ -79,13 +83,27 @@
 }
 
 @layer components {
-  /* 答案卡的印刷橫線，用在題目紙背景 */
+  /* 方格筆記紙：只用在空白狀態等沒有文字流的區塊，避免干擾閱讀 */
   .ruled {
-    background-image: repeating-linear-gradient(
-      to bottom,
-      transparent 0 31px,
-      color-mix(in srgb, var(--print-rule) 55%, transparent) 31px 32px
-    );
+    background-image: radial-gradient(circle, var(--rule) 1px, transparent 1.2px);
+    background-size: 18px 18px;
+  }
+
+  /* 螢光筆劃過：放在文字後面的色塊，scaleX 從 0 到 1 */
+  .marker {
+    position: relative;
+    isolation: isolate;
+  }
+  .marker::before {
+    content: '';
+    position: absolute;
+    inset: 22% -4px 14% -4px;
+    z-index: -1;
+    background: var(--marker-color, var(--hl));
+    border-radius: var(--radius-marker);
+    transform: scaleX(var(--marker-scale, 1));
+    transform-origin: left;
+    transition: transform var(--dur-marker) var(--ease-marker), background-color var(--dur) ease;
   }
 
   /* 數字對齊 */
@@ -94,17 +112,18 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* 小標：印刷體的欄位名稱 */
+  /* 小標：原子筆寫的批註 */
   .eyebrow {
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    color: var(--print);
-    font-weight: 500;
+    font-family: var(--font-hand);
+    font-size: var(--text-sm);
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    font-weight: 400;
   }
 
   /* 題目內容（Markdown 渲染結果） */
   .prose-question {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: var(--text-question);
     line-height: 1.85;
     color: var(--ink);
@@ -150,12 +169,12 @@
   }
   .prose-question th,
   .prose-question td {
-    border: 1px solid var(--print-rule);
+    border: 1px solid var(--rule);
     padding: 4px 10px;
     text-align: left;
   }
   .prose-question th {
-    background: var(--print-faint);
+    background: var(--accent-faint);
     font-weight: 500;
   }
   .prose-question strong {
@@ -174,7 +193,7 @@
     text-align: center;
     font-family: var(--font-mono);
     font-size: 0.75em;
-    color: var(--print);
+    color: var(--accent);
     line-height: 1.2;
     vertical-align: baseline;
   }
@@ -216,5 +235,22 @@
   }
   100% {
     transform: scale(1) rotate(-4deg);
+  }
+}
+
+/* 原子筆畫線：搭配 pathLength=1、stroke-dasharray=1 */
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 螢光筆刷過（用在進場動畫） */
+@keyframes swipe {
+  from {
+    transform: scaleX(0);
   }
 }

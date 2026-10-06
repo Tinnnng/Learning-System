@@ -74,7 +74,7 @@ export function RichText({ children, inline = false, className }: RichTextProps)
           <img src={assetUrl(String(src ?? ''))} alt={alt ?? ''} className="my-2 max-w-full rounded-sm" />
         ),
         a: ({ href, children: nodes }) => (
-          <a href={href} target="_blank" rel="noreferrer" className="text-print underline underline-offset-2">
+          <a href={href} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
             {nodes}
           </a>
         ),

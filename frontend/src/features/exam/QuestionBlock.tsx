@@ -1,4 +1,4 @@
-/** 一題的完整呈現：題組文章、題幹、附圖、選項（答案卡劃記格）、揭曉後的詳解。 */
+/** 一題的完整呈現：題組文章、題幹、附圖、選項（螢光筆劃記）、揭曉後的詳解。 */
 
 import { useState } from 'react'
 import { AiTutor } from '@/components/AiTutor'
@@ -44,18 +44,18 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
     <article className="flex flex-col gap-4" aria-labelledby={`q-${item.position}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <Heading id={`q-${item.position}`} className="m-0 flex items-baseline gap-3">
-          <span className="tabular text-2xl font-medium text-print">{item.position}</span>
+          <span className="tabular text-2xl font-medium text-accent">{item.position}</span>
           <span className="text-xs font-normal text-muted">
             {item.paper.year && `${item.paper.year} 年`}
             {item.paper.exam_type}｜{shortName(item.paper.subject)}
-            {multiple && <span className="ml-2 rounded-sm bg-print-faint px-1.5 py-0.5 text-print">複選</span>}
+            {multiple && <span className="ml-2 rounded-sm bg-accent-faint px-1.5 py-0.5 text-accent">複選</span>}
           </span>
         </Heading>
         {item.page_snapshot && (
           <button
             type="button"
             onClick={() => setShowPage(true)}
-            className="inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:text-print hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:text-accent hover:underline"
           >
             <Icon name="page" size={15} />
             看原始試卷
@@ -64,8 +64,8 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
       </div>
 
       {item.passage && (
-        <details className="group rounded-md border border-print-rule bg-sheet-tint" open>
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm text-print">
+        <details className="group rounded-md border border-rule bg-sheet-tint" open>
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm text-accent">
             題組文章
             <span className="text-xs text-muted group-open:hidden">展開</span>
           </summary>

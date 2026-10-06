@@ -1,32 +1,38 @@
 /*
- * Design tokens — 方向 A「答案卡」
- * 元件只能使用這裡的變數（透過 Tailwind 的 bg-paper、text-ink… 或 var(--…)），不寫死顏色與數值。
- * 日間：白紙＋粉紅印刷墨＋2B 鉛筆石墨；夜間：石墨板＋柔和玫瑰色，各自調色而不是直接反轉。
+ * Design tokens — 方向 B「螢光筆與原子筆」
+ * 元件只能使用這裡的變數（透過 Tailwind 的 bg-paper、text-ink、bg-hl… 或 var(--…)），不寫死顏色與數值。
+ * 日間：白紙＋藍色原子筆＋黃色螢光筆；夜間：深藍書桌＋螢光筆發光，各自調色而不是直接反轉。
+ * 螢光筆色（--hl、--ok-hl、--bad-hl）只當「底色」用，文字一律用 --ink，對比才夠。
  */
 
 :root {
   /* 色彩 */
-  --paper: #f6f7f5; /* 頁面底色：略帶冷調的紙 */
-  --sheet: #ffffff; /* 答案卡、題目紙 */
-  --sheet-tint: #fcf8f9; /* 帶一點印刷粉的區塊 */
-  --ink: #1d2129; /* 2B 鉛筆石墨：主要文字、塗滿的選項格 */
-  --ink-soft: #3b404b;
-  --muted: #66626c; /* 次要文字（對 --paper 5.6:1） */
-  --print: #c4375b; /* 答案卡印刷粉紅：品牌強調色、格線、焦點 */
-  --print-strong: #a82c4c;
-  --print-rule: #ecc9d2; /* 印刷格線 */
-  --print-faint: #f8e8ec;
-  --ok: #1f7a55;
-  --ok-soft: #dcefe5;
-  --bad: #c2410c;
-  --bad-soft: #fbe6da;
-  --line: #e4e2e5; /* 一般分隔線 */
-  --overlay: rgb(29 33 41 / 0.42);
+  --paper: #f7f8fb; /* 頁面底色：略帶藍調的紙 */
+  --sheet: #ffffff; /* 筆記紙、題目紙 */
+  --sheet-tint: #f6f8ff; /* 帶一點原子筆藍的區塊 */
+  --ink: #1a2340; /* 藍黑原子筆：主要文字 */
+  --ink-soft: #3a4466;
+  --muted: #5f6782; /* 次要文字（對 --sheet 6.0:1） */
+  --accent: #2346d8; /* 藍色原子筆：品牌強調色、批註、焦點 */
+  --accent-strong: #1a35a8;
+  --rule: #dfe4f2; /* 筆記本橫線 */
+  --accent-faint: #edf1ff;
+  --hl: #ffe34d; /* 黃色螢光筆 */
+  --hl-soft: #fff4b0;
+  --ok: #12804c;
+  --ok-soft: #ddf6e8;
+  --ok-hl: #9bf0bd; /* 綠色螢光筆：答對 */
+  --bad: #c42a5c;
+  --bad-soft: #ffe8f0;
+  --bad-hl: #ffc2d6; /* 粉紅螢光筆：答錯 */
+  --line: #e3e6ee;
+  --overlay: rgb(26 35 64 / 0.4);
 
   /* 字體 */
   --font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
-  --font-serif: 'Noto Serif TC', 'PMingLiU', 'Songti TC', serif;
-  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  --font-hand: 'LXGW WenKai TC', 'Kaiti TC', 'DFKai-SB', 'BiauKai', var(--font-sans);
+  /** 手寫批註感：只用在標題、小標、回饋與選項字母，不用在長段落 */
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
 
   /* 字級（1.2 比例，基準 15px；題目 17px） */
   --text-xs: 12px;
@@ -48,19 +54,21 @@
   --space-10: 40px;
   --space-14: 56px;
 
-  /* 形狀 */
+  /* 形狀：螢光筆劃過的不規則圓角 */
   --radius-sm: 4px;
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow-sheet: 0 1px 0 rgb(29 33 41 / 0.04), 0 12px 32px -24px rgb(29 33 41 / 0.35);
-  --shadow-pop: 0 18px 48px -18px rgb(29 33 41 / 0.45);
+  --radius-marker: 3px 10px 4px 9px;
+  --shadow-sheet: 0 1px 0 rgb(26 35 64 / 0.04), 0 14px 36px -26px rgb(26 35 64 / 0.4);
+  --shadow-pop: 0 18px 48px -18px rgb(26 35 64 / 0.45);
 
   /* 動效 */
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --ease-draw: cubic-bezier(0.6, 0, 0.2, 1);
+  --ease-marker: cubic-bezier(0.65, 0, 0.25, 1); /* 螢光筆刷過：起步慢、中段快、收筆慢 */
   --dur-fast: 120ms;
   --dur: 220ms;
   --dur-slow: 420ms;
+  --dur-marker: 380ms;
 
   --content-width: 1120px;
   --reading-width: 720px;
@@ -68,23 +76,27 @@
 }
 
 :root.dark {
-  --paper: #15171b;
-  --sheet: #1c1f25;
-  --sheet-tint: #211d23;
-  --ink: #e8e6e3;
-  --ink-soft: #cbc8c5;
-  --muted: #a39fa9;
-  --print: #f0839c;
-  --print-strong: #f6a3b6;
-  --print-rule: #4b2e39;
-  --print-faint: #2b2027;
-  --ok: #5bc596;
-  --ok-soft: #1c3a2d;
-  --bad: #f2925f;
-  --bad-soft: #3d271c;
-  --line: #2c2f37;
-  --overlay: rgb(0 0 0 / 0.6);
-  --shadow-sheet: 0 1px 0 rgb(0 0 0 / 0.2), 0 16px 36px -24px rgb(0 0 0 / 0.8);
+  --paper: #0d1124;
+  --sheet: #151a33;
+  --sheet-tint: #1a2040;
+  --ink: #e8ebf7;
+  --ink-soft: #c5cae3;
+  --muted: #9ca3c4;
+  --accent: #93a5ff;
+  --accent-strong: #b5c2ff;
+  --rule: #262d52;
+  --accent-faint: #1d2550;
+  --hl: rgb(232 210 58 / 0.4);
+  --hl-soft: rgb(232 210 58 / 0.18);
+  --ok: #57dc95;
+  --ok-soft: #12321f;
+  --ok-hl: rgb(73 213 138 / 0.32);
+  --bad: #ff7aa3;
+  --bad-soft: #3a1626;
+  --bad-hl: rgb(255 111 154 / 0.3);
+  --line: #232a4b;
+  --overlay: rgb(3 5 15 / 0.65);
+  --shadow-sheet: 0 1px 0 rgb(0 0 0 / 0.25), 0 18px 40px -26px rgb(0 0 0 / 0.9);
   --shadow-pop: 0 18px 48px -18px rgb(0 0 0 / 0.85);
   color-scheme: dark;
 }

@@ -17,12 +17,12 @@ const LETTERS = 'ABCDEFGHIJ'
 
 function QuestionPreview({ question, showAnswer }: { question: QuestionOut; showAnswer: boolean }) {
   return (
-    <li className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-b border-print-rule py-6 last:border-b-0">
-      <span className="tabular pt-1 text-right text-sm text-print">{question.number}</span>
+    <li className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-b border-rule py-6 last:border-b-0">
+      <span className="tabular pt-1 text-right text-sm text-accent">{question.number}</span>
       <div className="flex min-w-0 flex-col gap-3">
         {question.passage && (
           <details className="rounded-md bg-sheet-tint px-4 py-2 text-sm">
-            <summary className="cursor-pointer text-print">題組文章</summary>
+            <summary className="cursor-pointer text-accent">題組文章</summary>
             <RichText className="mt-2 text-[15px]">{question.passage}</RichText>
           </details>
         )}
@@ -89,12 +89,12 @@ export function PaperPage() {
 
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,1fr)]">
         <section aria-label="題目" className="order-2 rounded-lg bg-sheet px-4 shadow-sheet sm:px-7 lg:order-1">
-          <div className="flex items-center justify-between gap-4 border-b border-print pb-3 pt-5">
+          <div className="flex items-center justify-between gap-4 border-b border-line pb-3 pt-5">
             <h2 className="eyebrow m-0">試題預覽</h2>
             <Switch label="顯示答案" checked={showAnswer} onChange={setShowAnswer} />
           </div>
           {data.answer_note && showAnswer && (
-            <p className="m-0 mt-4 rounded-md bg-print-faint px-4 py-2 text-sm text-ink-soft">更正備註：{data.answer_note}</p>
+            <p className="m-0 mt-4 rounded-md bg-accent-faint px-4 py-2 text-sm text-ink-soft">更正備註：{data.answer_note}</p>
           )}
           <ol className="m-0 list-none p-0">
             {data.questions.map((question) => (
@@ -104,7 +104,7 @@ export function PaperPage() {
         </section>
 
         <aside className="order-1 rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24 lg:order-2">
-          <h2 className="m-0 mb-5 font-serif text-lg font-bold">開始寫這份試卷</h2>
+          <h2 className="m-0 mb-5 font-hand text-lg font-bold">開始寫這份試卷</h2>
           <StartPanel
             filter={{ paper_ids: [data.id] }}
             questionCount={choiceCount}

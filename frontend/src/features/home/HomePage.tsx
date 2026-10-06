@@ -11,7 +11,7 @@ import { useStartSession } from '@/lib/sessions'
 import type { SessionSummary } from '@/lib/types'
 import { fetchCountdown, fetchOverview, fetchPapers, fetchSessions, fetchVocabStats } from './api'
 
-/** 小橢圓格排成一列，用來表示「完成幾個」 */
+/** 一排短短的螢光筆劃記，用來表示「完成幾個」 */
 function Bubbles({ total, done, label }: { total: number; done: number; label: string }) {
   return (
     <span className="flex gap-1.5" role="img" aria-label={label}>
@@ -19,8 +19,8 @@ function Bubbles({ total, done, label }: { total: number; done: number; label: s
         <span
           key={index}
           className={cx(
-            'h-[18px] w-[12px] rounded-full border-[1.5px] transition-colors duration-[var(--dur)]',
-            index < done ? 'border-ink bg-ink' : 'border-print',
+            'h-2.5 w-6 rounded-[var(--radius-marker)] transition-colors duration-[var(--dur)]',
+            index < done ? 'bg-hl' : 'bg-line',
           )}
         />
       ))}
@@ -37,21 +37,22 @@ interface TaskRowProps {
   done?: boolean
 }
 
-/** 今天的任務：像答案卡上的一列，左邊題號，右邊動作 */
+/** 今天的任務：左邊是手寫的編號，完成的項目整個標題被螢光筆劃過 */
 function TaskRow({ index, title, detail, status, action, done }: TaskRowProps) {
   return (
-    <li className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 border-b border-print-rule py-5 last:border-b-0 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+    <li className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[auto_1fr_auto] sm:items-center">
       <span
-        className={cx(
-          'tabular grid h-9 w-9 place-items-center rounded-full border-[1.5px] text-sm',
-          done ? 'border-ok bg-ok text-paper' : 'border-print text-print',
-        )}
+        className={cx('grid w-8 place-items-center font-hand text-2xl leading-none', done ? 'text-ok' : 'text-accent')}
         aria-hidden="true"
       >
-        {done ? <Icon name="check" size={18} /> : index}
+        {done ? <Icon name="check" size={22} /> : index}
       </span>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <h3 className="m-0 text-base font-medium">{title}</h3>
+        <h3 className="m-0 text-base font-medium">
+          <span className={cx('marker [--marker-color:var(--ok-hl)]', done ? '[--marker-scale:1]' : '[--marker-scale:0]')}>
+            {title}
+          </span>
+        </h3>
         <div className="text-sm text-muted">{detail}</div>
         {status}
       </div>
@@ -76,7 +77,7 @@ function SessionRow({ session }: { session: SessionSummary }) {
               <span className="text-muted">／{score(session.max_score)}</span>
             </>
           ) : (
-            <span className="text-print">
+            <span className="text-accent">
               {session.answered_count}／{session.total} 題
             </span>
           )}
@@ -115,14 +116,14 @@ export function HomePage() {
         title="今天要做的事"
         actions={
           nextExam ? (
-            <Link to="/calendar" className="group flex items-baseline gap-2 rounded-md px-3 py-1 transition-colors hover:bg-print-faint">
+            <Link to="/calendar" className="group flex items-baseline gap-2 rounded-md px-3 py-1 transition-colors hover:bg-accent-faint">
               <span className="text-sm text-muted">距離{nextExam.title}</span>
-              <span className="font-serif text-3xl font-bold leading-none text-print tabular-nums">{nextExam.days_until}</span>
-              <span className="text-sm text-print">天</span>
+              <span className="font-hand text-3xl font-bold leading-none text-accent tabular-nums">{nextExam.days_until}</span>
+              <span className="text-sm text-accent">天</span>
             </Link>
           ) : (
             countdown.isSuccess && (
-              <Link to="/calendar" className="text-sm text-print underline underline-offset-4">
+              <Link to="/calendar" className="text-sm text-accent underline underline-offset-4">
                 新增考試日期，開始倒數
               </Link>
             )
@@ -234,13 +235,13 @@ export function HomePage() {
                 ['學過的單字', `${words.studied}`],
                 ['錯題單字', `${words.wrong_list}`],
               ].map(([label, value]) => (
-                <div key={label} className="flex flex-col gap-0.5 border-l-2 border-print-rule pl-3">
+                <div key={label} className="flex flex-col gap-0.5 border-l-2 border-rule pl-3">
                   <dt className="text-xs text-muted">{label}</dt>
                   <dd className="tabular m-0 text-xl text-ink">{value}</dd>
                 </div>
               ))}
             </dl>
-            <Link to="/overview" className="text-sm text-print underline underline-offset-4">
+            <Link to="/overview" className="text-sm text-accent underline underline-offset-4">
               看完整總覽
             </Link>
           </section>

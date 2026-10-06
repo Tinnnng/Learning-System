@@ -27,8 +27,8 @@ export function Segmented<T extends string>({ label, value, options, onChange, c
             className={cx(
               'flex flex-col items-start gap-0.5 rounded-md border px-3.5 py-2.5 text-left transition-[border-color,background-color,box-shadow] duration-[var(--dur)]',
               active
-                ? 'border-ink bg-sheet shadow-[inset_0_0_0_1px_var(--ink)]'
-                : 'border-line bg-sheet hover:border-print-rule',
+                ? 'border-accent bg-accent-faint shadow-[inset_0_0_0_1px_var(--accent)]'
+                : 'border-line bg-sheet hover:border-rule',
             )}
           >
             <span className={cx('text-sm font-medium', active ? 'text-ink' : 'text-ink-soft')}>{option.label}</span>
@@ -47,7 +47,7 @@ interface SwitchProps {
   onChange: (checked: boolean) => void
 }
 
-/** 開關：外觀是一個可以塗滿的橢圓格，延續答案卡的語言。 */
+/** 開關：開啟時是藍黑原子筆色，關閉時是灰色。 */
 export function Switch({ label, description, checked, onChange }: SwitchProps) {
   const id = useId()
   return (
@@ -101,7 +101,7 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
             onClick={() => onChange(active ? null : option.value)}
             className={cx(
               'h-8 rounded-full border px-3 text-sm transition-colors duration-[var(--dur-fast)]',
-              active ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:border-print-rule',
+              active ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:border-rule',
             )}
           >
             {option.label}

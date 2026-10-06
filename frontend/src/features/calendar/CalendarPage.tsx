@@ -51,13 +51,13 @@ function Countdown() {
   if (!exam) return null
   return (
     <section aria-label="下一場考試" className="flex flex-wrap items-end gap-x-8 gap-y-3 rounded-lg bg-sheet px-6 py-6 shadow-sheet sm:px-8">
-      <div className="flex items-baseline gap-2 text-print">
-        <span className="font-serif text-[64px] font-bold leading-none tabular-nums">{exam.days_until}</span>
+      <div className="flex items-baseline gap-2 text-accent">
+        <span className="font-hand text-[64px] font-bold leading-none tabular-nums">{exam.days_until}</span>
         <span className="text-lg">天</span>
       </div>
       <div className="flex flex-col gap-1 pb-1">
         <span className="eyebrow">距離下一場考試</span>
-        <span className="font-serif text-xl font-bold">{exam.title}</span>
+        <span className="font-hand text-xl font-bold">{exam.title}</span>
         <span className="text-sm text-muted">
           {dateLabel(exam)}
           {exam.location && `・${exam.location}`}
@@ -93,7 +93,7 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
   return (
     <section aria-label="月曆" className="flex flex-col gap-3 rounded-lg bg-sheet p-4 shadow-sheet sm:p-6">
       <div className="flex items-center justify-between">
-        <h2 className="m-0 font-serif text-lg font-bold">
+        <h2 className="m-0 font-hand text-lg font-bold">
           {cursor.year} 年 {cursor.month + 1} 月
         </h2>
         <div className="flex gap-1">
@@ -105,7 +105,7 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-print pb-1 text-center text-xs text-print">
+      <div className="grid grid-cols-7 border-b border-accent pb-1 text-center text-xs text-accent">
         {WEEKDAYS.map((day) => (
           <span key={day}>{day}</span>
         ))}
@@ -123,18 +123,18 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
               onClick={() => onPick(key)}
               aria-label={`${cursor.month + 1} 月 ${day} 日${dayEvents.length ? `，${dayEvents.map((event) => event.title).join('、')}` : ''}`}
               className={cx(
-                'flex aspect-square min-h-11 flex-col items-center justify-start gap-1 rounded-sm pt-1.5 text-sm transition-colors hover:bg-print-faint',
-                key === today && 'ring-1 ring-print',
-                hasExam && 'bg-print-faint',
+                'flex aspect-square min-h-11 flex-col items-center justify-start gap-1 rounded-sm pt-1.5 text-sm transition-colors hover:bg-accent-faint',
+                key === today && 'ring-1 ring-accent',
+                hasExam && 'bg-accent-faint',
               )}
             >
-              <span className={cx('tabular', key === today ? 'font-medium text-print' : 'text-ink')}>{day}</span>
+              <span className={cx('tabular', key === today ? 'font-medium text-accent' : 'text-ink')}>{day}</span>
               {dayEvents.length > 0 && (
                 <span className="flex gap-0.5">
                   {dayEvents.slice(0, 3).map((event) => (
                     <span
                       key={event.id}
-                      className={cx('h-[9px] w-[6px] rounded-full', event.kind === 'exam' ? 'bg-print' : 'bg-ink')}
+                      className={cx('h-[9px] w-[6px] rounded-full', event.kind === 'exam' ? 'bg-accent' : 'bg-ink')}
                     />
                   ))}
                 </span>
@@ -238,7 +238,7 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
           <ErrorState error={extract.error instanceof ApiError ? extract.error : new ApiError(500, 'AI 辨識失敗')} />
         )}
         {extract.data?.warnings.map((warning) => (
-          <p key={warning} className="m-0 text-sm text-print">
+          <p key={warning} className="m-0 text-sm text-accent">
             {warning}
           </p>
         ))}
@@ -247,7 +247,7 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
             key={index}
             className={cx(
               'm-0 flex flex-col gap-3 rounded-md border px-4 py-4 transition-opacity',
-              draft.selected ? 'border-print-rule' : 'border-line opacity-55',
+              draft.selected ? 'border-rule' : 'border-line opacity-55',
             )}
           >
             <label className="flex items-center gap-2 text-sm font-medium">
@@ -309,11 +309,11 @@ export function CalendarPage() {
   const past = all.filter((event) => (event.end_date ?? event.date) < today).reverse().slice(0, 5)
 
   const row = (event: EventOut) => (
-    <li key={event.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-print-rule py-4 last:border-b-0">
+    <li key={event.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-rule py-4 last:border-b-0">
       <span
         className={cx(
           'tabular w-16 text-right text-sm',
-          event.kind === 'exam' && event.days_until >= 0 ? 'font-medium text-print' : 'text-muted',
+          event.kind === 'exam' && event.days_until >= 0 ? 'font-medium text-accent' : 'text-muted',
         )}
       >
         {daysText(event.days_until)}
@@ -321,7 +321,7 @@ export function CalendarPage() {
       <span className="flex min-w-0 flex-col">
         <span className="flex items-center gap-2">
           <span className="truncate font-medium">{event.title}</span>
-          <span className="flex-none rounded-sm bg-print-faint px-1.5 text-[11px] text-print">{KIND_LABELS[event.kind ?? 'exam']}</span>
+          <span className="flex-none rounded-sm bg-accent-faint px-1.5 text-[11px] text-accent">{KIND_LABELS[event.kind ?? 'exam']}</span>
           {event.source === 'photo' && <Icon name="camera" size={14} className="flex-none text-muted" label="拍照加入" />}
           {event.subscription_name && (
             <span className="flex-none truncate text-[11px] text-muted" title="訂閱的行程，隨來源更新">
@@ -366,7 +366,7 @@ export function CalendarPage() {
               <a
                 href={ICS_URL}
                 download
-                className="inline-flex h-11 items-center gap-2 rounded-md px-4 text-sm font-medium text-ink-soft transition-colors hover:bg-print-faint hover:text-ink"
+                className="inline-flex h-11 items-center gap-2 rounded-md px-4 text-sm font-medium text-ink-soft transition-colors hover:bg-accent-faint hover:text-ink"
               >
                 <Icon name="import" size={18} />
                 匯出 .ics

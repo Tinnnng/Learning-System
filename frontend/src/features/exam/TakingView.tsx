@@ -195,10 +195,10 @@ export function TakingView({ session }: { session: SessionOut }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-print pb-4">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="eyebrow">{isPractice ? '練習・作答後立刻對答案' : '模擬考・交卷才評分'}</span>
-          <h1 className="m-0 font-serif text-xl font-bold sm:text-2xl">{shortName(session.title)}</h1>
+          <h1 className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
         </div>
         <Segmented
           label="顯示方式"
@@ -221,7 +221,7 @@ export function TakingView({ session }: { session: SessionOut }) {
           <Timer remainingSeconds={session.remaining_seconds} onExpire={onExpire} />
         )}
         <Button size="sm" variant="secondary" onClick={() => setGridOpen(true)}>
-          答案卡
+          題號
         </Button>
       </div>
 
@@ -230,7 +230,7 @@ export function TakingView({ session }: { session: SessionOut }) {
           {view === 'single' ? (
             <div key={item.position} className="animate-[rise-in_var(--dur)_var(--ease-out)]">
               {block(item)}
-              <nav aria-label="換題" className="mt-8 flex items-center justify-between gap-3 border-t border-print-rule pt-5">
+              <nav aria-label="換題" className="mt-8 flex items-center justify-between gap-3 border-t border-rule pt-5">
                 <Button variant="ghost" onClick={() => goTo(current - 1)} disabled={current <= 1}>
                   <Icon name="back" size={18} />
                   上一題
@@ -254,7 +254,7 @@ export function TakingView({ session }: { session: SessionOut }) {
                 <li
                   key={entry.position}
                   id={`item-${entry.position}`}
-                  className="scroll-mt-32 border-b border-print-rule py-8 first:pt-0 last:border-b-0"
+                  className="scroll-mt-32 border-b border-rule py-8 first:pt-0 last:border-b-0"
                 >
                   {block(entry)}
                 </li>
@@ -290,7 +290,7 @@ export function TakingView({ session }: { session: SessionOut }) {
       <Dialog
         open={gridOpen}
         onClose={() => setGridOpen(false)}
-        title="答案卡"
+        title="題號一覽"
         actions={
           <Button onClick={() => { setGridOpen(false); setConfirmSubmit(true) }}>{isPractice ? '結束練習' : '交卷'}</Button>
         }
@@ -322,7 +322,7 @@ export function TakingView({ session }: { session: SessionOut }) {
         <p className="m-0">
           {unanswered > 0 ? (
             <>
-              還有 <span className="tabular font-medium text-print">{unanswered}</span> 題沒有作答，沒作答的題目計 0 分，但不會收進錯題本。
+              還有 <span className="tabular font-medium text-accent">{unanswered}</span> 題沒有作答，沒作答的題目計 0 分，但不會收進錯題本。
             </>
           ) : (
             '所有題目都作答了。'

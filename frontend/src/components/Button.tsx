@@ -13,9 +13,9 @@ const base =
 const variants: Record<Variant, string> = {
   // 主要按鈕：石墨色，像 2B 鉛筆塗滿
   primary: 'bg-ink text-paper hover:bg-ink-soft shadow-[0_1px_0_rgb(0_0_0/.15)]',
-  // 次要按鈕：答案卡印刷粉紅的框
-  secondary: 'border border-print-rule text-print-strong bg-sheet hover:border-print hover:bg-print-faint',
-  ghost: 'text-ink-soft hover:bg-print-faint hover:text-ink',
+  // 次要按鈕：原子筆藍的框
+  secondary: 'border border-rule text-accent-strong bg-sheet hover:border-accent hover:bg-accent-faint',
+  ghost: 'text-ink-soft hover:bg-accent-faint hover:text-ink',
   danger: 'border border-bad/40 text-bad bg-sheet hover:bg-bad-soft',
 }
 
