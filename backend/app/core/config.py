@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Taipei"
     """判斷「今天」用的時區（每日單字、每日統計）。"""
 
+    # 系統內 AI（AI 助教、拍照辨識行事曆）
+    ai_provider: str = "claude_code"
+    """claude_code＝呼叫本機已登入的 Claude Code CLI（用使用者的訂閱額度）；disabled＝關閉；fake＝測試用。"""
+    ai_model: str = "claude-haiku-4-5"
+    claude_cli: str = "claude"
+    """Claude Code 執行檔，找不到時可在 .env 指定完整路徑。"""
+    ai_timeout_seconds: int = 120
+    ai_monthly_budget_usd: float = 3.0
+    """每月 AI 用量上限（以 Claude Code 回報的等值美元計），超過就停用到下個月。"""
+
     @property
     def resolved_database_url(self) -> str:
         return self.database_url or f"sqlite:///{(self.data_dir / 'learning.db').as_posix()}"

@@ -7,7 +7,9 @@
 | 項目 | 決定 |
 |---|---|
 | 使用情境 | 單一使用者、本機執行，**不做登入/帳號系統** |
-| AI 串接 | 系統**不呼叫** Claude API。PDF 由 Claude Code 離線轉成 JSON，再由系統匯入 |
+| AI 串接 | PDF 轉檔：Claude Code 離線轉成 JSON 再匯入。**系統內 AI（AI 助教、拍照辨識行事曆）**：2026-10-06 使用者決定改為在本機呼叫已登入的 Claude Code CLI（`claude -p`），消耗使用者自己的 Claude 訂閱用量，模型 **Claude Haiku 4.5**；不使用 API 金鑰。只限使用者本機自用 |
+| AI 省 token | 呼叫時一律用精簡參數：自訂 `--system-prompt`、`--tools ""`、`--strict-mcp-config`、`--setting-sources ""`、`--no-session-persistence`、`--effort low`（一次約 400 token，不加會變 2.6 萬）。AI 詳解存資料庫重複使用；每月用量上限可設定 |
+| 行事曆 | 手動輸入＋拍照由 AI 辨識（使用者確認後才加入）＋首頁考試倒數＋匯出 .ics |
 | 題型範圍 | 第一版只做選擇題（單選、複選/多答案給分）。**申論題暫不做**，但 schema 保留 `essay` 型別 |
 | 錯題掌握 | 同一題**連續答對 5 次**才移出錯題本（中間答錯一次就歸零重算）。次數放在設定檔，不寫死 |
 | 期中考題目來源 | ① 上課教材（PPT／PDF／DOCX）→ Claude Code 離線**分析教材並出題**；② 現成題目文字檔 → 直接匯入 |
@@ -51,6 +53,9 @@ backend/
       review/          錯題本、作答總覽與統計
       srs/             間隔複習排程（錯題與單字共用，FSRS）
       vocab/           單字匯入、每日測驗
+      ai/              系統內 AI：呼叫本機 Claude Code CLI（providers/）、用量紀錄、每月上限
+      tutor/           AI 助教：依官方答案解釋題目、追問、詳解快取
+      calendar/        行事曆：考試日期、倒數、拍照辨識、匯出 .ics
     每個模組內：router.py / service.py / models.py / schemas.py
   tests/
 frontend/
@@ -142,6 +147,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 
 - 後端 API 文件：http://127.0.0.1:8000/docs
 - 前端一律用 `@/lib/api` 以 `/api/...` 相對路徑呼叫後端，開發時由 Vite proxy 轉送。
+- AI 相關設定（`LS_AI_PROVIDER`、`LS_AI_MODEL`、`LS_AI_MONTHLY_BUDGET_USD`、`LS_CLAUDE_CLI`）也在 config.py；測試一律用 `ai.service.set_provider(FakeProvider())`，**不要在測試中呼叫真的模型**。
 - 可調參數在 `backend/app/core/config.py`，可用 `backend/.env` 覆寫（`LS_` 前綴，例如 `LS_MASTERY_STREAK=5`）。
 - `alembic.ini` 必須維持純 ASCII（Windows cp950 讀到中文會失敗）。
 - 截圖或測試要造假資料時，複製 `data/` 到暫存區並用 `LS_DATA_DIR` 指向副本，**不要寫進使用者真正的資料庫**。

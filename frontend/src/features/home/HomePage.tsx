@@ -9,7 +9,7 @@ import { cx } from '@/lib/cx'
 import { formatDateTime, percent, score, shortName, todayLabel } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { SessionSummary } from '@/lib/types'
-import { fetchOverview, fetchPapers, fetchSessions, fetchVocabStats } from './api'
+import { fetchCountdown, fetchOverview, fetchPapers, fetchSessions, fetchVocabStats } from './api'
 
 /** 小橢圓格排成一列，用來表示「完成幾個」 */
 function Bubbles({ total, done, label }: { total: number; done: number; label: string }) {
@@ -96,6 +96,8 @@ export function HomePage() {
   const recent = useQuery({ queryKey: ['exam', 'sessions', 'submitted'], queryFn: () => fetchSessions('submitted') })
   const papers = useQuery({ queryKey: ['bank', 'papers'], queryFn: fetchPapers })
   const startReview = useStartSession()
+  const countdown = useQuery({ queryKey: ['calendar', 'countdown'], queryFn: fetchCountdown })
+  const nextExam = countdown.data?.next_exam
 
   if (vocab.isPending || overview.isPending) return <Loading />
   if (vocab.isError || overview.isError) return <ErrorState error={vocab.error ?? overview.error} onRetry={() => vocab.refetch()} />
@@ -108,7 +110,25 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <PageHeader eyebrow={todayLabel()} title="今天要做的事" />
+      <PageHeader
+        eyebrow={todayLabel()}
+        title="今天要做的事"
+        actions={
+          nextExam ? (
+            <Link to="/calendar" className="group flex items-baseline gap-2 rounded-md px-3 py-1 transition-colors hover:bg-print-faint">
+              <span className="text-sm text-muted">距離{nextExam.title}</span>
+              <span className="font-serif text-3xl font-bold leading-none text-print tabular-nums">{nextExam.days_until}</span>
+              <span className="text-sm text-print">天</span>
+            </Link>
+          ) : (
+            countdown.isSuccess && (
+              <Link to="/calendar" className="text-sm text-print underline underline-offset-4">
+                新增考試日期，開始倒數
+              </Link>
+            )
+          )
+        }
+      />
 
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section aria-labelledby="tasks-title" className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">

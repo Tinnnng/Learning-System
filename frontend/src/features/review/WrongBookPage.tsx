@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
+import { AiTutor } from '@/components/AiTutor'
 import { Button } from '@/components/Button'
 import { ChipGroup, Segmented } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
@@ -105,7 +106,11 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
               )
             })}
           </div>
-          {question.explanation && <RichText className="text-[15px]">{question.explanation}</RichText>}
+          {question.explanation ? (
+            <RichText className="text-[15px]">{question.explanation}</RichText>
+          ) : (
+            <AiTutor questionId={question.id} />
+          )}
           <History questionId={question.id} />
         </div>
       )}

@@ -1,6 +1,7 @@
 /** 一題的完整呈現：題組文章、題幹、附圖、選項（答案卡劃記格）、揭曉後的詳解。 */
 
 import { useState } from 'react'
+import { AiTutor } from '@/components/AiTutor'
 import { Button } from '@/components/Button'
 import { Dialog } from '@/components/Dialog'
 import { Icon } from '@/components/Icon'
@@ -129,6 +130,8 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
           )}
         </div>
       )}
+
+      {item.revealed && !item.explanation && <AiTutor questionId={item.question_id} myAnswer={item.original_response} />}
 
       {item.page_snapshot && (
         <Dialog open={showPage} onClose={() => setShowPage(false)} title="原始試卷" wide>

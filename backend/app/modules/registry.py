@@ -23,6 +23,9 @@ ENABLED_MODULES: list[str] = [
     "review",
     "exam",
     "vocab",
+    "ai",
+    "tutor",
+    "calendar",
 ]
 
 

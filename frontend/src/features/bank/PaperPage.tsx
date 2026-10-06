@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { AiTutor } from '@/components/AiTutor'
 import { Icon } from '@/components/Icon'
 import { OptionBubble } from '@/components/OptionBubble'
 import { PageHeader } from '@/components/PageHeader'
@@ -47,6 +48,12 @@ function QuestionPreview({ question, showAnswer }: { question: QuestionOut; show
         {showAnswer && question.answer_source === 'MOD' && (
           <p className="m-0 text-xs text-muted">此題答案經考選部更正。</p>
         )}
+        {showAnswer &&
+          (question.explanation ? (
+            <RichText className="text-[15px]">{question.explanation}</RichText>
+          ) : (
+            question.type !== 'essay' && <AiTutor questionId={question.id} />
+          ))}
       </div>
     </li>
   )

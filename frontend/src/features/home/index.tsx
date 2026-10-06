@@ -4,5 +4,5 @@ import { HomePage } from './HomePage'
 export const feature: FeatureDefinition = {
   id: 'home',
   routes: [{ index: true, element: <HomePage /> }],
-  nav: { label: '今日', path: '/', icon: 'today', order: 0, primary: true },
+  nav: { label: '今日', path: '/', icon: 'home', order: 0, primary: true },
 }

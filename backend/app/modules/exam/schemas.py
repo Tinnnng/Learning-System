@@ -61,6 +61,8 @@ class ItemOut(BaseModel):
     correct: list[str] | None = None
     """正確答案（畫面上的字母），揭曉後才有。"""
     explanation: str | None = None
+    original_response: list[str] | None = None
+    """揭曉後才有：使用者的作答換回原始選項字母（給 AI 助教用，選項可能被打亂過）。"""
     time_spent_seconds: int | None = None
 
 

@@ -169,6 +169,7 @@ def _item_out(item: ExamItem, question: QuestionWithPaper, reveal: bool) -> Item
         is_correct=item.is_correct if revealed else None,
         correct=_to_display(item, question.answer) if revealed else None,
         explanation=question.explanation if revealed else None,
+        original_response=item.response if revealed else None,
         time_spent_seconds=item.time_spent_seconds,
     )
 

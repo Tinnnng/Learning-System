@@ -7,5 +7,5 @@ export const feature: FeatureDefinition = {
     { path: 'import', element: <ImportListPage /> },
     { path: 'import/:name', element: <ImportPreviewPage /> },
   ],
-  nav: { label: '匯入', path: '/import', icon: 'import', order: 5 },
+  nav: { label: '匯入', path: '/import', icon: 'import', order: 6 },
 }
