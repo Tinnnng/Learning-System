@@ -32,3 +32,4 @@ export const subscribe = (data: { url: string; name?: string | null; include_dea
   api.post<SyncResult>('/calendar/subscriptions', data)
 export const syncSubscription = (id: number) => api.post<SyncResult>(`/calendar/subscriptions/${id}/sync`)
 export const unsubscribe = (id: number) => api.delete<null>(`/calendar/subscriptions/${id}`)
+export const syncStaleSubscriptions = () => api.post<SyncResult[]>('/calendar/subscriptions/sync-stale')

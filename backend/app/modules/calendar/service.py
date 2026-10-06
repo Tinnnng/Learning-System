@@ -290,6 +290,24 @@ def list_subscriptions(db: Session) -> list[SubscriptionOut]:
     return [_subscription_out(db, sub) for sub in db.scalars(select(CalendarSubscription).order_by(CalendarSubscription.id))]
 
 
+def sync_stale(db: Session, now: datetime | None = None) -> list[SyncResult]:
+    """同步超過 calendar_sync_days 天沒更新的訂閱。個別失敗只記錄在 last_error，不影響其他訂閱。"""
+    now = now or datetime.now(UTC).replace(tzinfo=None)
+    cutoff = now - timedelta(days=get_settings().calendar_sync_days)
+    stale = db.scalars(
+        select(CalendarSubscription.id).where(
+            or_(CalendarSubscription.last_synced_at.is_(None), CalendarSubscription.last_synced_at < cutoff)
+        )
+    ).all()
+    results = []
+    for subscription_id in stale:
+        try:
+            results.append(sync(db, subscription_id))
+        except CalendarError:
+            continue
+    return results
+
+
 def presets(db: Session) -> PresetList:
     source, calendars = subscriptions.load_presets()
     subscribed = set(db.scalars(select(CalendarSubscription.url)))

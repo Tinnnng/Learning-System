@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     claude_cli: str = "claude"
     """Claude Code 執行檔，找不到時可在 .env 指定完整路徑。"""
     ai_timeout_seconds: int = 120
+    calendar_sync_days: int = 3
+    """訂閱的行事曆超過幾天沒更新，打開行事曆時就自動同步。"""
     ai_monthly_budget_usd: float = 3.0
     """每月 AI 用量上限（以 Claude Code 回報的等值美元計），超過就停用到下個月。"""
 

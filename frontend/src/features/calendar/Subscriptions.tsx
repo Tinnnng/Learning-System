@@ -1,7 +1,7 @@
 /** 訂閱考試行事曆（iCal）：從清單選考試類別，或貼上 iCal 網址／Google 日曆 ID。同步不需要 AI。 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Switch } from '@/components/Controls'
 import { Dialog } from '@/components/Dialog'
@@ -9,7 +9,15 @@ import { Icon } from '@/components/Icon'
 import { ErrorState } from '@/components/States'
 import { cx } from '@/lib/cx'
 import { formatDateTime } from '@/lib/format'
-import { fetchPresets, fetchSubscriptions, subscribe, type SyncResult, syncSubscription, unsubscribe } from './api'
+import {
+  fetchPresets,
+  fetchSubscriptions,
+  subscribe,
+  type SyncResult,
+  syncStaleSubscriptions,
+  syncSubscription,
+  unsubscribe,
+} from './api'
 
 function SyncNote({ result }: { result: SyncResult }) {
   return (
@@ -137,12 +145,24 @@ export function SubscriptionPanel() {
     },
   })
   const list = subscriptions.data ?? []
+  const autoSync = useMutation({
+    mutationFn: syncStaleSubscriptions,
+    onSuccess: (results) => {
+      if (results.length > 0) refresh()
+    },
+  })
+  const { mutate: runAutoSync } = autoSync
+  useEffect(() => {
+    // 打開行事曆時，自動更新太久沒同步的訂閱（失敗也不打擾，錯誤會顯示在該訂閱下方）
+    runAutoSync()
+  }, [runAutoSync])
 
   return (
     <section aria-labelledby="subscriptions-title" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 id="subscriptions-title" className="eyebrow m-0">
           訂閱的考試行事曆
+          {autoSync.isPending && list.length > 0 && <span className="ml-2 text-xs text-muted">（自動更新中…）</span>}
         </h2>
         <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
           <Icon name="plus" size={16} />

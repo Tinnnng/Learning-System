@@ -370,3 +370,23 @@ def test_presets_list(db):
     assert "高等考試" in names and "普通考試" in names
     assert all(preset.url.endswith("/public/basic.ics") for preset in presets.calendars)
     assert "非官方" in presets.source
+
+
+def test_sync_stale_only_updates_old_subscriptions(db, remote_ics):
+    from datetime import datetime
+
+    from app.modules.calendar.models import CalendarSubscription
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    future = calendar_service.today() + timedelta(days=5)
+    remote_ics["data"] = make_ics([("e", future.strftime("%Y%m%d"), (future + timedelta(days=1)).strftime("%Y%m%d"), "期中考試")])
+    fresh = calendar_service.subscribe(db, SubscriptionIn(url="https://example.com/a.ics"))
+    old = calendar_service.subscribe(db, SubscriptionIn(url="https://example.com/b.ics"))
+    db.get(CalendarSubscription, old.subscription.id).last_synced_at = datetime(2020, 1, 1)
+    db.commit()
+
+    remote_ics["urls"].clear()
+    results = calendar_service.sync_stale(db)
+    assert [r.subscription.id for r in results] == [old.subscription.id]
+    assert remote_ics["urls"] == ["https://example.com/b.ics"]
+    assert fresh.subscription.id not in [r.subscription.id for r in results]

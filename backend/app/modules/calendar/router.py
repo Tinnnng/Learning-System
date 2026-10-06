@@ -66,6 +66,12 @@ def list_subscriptions(db: Session = Depends(get_db)) -> list[SubscriptionOut]:
     return service.list_subscriptions(db)
 
 
+@router.post("/subscriptions/sync-stale", response_model=list[SyncResult])
+def sync_stale_subscriptions(db: Session = Depends(get_db)) -> list[SyncResult]:
+    """打開行事曆時呼叫：自動同步太久沒更新的訂閱。"""
+    return service.sync_stale(db)
+
+
 @router.get("/subscriptions/presets", response_model=PresetList)
 def subscription_presets(db: Session = Depends(get_db)) -> PresetList:
     """可以直接訂閱的考試行事曆清單。"""
