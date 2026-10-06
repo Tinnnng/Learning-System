@@ -157,21 +157,49 @@ def test_parse_extraction_tolerates_fences_and_bad_items():
  {"title": "壞資料", "date": "十二月"}]
 ```"""
     result = calendar_service.parse_extraction(text)
-    assert [d.title for d in result.drafts] == ["高考三級"]
+    assert [d.title for d in result.drafts] == ["高考三級"]  # 舊的純陣列格式也接受
     assert result.drafts[0].end_date == date(2026, 12, 7)
     assert "壞資料" in result.warnings[0]
     assert calendar_service.parse_extraction("看不清楚").drafts == []
 
 
 def test_extract_from_image_does_not_save(db, fake_ai):
-    fake_ai.replies = ['[{"title": "期中考", "kind": "exam", "date": "2026-11-10", "time": "10:10"}]']
-    result = calendar_service.extract_from_image(db, b"fake-image", "image/jpeg")
+    fake_ai.replies = ['{"events": [{"title": "期中考", "kind": "exam", "date": "2026-11-10", "time": "10:10"}], "problem": null}']
+    result = calendar_service.extract_from_file(db, b"fake-image", "image/jpeg")
     assert result.drafts[0].time == "10:10"
     assert fake_ai.calls[0]["images"][0].media_type == "image/jpeg"
     assert "今天是" in fake_ai.calls[0]["prompt"]
+    assert "只需要考試" in fake_ai.calls[0]["system"]  # 預設只找考試
     assert calendar_service.list_events(db) == []  # 使用者確認前不會儲存
     with pytest.raises(calendar_service.CalendarError, match="只支援"):
-        calendar_service.extract_from_image(db, b"x", "application/pdf")
+        calendar_service.extract_from_file(db, b"x", "application/zip")
+
+
+def test_extract_reports_problem_and_low_resolution(db, fake_ai):
+    import pymupdf
+
+    small = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 330, 450), False)
+    small.clear_with(255)
+    fake_ai.replies = ['{"events": [], "problem": "圖片解析度太低，事項欄的文字讀不出來"}']
+    result = calendar_service.extract_from_file(db, small.tobytes("png"), "image/png")
+    assert result.drafts == []
+    assert "330×450" in result.warnings[0]
+    assert "AI：圖片解析度太低" in result.warnings[1]
+
+
+def test_extract_pdf_renders_pages_at_high_resolution(db, fake_ai):
+    import pymupdf
+
+    document = pymupdf.open()
+    for _ in range(5):
+        document.new_page(width=595, height=842)
+    fake_ai.replies = ['{"events": [{"title": "期末考試週", "kind": "exam", "date": "2027-01-11", "end_date": "2027-01-15"}, {"title": "選課", "kind": "deadline", "date": "2026-12-01"}], "problem": null}']
+    result = calendar_service.extract_from_file(db, document.tobytes(), "application/pdf")
+    images = fake_ai.calls[0]["images"]
+    assert len(images) == calendar_service.MAX_PDF_PAGES
+    assert max(pymupdf.Pixmap(images[0].data).width, pymupdf.Pixmap(images[0].data).height) >= 2000
+    assert [d.title for d in result.drafts] == ["期末考試週"]  # 只找考試：期限被濾掉
+    assert "只辨識前 4 頁" in result.warnings[0]
 
 
 def test_ics_export(client, db):
@@ -202,3 +230,42 @@ def test_windows_cmd_shim_is_bypassed(monkeypatch, tmp_path):
     command = ClaudeCodeProvider("claude", "claude-haiku-4-5", 60).command("第一行\n第二行")
     assert command[0] == str(shim)
     assert "第一行 第二行" in command  # 只能經過 cmd.exe 時把換行換成空格，避免後面參數被截斷
+
+
+def test_text_pdf_sends_only_exam_lines(db, fake_ai):
+    import pymupdf
+
+    document = pymupdf.open()
+    page = document.new_page(width=595, height=842)
+    lines = ["國立臺中科技大學 115 學年度第 1 學期行事曆", "日間部", "進修部"]
+    lines += [f"9/{day} 社團博覽會與其他活動說明文字" for day in range(1, 20)]
+    lines += ["11/2-11/7 期中考試週", "1/4-1/9 期末考試週"]
+    for index, line in enumerate(lines):
+        page.insert_text((40, 40 + index * 16), line, fontname="china-t", fontsize=10)
+    fake_ai.replies = ['{"events": [{"title": "期中考試週", "kind": "exam", "date": "2026-11-02", "end_date": "2026-11-07"}]}']
+    result = calendar_service.extract_from_file(db, document.tobytes(), "application/pdf")
+    call = fake_ai.calls[0]
+    assert call["images"] == []  # 有文字層就不轉圖片
+    assert "11/2-11/7 期中考試週" in call["prompt"] and "1/4-1/9 期末考試週" in call["prompt"]
+    assert "社團博覽會" not in call["prompt"]  # 只找考試時先在本機過濾
+    assert "115 學年度第 1 學期" in call["prompt"]  # 保留頁首（推算年份要用）
+    assert result.drafts[0].end_date == date(2026, 11, 7)
+
+
+def test_claude_code_disables_thinking(monkeypatch):
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured.update(kwargs)
+
+        class Result:
+            returncode = 0
+            stdout = json.dumps({"type": "result", "is_error": False, "result": "ok", "usage": {}})
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/claude")
+    monkeypatch.setattr("subprocess.run", fake_run)
+    ClaudeCodeProvider("claude", "claude-haiku-4-5", 60).complete("系統", "問題")
+    assert captured["env"]["MAX_THINKING_TOKENS"] == "0"

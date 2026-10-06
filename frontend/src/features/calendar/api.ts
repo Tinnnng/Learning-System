@@ -13,9 +13,10 @@ export const createEvent = (data: EventIn, source: 'manual' | 'photo' = 'manual'
 export const updateEvent = (id: number, data: EventIn) => api.put<EventOut>(`/calendar/events/${id}`, data)
 export const deleteEvent = (id: number) => api.delete<null>(`/calendar/events/${id}`)
 
-export function extractFromImage(file: File) {
+export function extractFromFile(file: File, examsOnly: boolean) {
   const form = new FormData()
   form.append('image', file)
+  form.append('exams_only', String(examsOnly))
   return api.postForm<ExtractResult>('/calendar/extract', form)
 }
 

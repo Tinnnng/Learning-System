@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -44,10 +44,12 @@ def countdown(db: Session = Depends(get_db)) -> Countdown:
 
 
 @router.post("/extract", response_model=ExtractResult)
-async def extract(image: UploadFile = File(...), db: Session = Depends(get_db)) -> ExtractResult:
-    """拍照辨識：回傳 AI 找到的行程草稿（不會自動儲存）。"""
+async def extract(
+    image: UploadFile = File(...), exams_only: bool = Form(True), db: Session = Depends(get_db)
+) -> ExtractResult:
+    """拍照或上傳 PDF 辨識：回傳 AI 找到的行程草稿（不會自動儲存）。"""
     data = await image.read()
-    return _run(lambda: service.extract_from_image(db, data, image.content_type or ""))
+    return _run(lambda: service.extract_from_file(db, data, image.content_type or "", exams_only))
 
 
 @router.get("/export.ics")

@@ -655,7 +655,7 @@ export interface paths {
         put?: never;
         /**
          * Extract
-         * @description 拍照辨識：回傳 AI 找到的行程草稿（不會自動儲存）。
+         * @description 拍照或上傳 PDF 辨識：回傳 AI 找到的行程草稿（不會自動儲存）。
          */
         post: operations["extract_api_calendar_extract_post"];
         delete?: never;
@@ -751,6 +751,11 @@ export interface components {
         Body_extract_api_calendar_extract_post: {
             /** Image */
             image: string;
+            /**
+             * Exams Only
+             * @default true
+             */
+            exams_only: boolean;
         };
         /** Body_import_words_api_vocab_import_post */
         Body_import_words_api_vocab_import_post: {

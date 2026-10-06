@@ -9,13 +9,9 @@ __pycache__/
 # 本機設定
 backend/.env
 
-# 個人資料：資料庫、原始檔案、轉檔結果、圖片
-data/learning.db
-data/learning.db-*
-data/inbox/*
-data/converted/*
-data/drafts/*
-data/assets/*
+# 個人資料：data/ 底下全部不進版控（資料庫、題目 PDF、草稿、轉檔結果、圖片、行事曆…），只保留資料夾占位檔
+data/**
+!data/**/
 !data/**/.gitkeep
 
 # 編輯器與系統檔

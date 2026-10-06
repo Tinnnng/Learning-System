@@ -7,6 +7,7 @@
 
 import base64
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -104,6 +105,8 @@ class ClaudeCodeProvider:
                     encoding="utf-8",
                     timeout=self.timeout,
                     cwd=workdir,
+                    # 關掉延伸思考：實測擷取行事曆時思考會吃掉 1.5 萬 token、拖到 2 分鐘以上
+                    env={**os.environ, "MAX_THINKING_TOKENS": "0"},
                 )
         except subprocess.TimeoutExpired as error:
             raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。") from error

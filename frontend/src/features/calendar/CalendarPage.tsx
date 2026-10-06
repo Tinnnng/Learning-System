@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/Button'
+import { Switch } from '@/components/Controls'
 import { Dialog } from '@/components/Dialog'
 import { Icon } from '@/components/Icon'
 import { PageHeader } from '@/components/PageHeader'
@@ -14,7 +15,7 @@ import {
   deleteEvent,
   type EventIn,
   type EventOut,
-  extractFromImage,
+  extractFromFile,
   fetchCountdown,
   fetchEvents,
   ICS_URL,
@@ -150,8 +151,9 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Array<EventIn & { selected: boolean }>>([])
+  const [examsOnly, setExamsOnly] = useState(true)
   const extract = useMutation({
-    mutationFn: extractFromImage,
+    mutationFn: (file: File) => extractFromFile(file, examsOnly),
     onSuccess: (result) => setDrafts(result.drafts.map((draft) => ({ ...draft, selected: true }))),
   })
   const save = useMutation({
@@ -177,7 +179,7 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
     <Dialog
       open={open}
       onClose={close}
-      title="拍照加入考試日期"
+      title="從照片或 PDF 加入考試日期"
       wide
       actions={
         drafts.length > 0 ? (
@@ -194,12 +196,19 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
     >
       <div className="flex flex-col gap-5">
         <p className="m-0 text-sm text-muted">
-          上傳考試公告、准考證或課表的照片，AI 會找出日期。辨識結果要你確認後才會加入行事曆。
+          上傳考試公告、准考證或學校行事曆，AI 會找出日期，確認後才會加入行事曆。學校行事曆請優先用學校網站的
+          PDF：比截圖清楚得多，而且幾秒就辨識完。
         </p>
+        <Switch
+          label="只找考試日期"
+          description="學校行事曆事項很多，只挑期中考、期末考等考試"
+          checked={examsOnly}
+          onChange={setExamsOnly}
+        />
         <input
           ref={fileRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
           capture="environment"
           className="sr-only"
           id="calendar-photo"
@@ -208,20 +217,20 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
             event.target.value = ''
             if (!file) return
             setDrafts([])
-            setPreview(URL.createObjectURL(file))
+            setPreview(file.type === 'application/pdf' ? null : URL.createObjectURL(file))
             extract.mutate(file)
           }}
         />
         <div className="flex flex-wrap items-start gap-4">
           <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={extract.isPending}>
             <Icon name="camera" size={18} />
-            {preview ? '換一張照片' : '選擇或拍攝照片'}
+            {extract.isIdle ? '選擇照片或 PDF' : '換一個檔案'}
           </Button>
           {preview && <img src={preview} alt="上傳的照片" className="max-h-40 rounded-sm border border-line" />}
         </div>
         {extract.isPending && (
           <p className="m-0 text-sm text-muted" role="status">
-            AI 正在辨識照片，大約 10～20 秒…
+            AI 正在辨識，PDF 約 5 秒、照片約 10～20 秒…
           </p>
         )}
         {extract.isError && (
@@ -345,7 +354,7 @@ export function CalendarPage() {
             </Button>
             <Button variant="secondary" onClick={() => setPhotoOpen(true)}>
               <Icon name="camera" size={18} />
-              拍照加入
+              照片／PDF 加入
             </Button>
             {all.length > 0 && (
               <a

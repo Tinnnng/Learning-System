@@ -5,6 +5,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pymupdf
 from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -15,18 +16,34 @@ from app.modules.calendar.models import CalendarEvent
 from app.modules.calendar.schemas import Countdown, EventIn, EventOut, ExtractResult
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
-MAX_IMAGE_BYTES = 8 * 1024 * 1024
+PDF_TYPE = "application/pdf"
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+MAX_PDF_PAGES = 4
+PDF_TARGET_LONG_SIDE = 2200
+"""PDF 每頁轉成長邊約 2200 像素的圖片，小字也看得清楚。"""
+LOW_RESOLUTION_LONG_SIDE = 1000
+"""圖片長邊小於這個像素數，密密麻麻的行事曆通常讀不出來。"""
 
-EXTRACT_SYSTEM = """你是行事曆資料擷取助手。從使用者提供的圖片（考試公告、准考證、課表、行事曆截圖等）找出考試或重要日期。
-只輸出一個 JSON 陣列，不要任何其他文字或程式碼框。每個元素格式：
+PDF_TEXT_MIN_CHARS = 200
+"""PDF 每頁至少有這麼多文字，就直接用文字辨識（快、便宜、準），不轉圖片。"""
+MAX_TEXT_CHARS = 20000
+
+EXTRACT_SYSTEM = """你是行事曆資料擷取助手。從使用者提供的圖片或文件文字（考試公告、准考證、學校行事曆、課表等）找出日期。
+只輸出一個 JSON 物件，不要任何其他文字或程式碼框：
+{"events": [...], "problem": null}
+events 每個元素：
 {"title": "名稱", "kind": "exam|deadline|other", "date": "YYYY-MM-DD", "time": "HH:MM 或 null", "end_date": "YYYY-MM-DD 或 null", "location": "地點或 null", "subject": "科目或 null", "note": "補充或 null"}
 規則：
-- 民國年要換成西元（民國年 + 1911）。
-- 只寫月日沒寫年時，取「今天」之後最近的那一天。
-- 考試是 exam；報名、繳費、成績公告等期限是 deadline；其他是 other。
-- 跨好幾天的考試用 date 與 end_date 表示，不要拆成多筆。
+- 民國年要換成西元（民國年 + 1911）。學年度 115 的第 1 學期是 2026 年 8 月～2027 年 1 月，第 2 學期是 2027 年 2 月～7 月。
+- 只寫月日沒寫年時，依學期或「今天」推算最合理的年份。
+- 考試是 exam；報名、繳費、選課、成績登錄等期限是 deadline；其他是 other。
+- 跨好幾天的考試（例如「期中考試週」「期末考試」）用 date 與 end_date 表示，不要拆成多筆。
+- 學校行事曆常把同一件事寫成「11/2-11/6 期中考試週」，請照寫的日期範圍輸出。
 - 一場考試若有多個科目分不同時間，每個科目一筆，title 寫「考試名稱－科目」。
-- 圖片看不清楚或沒有日期就輸出 []，不要猜。"""
+- 值為 null 的欄位直接省略，讓輸出越短越好。
+- 不要猜。如果圖片解析度太低、文字太小或模糊而讀不出日期，events 給 []，problem 寫一句原因（例如「圖片解析度太低，事項欄的文字讀不出來」）。"""
+
+EXAMS_ONLY_RULE = "\n只需要考試（kind 為 exam）：期中考、期末考、檢定考、國家考試等，其他行程一律不要輸出。"
 
 
 class CalendarError(Exception):
@@ -105,16 +122,23 @@ def countdown(db: Session, limit: int = 5) -> Countdown:
     return Countdown(next_exam=next_exam, upcoming=upcoming[:limit])
 
 
-def parse_extraction(text: str) -> ExtractResult:
-    """解析 AI 回傳的 JSON。格式錯的項目略過並提出警告，不讓整批失敗。"""
+def parse_extraction(text: str, exams_only: bool = False) -> ExtractResult:
+    """解析 AI 回傳的 JSON（{"events": [...], "problem": ...}，也接受舊的純陣列）。
+    格式錯的項目略過並提出警告，不讓整批失敗。"""
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+    match = re.search(r"[\[{].*[\]}]", cleaned, re.DOTALL)
     if match is None:
         return ExtractResult(drafts=[], warnings=["AI 沒有辨識出任何日期，請確認照片清楚，或改用手動新增。"])
     try:
-        items = json.loads(match.group())
+        payload = json.loads(match.group())
     except json.JSONDecodeError:
         return ExtractResult(drafts=[], warnings=["AI 回傳的格式無法解析，請再試一次或改用手動新增。"])
+
+    problem = None
+    items = payload
+    if isinstance(payload, dict):
+        items = payload.get("events") or []
+        problem = payload.get("problem")
 
     drafts, warnings = [], []
     for index, item in enumerate(items if isinstance(items, list) else [], start=1):
@@ -122,27 +146,102 @@ def parse_extraction(text: str) -> ExtractResult:
             continue
         cleaned_item = {key: value for key, value in item.items() if value not in (None, "", "null")}
         try:
-            drafts.append(EventIn.model_validate(cleaned_item))
+            draft = EventIn.model_validate(cleaned_item)
         except ValidationError:
             warnings.append(f"第 {index} 筆資料不完整（{item.get('title') or '沒有名稱'}），已略過。")
+            continue
+        if exams_only and draft.kind != "exam":
+            continue
+        drafts.append(draft)
+    if problem:
+        warnings.insert(0, f"AI：{problem}")
     if not drafts and not warnings:
-        warnings.append("照片中沒有找到日期。")
+        warnings.append("照片中沒有找到考試日期。" if exams_only else "照片中沒有找到日期。")
     return ExtractResult(drafts=drafts, warnings=warnings)
 
 
-def extract_from_image(db: Session, data: bytes, media_type: str) -> ExtractResult:
-    if media_type not in ALLOWED_IMAGE_TYPES:
-        raise CalendarError("只支援 PNG、JPEG、WebP、GIF 圖片")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise CalendarError("圖片太大（上限 8 MB），請縮小後再上傳")
-    prompt = f"今天是 {today().isoformat()}（台灣時間）。請找出圖片中的考試與重要日期。"
+def _pdf_content(data: bytes) -> tuple[str | None, list[bytes], list[str]]:
+    """回傳 (文字, 圖片, 警告)。有文字層就只回傳文字；掃描檔才轉成高解析度圖片。"""
+    with pymupdf.open(stream=data, filetype="pdf") as document:
+        warnings = []
+        if len(document) > MAX_PDF_PAGES:
+            warnings.append(f"PDF 有 {len(document)} 頁，只辨識前 {MAX_PDF_PAGES} 頁。")
+        pages = list(document)[:MAX_PDF_PAGES]
+        texts = [page.get_text("text", sort=True).strip() for page in pages]
+        if all(len(text) >= PDF_TEXT_MIN_CHARS for text in texts):
+            joined = "\n\n".join(f"--- 第 {index} 頁 ---\n{text}" for index, text in enumerate(texts, start=1))
+            return joined[:MAX_TEXT_CHARS], [], warnings
+        images = []
+        for page in pages:
+            zoom = PDF_TARGET_LONG_SIDE / max(page.rect.width, page.rect.height)
+            images.append(page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png"))
+        return None, images, warnings
+
+
+EXAM_LINE = re.compile(r"考|測驗|檢定|會考")
+PAGE_HEADER_LINES = 3
+
+
+def exam_lines_only(document_text: str) -> str:
+    """只找考試時，先在本機挑出含「考」「測驗」的行（加上每頁開頭的學年度、學期標題），
+    不必把整份行事曆送給 AI。實測 1.8 萬字降到約 3 千字，時間與用量都少一個數量級。"""
+    kept: list[str] = []
+    for page in re.split(r"(?=^--- 第 \d+ 頁 ---$)", document_text, flags=re.MULTILINE):
+        lines = [line for line in page.splitlines() if line.strip()]
+        if not lines:
+            continue
+        kept += lines[: PAGE_HEADER_LINES + 1]
+        kept += [line for line in lines[PAGE_HEADER_LINES + 1 :] if EXAM_LINE.search(line)]
+    return "\n".join(kept)
+
+
+def _resolution_warning(data: bytes) -> str | None:
     try:
-        completion = ai_service.complete(
-            db, "calendar_extract", EXTRACT_SYSTEM, prompt, images=[ai_service.ImageInput(data=data, media_type=media_type)]
+        pixmap = pymupdf.Pixmap(data)
+    except Exception:  # noqa: BLE001 — 讀不到尺寸就交給 AI 判斷
+        return None
+    long_side = max(pixmap.width, pixmap.height)
+    if long_side < LOW_RESOLUTION_LONG_SIDE:
+        return (
+            f"圖片只有 {pixmap.width}×{pixmap.height} 像素，小字可能讀不出來。"
+            "建議上傳學校網站的原始 PDF，或拍近一點、更清楚的照片。"
         )
+    return None
+
+
+def extract_from_file(db: Session, data: bytes, media_type: str, exams_only: bool = True) -> ExtractResult:
+    """拍照或上傳檔案讓 AI 辨識日期。支援圖片與 PDF（有文字層就用文字，掃描檔才轉圖片）。不會自動儲存。"""
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise CalendarError("檔案太大（上限 15 MB），請縮小後再上傳")
+    notices: list[str] = []
+    document_text = None
+    if media_type == PDF_TYPE:
+        try:
+            document_text, pages, notices = _pdf_content(data)
+        except Exception as error:  # noqa: BLE001
+            raise CalendarError("PDF 無法開啟，請確認檔案沒有損壞或加密") from error
+        images = [ai_service.ImageInput(data=page, media_type="image/png") for page in pages]
+    elif media_type in ALLOWED_IMAGE_TYPES:
+        images = [ai_service.ImageInput(data=data, media_type=media_type)]
+        if warning := _resolution_warning(data):
+            notices.append(warning)
+    else:
+        raise CalendarError("只支援 PDF 與 PNG、JPEG、WebP、GIF 圖片")
+
+    system = EXTRACT_SYSTEM + (EXAMS_ONLY_RULE if exams_only else "")
+    prompt = f"今天是 {today().isoformat()}（台灣時間）。請找出{'考試日期' if exams_only else '考試與重要日期'}。"
+    if document_text and exams_only:
+        document_text = exam_lines_only(document_text)
+    if document_text:
+        prompt += f"\n\n以下是文件的文字內容（由 PDF 抽出，表格排版可能錯位）：\n{document_text}"
+    try:
+        completion = ai_service.complete(db, "calendar_extract", system, prompt, images=images)
     except ai_service.AiUnavailable as error:
         raise CalendarError(str(error), status_code=503) from error
-    return parse_extraction(completion.text)
+    result = parse_extraction(completion.text, exams_only=exams_only)
+    if result.drafts:
+        notices = [notice for notice in notices if "像素" not in notice]  # 讀得出來就不用提解析度
+    return result.model_copy(update={"warnings": notices + result.warnings})
 
 
 def _ics_text(value: str) -> str:
