@@ -1856,7 +1856,7 @@ export interface components {
         };
         /**
          * QuestionEdit
-         * @description 手動新增或修改題目（修正轉檔錯誤、自己出題）。
+         * @description 手動新增或修改題目（修正轉檔錯誤、自己出題）。申論題不用選項，改填參考答案（explanation）與得分要點（rubric）。
          */
         QuestionEdit: {
             /**
@@ -1865,18 +1865,22 @@ export interface components {
              * @enum {string}
              */
             type: "single_choice" | "multi_choice" | "essay";
+            /** Label */
+            label?: string | null;
             /** Passage */
             passage?: string | null;
             /** Stem */
             stem: string;
             /** Options */
-            options: string[];
+            options?: string[];
             /** Answer */
-            answer: string[];
+            answer?: string[];
             /** Points */
             points?: number | null;
             /** Explanation */
             explanation?: string | null;
+            /** Rubric */
+            rubric?: components["schemas"]["RubricPoint"][];
             /** Tags */
             tags?: string[];
         };

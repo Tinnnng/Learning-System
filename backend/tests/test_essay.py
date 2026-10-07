@@ -145,3 +145,28 @@ def test_search_finds_essays(db, paper_id):
 
     result = bank_service.search_questions(db, Filter(keyword="子題", types=["single_choice", "multi_choice", "essay"]))
     assert result.total == 2
+
+
+def test_manual_essay_edit(db, paper_id):
+    from pydantic import ValidationError
+
+    from app.modules.bank.schemas import QuestionEdit
+
+    with pytest.raises(ValidationError, match="與配分 10 分不符"):
+        QuestionEdit(type="essay", stem="說明 TCP", points=10, explanation="參考", rubric=[RubricPoint(text="三向交握", points=6)])
+    with pytest.raises(ValidationError, match="至少要有兩個選項"):
+        QuestionEdit(stem="選擇題", options=["只有一個"], answer=["A"])
+
+    edit = QuestionEdit(
+        type="essay",
+        label="五",
+        stem="說明 TCP 三向交握。",
+        points=10,
+        explanation="SYN → SYN/ACK → ACK",
+        rubric=[RubricPoint(text="三個步驟", points=6), RubricPoint(text="目的：同步序號", points=4)],
+    )
+    added = bank_service.add_question(db, paper_id, edit)
+    assert (added.type, added.label, added.number) == ("essay", "五", 5)
+    assert [p.text for p in added.rubric] == ["三個步驟", "目的：同步序號"]
+    updated = bank_service.update_question(db, added.id, edit.model_copy(update={"label": "五(一)"}))
+    assert updated.label == "五(一)" and updated.rubric[1].points == 4

@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { cx } from '@/lib/cx'
 import { api } from '@/lib/api'
 import { shortName } from '@/lib/format'
-import type { QuestionDraft } from '@/lib/questionEdit'
+import { type QuestionDraft, toDraft } from '@/lib/questionEdit'
 import type { ConvertedFile, ImportOutcome } from '@/lib/types'
 import { fetchBundle, fetchConverted, importFile } from './api'
 
@@ -260,20 +260,7 @@ export function ImportPreviewPage() {
       {question && (
         <QuestionEditorDialog
           title={`修改第 ${question.number} 題`}
-          initial={
-            editing
-              ? {
-                  type: question.type === 'multi_choice' ? 'multi_choice' : 'single_choice',
-                  passage: question.passage ?? null,
-                  stem: question.stem,
-                  options: question.options ?? [],
-                  answer: question.answer ?? [],
-                  points: question.points ?? null,
-                  explanation: question.explanation ?? null,
-                  tags: question.tags ?? [],
-                }
-              : null
-          }
+          initial={editing ? toDraft(question) : null}
           onClose={() => setEditing(false)}
           onSave={saveEdit}
           note="修改會直接寫回匯入檔，存檔後會重新檢查；確認沒問題再按「確認並匯入」。"

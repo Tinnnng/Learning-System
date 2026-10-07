@@ -294,12 +294,14 @@ class BankError(Exception):
 
 def _apply_edit(question: Question, data: QuestionEdit) -> None:
     question.type = data.type
+    question.label = data.label or None
     question.passage = data.passage or None
     question.stem = data.stem
     question.options = data.options
     question.answer = sorted(data.answer)
     question.points = data.points
     question.explanation = data.explanation or None
+    question.rubric = [point.model_dump() for point in data.rubric]
     question.tags = data.tags
 
 

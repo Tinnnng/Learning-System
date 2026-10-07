@@ -3,17 +3,69 @@
 import type { components } from './api-types'
 
 export type QuestionDraft = components['schemas']['QuestionEdit']
+export type RubricDraft = components['schemas']['RubricPoint']
+type QuestionLike = Partial<components['schemas']['QuestionIn']> & Pick<components['schemas']['QuestionIn'], 'stem'>
 
 export function emptyQuestion(): QuestionDraft {
-  return { type: 'single_choice', passage: null, stem: '', options: ['', '', '', ''], answer: [], points: null, explanation: null, tags: [] }
+  return {
+    type: 'single_choice',
+    label: null,
+    passage: null,
+    stem: '',
+    options: ['', '', '', ''],
+    answer: [],
+    points: null,
+    explanation: null,
+    rubric: [],
+    tags: [],
+  }
 }
+
+/** 題庫或匯入檔裡的題目 → 編輯器的草稿 */
+export function toDraft(question: QuestionLike): QuestionDraft {
+  return {
+    type: question.type ?? 'single_choice',
+    label: question.label ?? null,
+    passage: question.passage ?? null,
+    stem: question.stem,
+    options: question.options ?? [],
+    answer: question.answer ?? [],
+    points: question.points ?? null,
+    explanation: question.explanation ?? null,
+    rubric: question.rubric ?? [],
+    tags: question.tags ?? [],
+  }
+}
+
+/** 切換題型時調整選項與答案：申論題不用選項，換回選擇題時補四個空白選項 */
+export function changeType(question: QuestionDraft, type: NonNullable<QuestionDraft['type']>): QuestionDraft {
+  if (type === 'essay') {
+    return { ...question, type, options: [], answer: [], rubric: question.rubric?.length ? question.rubric : [{ text: '', points: question.points ?? 0 }] }
+  }
+  const options = question.options?.length ? question.options : ['', '', '', '']
+  const answer = type === 'single_choice' ? (question.answer ?? []).slice(0, 1) : (question.answer ?? [])
+  return { ...question, type, options, answer, rubric: [] }
+}
+
+export const rubricTotal = (rubric: RubricDraft[] | undefined) => (rubric ?? []).reduce((sum, point) => sum + (point.points || 0), 0)
 
 /** 檢查編輯中的題目，回傳第一個問題（沒問題回傳 null）。 */
 export function validateQuestion(question: QuestionDraft): string | null {
   if (!question.stem.trim()) return '請輸入題幹'
-  if (question.options.length < 2) return '至少要有兩個選項'
-  if (question.options.some((option) => !option.trim())) return '有空白的選項'
-  if (question.answer.length === 0) return '請勾選正確答案'
-  if (question.type === 'multi_choice' && question.answer.length < 2) return '複選題至少要有兩個正確答案'
+  if (question.type === 'essay') {
+    if (!question.points || question.points <= 0) return '申論題要填配分'
+    if (!question.explanation?.trim()) return '申論題要填參考答案'
+    const rubric = question.rubric ?? []
+    if (rubric.length === 0) return '至少要有一個得分要點'
+    if (rubric.some((point) => !point.text.trim() || !(point.points > 0))) return '每個得分要點都要有內容和分數'
+    if (Math.abs(rubricTotal(rubric) - question.points) > 0.01) return `得分要點加總 ${rubricTotal(rubric)} 分，要等於配分 ${question.points} 分`
+    return null
+  }
+  const options = question.options ?? []
+  const answer = question.answer ?? []
+  if (options.length < 2) return '至少要有兩個選項'
+  if (options.some((option) => !option.trim())) return '有空白的選項'
+  if (answer.length === 0) return '請勾選正確答案'
+  if (question.type === 'multi_choice' && answer.length < 2) return '複選題至少要有兩個正確答案'
   return null
 }

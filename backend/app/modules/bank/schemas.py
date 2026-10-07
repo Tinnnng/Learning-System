@@ -173,19 +173,38 @@ class FilterOptions(BaseModel):
 
 
 class QuestionEdit(BaseModel):
-    """手動新增或修改題目（修正轉檔錯誤、自己出題）。"""
+    """手動新增或修改題目（修正轉檔錯誤、自己出題）。申論題不用選項，改填參考答案（explanation）與得分要點（rubric）。"""
 
     type: QuestionType = "single_choice"
+    label: str | None = Field(default=None, max_length=20)
     passage: str | None = None
     stem: str = Field(min_length=1)
-    options: list[str] = Field(min_length=2, max_length=len(OPTION_LETTERS))
-    answer: list[str] = Field(min_length=1)
+    options: list[str] = Field(default_factory=list, max_length=len(OPTION_LETTERS))
+    answer: list[str] = Field(default_factory=list)
     points: float | None = None
     explanation: str | None = None
+    rubric: list[RubricPoint] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def check_answer(self) -> "QuestionEdit":
+        if self.type == "essay":
+            if self.options or self.answer:
+                raise ValueError("申論題不能有選項或選擇題答案")
+            if not self.points or self.points <= 0:
+                raise ValueError("申論題要填配分")
+            if not (self.explanation or "").strip():
+                raise ValueError("申論題要填參考答案")
+            if not self.rubric:
+                raise ValueError("申論題至少要有一個得分要點")
+            total = sum(point.points for point in self.rubric)
+            if abs(total - self.points) > 0.01:
+                raise ValueError(f"得分要點加總 {total:g} 分，與配分 {self.points:g} 分不符")
+            return self
+        if len(self.options) < 2:
+            raise ValueError("選擇題至少要有兩個選項")
+        if not self.answer:
+            raise ValueError("請選擇正確答案")
         if any(not option.strip() for option in self.options):
             raise ValueError("選項不能空白")
         valid = OPTION_LETTERS[: len(self.options)]

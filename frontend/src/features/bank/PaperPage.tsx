@@ -15,41 +15,26 @@ import { Switch } from '@/components/Controls'
 import { api } from '@/lib/api'
 import { shortName } from '@/lib/format'
 import { prefetchNotes } from '@/lib/notes'
-import { emptyQuestion, type QuestionDraft } from '@/lib/questionEdit'
+import { emptyQuestion, type QuestionDraft, toDraft } from '@/lib/questionEdit'
 import type { QuestionOut } from '@/lib/types'
 import { fetchPaper } from './api'
 import { StartPanel } from './StartPanel'
 
 const LETTERS = 'ABCDEFGHIJ'
 
-function toDraft(question: QuestionOut): QuestionDraft {
-  return {
-    type: question.type === 'multi_choice' ? 'multi_choice' : 'single_choice',
-    passage: question.passage ?? null,
-    stem: question.stem,
-    options: question.options,
-    answer: question.answer,
-    points: question.points ?? null,
-    explanation: question.explanation ?? null,
-    tags: question.tags,
-  }
-}
-
 function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionOut; showAnswer: boolean; onEdit: () => void }) {
   return (
-    <li className="group/question grid grid-cols-[2.25rem_1fr] gap-x-3 border-b border-rule py-6 last:border-b-0">
-      <span className="tabular pt-1 text-right text-sm text-accent [word-break:keep-all]">{question.label ?? question.number}</span>
+    <li className="group/question grid grid-cols-[minmax(2.25rem,auto)_1fr] gap-x-3 border-b border-rule py-6 last:border-b-0">
+      <span className="tabular whitespace-nowrap pt-1 text-right text-sm text-accent">{question.label ?? question.number}</span>
       <div className="relative flex min-w-0 flex-col gap-3">
-        {question.type !== 'essay' && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="absolute -top-1 right-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted opacity-60 transition-opacity hover:bg-sheet-tint hover:text-accent focus-visible:opacity-100 group-hover/question:opacity-100"
-          >
-            <Icon name="edit" size={14} />
-            修改
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onEdit}
+          className="absolute -top-1 right-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted opacity-60 transition-opacity hover:bg-sheet-tint hover:text-accent focus-visible:opacity-100 group-hover/question:opacity-100"
+        >
+          <Icon name="edit" size={14} />
+          修改
+        </button>
         {question.passage && (
           <details className="rounded-md bg-sheet-tint px-4 py-2 text-sm">
             <summary className="cursor-pointer text-accent">{question.type === 'essay' ? '題目說明' : '題組文章'}</summary>
