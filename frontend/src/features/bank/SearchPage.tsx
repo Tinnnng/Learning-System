@@ -91,7 +91,8 @@ function SearchRow({ hit, words }: { hit: SearchHit; words: string[] }) {
       >
         <span className="text-xs text-muted">
           {question.paper.year && `${question.paper.year} 年`}
-          {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.label ?? question.number} 題
+          {question.paper.exam_type}｜{shortName(question.paper.subject)}　{question.label ?? `第 ${question.number} 題`}
+          {question.type === 'essay' && <span className="ml-2 rounded-sm bg-hl-soft px-1.5 py-0.5 text-ink">申論</span>}
           {field && <span className="ml-2 rounded-sm bg-sheet-tint px-1.5 py-0.5">命中{field}</span>}
         </span>
         <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>

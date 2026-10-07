@@ -92,7 +92,7 @@ export function PrintPage() {
                   <p className="m-0 flex items-baseline gap-2 text-xs text-muted">
                     <span className="font-hand text-xl text-accent">{index + 1}</span>
                     {question.paper.year && `${question.paper.year} 年`}
-                    {question.paper.exam_type}｜{shortName(question.paper.subject)} 第 {question.label ?? question.number} 題
+                    {question.paper.exam_type}｜{shortName(question.paper.subject)} {question.label ?? `第 ${question.number} 題`}
                   </p>
                   {question.passage && <RichText className="rounded-md bg-sheet-tint px-4 py-3 text-[14px]">{question.passage}</RichText>}
                   <RichText>{question.stem}</RichText>

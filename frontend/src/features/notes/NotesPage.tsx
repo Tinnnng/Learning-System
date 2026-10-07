@@ -37,7 +37,7 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs text-muted">
             {question.paper.year && `${question.paper.year} 年`}
-            {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.label ?? question.number} 題
+            {question.paper.exam_type}｜{shortName(question.paper.subject)}　{question.label ?? `第 ${question.number} 題`}
           </span>
           <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>{plainText(question.stem)}</span>
           {note.note && !open && (

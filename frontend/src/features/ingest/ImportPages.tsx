@@ -187,7 +187,7 @@ export function ImportPreviewPage() {
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section aria-label="解析結果" className="flex flex-col gap-4 rounded-lg bg-sheet px-5 py-6 shadow-sheet sm:px-7">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="eyebrow m-0">解析結果・第 {question.label ?? question.number} 題</h2>
+              <h2 className="eyebrow m-0">解析結果・{question.label ?? `第 ${question.number} 題`}</h2>
               {editable && (
                 <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
                   <Icon name="edit" size={16} />

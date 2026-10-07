@@ -29,7 +29,7 @@ for (const [device, viewport] of Object.entries(viewports)) {
       await page.goto(BASE + path, { waitUntil: 'networkidle' })
       await page.evaluate(() => document.fonts.ready)
       await page.waitForTimeout(700)
-      const name = `${path.replace(/[/:]+/g, '_').replace(/^_|_$/g, '') || 'home'}-${device}-${theme}.png`
+      const name = `${path.replace(/[/:?&=]+/g, '_').replace(/^_|_$/g, '') || 'home'}-${device}-${theme}.png`
       await page.screenshot({ path: join(outDir, name), fullPage: !viewportOnly })
       console.log(name)
     }
