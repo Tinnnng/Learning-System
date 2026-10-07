@@ -23,6 +23,8 @@ from app.modules.topics.models import TopicTag
 from app.modules.topics.schemas import SubjectTopics, TagRequest, TagResult, TopicsOverview, TopicStat, WeakTopic
 
 OTHER = "其他"
+ALL_TYPES = ["single_choice", "multi_choice", "essay"]
+"""申論題也標知識點：申論題的自評結果一樣會算進弱點"""
 TAXONOMY_SAMPLE = 120
 """整理知識點清單時最多讀幾題的摘要（超過就平均抽樣）"""
 
@@ -119,11 +121,11 @@ def _build_taxonomy(db: Session, subject: str, questions: list[QuestionOut], exi
 def _classify(db: Session, subject: str, topics: list[str], batch: list[QuestionOut]) -> dict[int, list[str]]:
     lines = [f"科目：{subject}", f"知識點清單：{'、'.join(topics)}", ""]
     for index, question in enumerate(batch, start=1):
-        options = " ／ ".join(_clean(option, 40) for option in question.options)
         lines.append(f"[{index}] {_clean(question.stem, 220)}")
         if question.passage and len(question.stem) < 40:
             lines.append(f"文章開頭：{_clean(question.passage, 120)}")
-        lines.append(f"選項：{options}")
+        if question.options:
+            lines.append(f"選項：{' ／ '.join(_clean(option, 40) for option in question.options)}")
     payload = _parse_json(_complete(db, "topics_classify", CLASSIFY_SYSTEM, "\n".join(lines)))
     raw = payload.get("tags") if isinstance(payload.get("tags"), dict) else {}
     # 題號有時會寫成 "[1]"、"1." 之類；知識點名稱比對時忽略空白
@@ -142,7 +144,7 @@ def _classify(db: Session, subject: str, topics: list[str], batch: list[Question
 
 def tag_subject(db: Session, data: TagRequest) -> TagResult:
     """用 AI 幫一個科目的題目標知識點。已標過的題目會略過（retag 時重來）。"""
-    ids = bank_service.query_question_ids(db, QuestionFilter(subject=data.subject))
+    ids = bank_service.query_question_ids(db, QuestionFilter(subject=data.subject, types=ALL_TYPES))
     if not ids:
         raise TopicsError("找不到這個科目的題目", 404)
     if data.retag:
@@ -206,7 +208,7 @@ def overview(db: Session) -> TopicsOverview:
     subjects = []
     weak = []
     for subject in bank_service.get_filter_options(db).subjects:
-        ids = bank_service.query_question_ids(db, QuestionFilter(subject=subject))
+        ids = bank_service.query_question_ids(db, QuestionFilter(subject=subject, types=ALL_TYPES))
         if not ids:
             continue
         by_topic: dict[str, list[int]] = defaultdict(list)

@@ -107,3 +107,26 @@ def test_errors(db, fake, question_ids, client, monkeypatch):
     monkeypatch.setattr(get_settings(), "ai_provider", "disabled")
     assert client.post("/api/topics/tag", json={"subject": "行政法"}).status_code == 503
     assert client.get("/api/topics").json()["subjects"][0]["tagged"] == 0
+
+
+def test_essays_are_tagged_too(db, fake):
+    from app.modules.bank.schemas import QuestionIn, RubricPoint
+
+    bundle = make_bundle("topics-essay", questions=1, subject="資料庫")
+    bundle.questions.append(
+        QuestionIn(
+            number=2,
+            type="essay",
+            stem="請說明第三正規化。",
+            answer_source="reference",
+            points=10,
+            explanation="參考答案",
+            rubric=[RubricPoint(text="遞移相依", points=10)],
+        )
+    )
+    bank_service.upsert_paper(db, bundle)
+    _reply(fake, {"topics": ["正規化"]})
+    _reply(fake, {"tags": {"1": ["正規化"], "2": ["正規化"]}})
+    assert service.tag_subject(db, TagRequest(subject="資料庫")).tagged == 2
+    assert "選項：" not in fake.calls[1]["prompt"].split("[2]")[1]  # 申論題沒有選項就不送
+    assert service.overview(db).subjects[0].questions == 2
