@@ -5,7 +5,9 @@
 - 每次作答都交給 srs 排下次複習時間（不論對錯，長期記憶都需要複習）。
 """
 
+import json
 import random
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -15,6 +17,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.modules.ai import service as ai_service
+from app.modules.bank import service as bank_service
+from app.modules.bank.schemas import QuestionFilter
+from app.modules.review import service as review_service
 from app.modules.srs import service as srs_service
 from app.modules.vocab import quiz
 from app.modules.vocab.importer import parse_word_table
@@ -24,6 +30,8 @@ from app.modules.vocab.schemas import (
     AnswerResult,
     BuiltinList,
     DailyQuiz,
+    ExtractedWords,
+    ExtractRequest,
     ImportResult,
     QuizItem,
     VocabStats,
@@ -31,6 +39,7 @@ from app.modules.vocab.schemas import (
     WordOut,
     WordPage,
     WordProgressOut,
+    WordBatchIn,
     WordStatus,
 )
 
@@ -344,3 +353,89 @@ def stats(db: Session, now: datetime | None = None) -> VocabStats:
         daily_done=daily_done or 0,
         daily_total=len(daily.word_ids) if daily else get_settings().daily_vocab_count,
     )
+
+
+# ---------- 從考古題英文題抽生字（AI） ----------
+
+EXTRACT_WORDS_SYSTEM = """你是台灣考生的英文老師。從使用者提供的英文考題中，挑出值得背的單字或片語（多益、國家考試程度）。
+只輸出 JSON 物件，不要其他文字或程式碼框：{"words": [{"term": "...", "part_of_speech": "n.|v.|adj.|adv.|prep.|conj.|phr.", "meaning": "...", "example": "...", "example_translation": "..."}]}
+規則：
+- 排除太基礎的字（國中程度）、專有名詞、人名地名。
+- term 用原形（動詞原形、名詞單數），全部小寫（專有名詞除外）。
+- meaning 是繁體中文（台灣用語），以這題的語境為主，最多 2 個意思用「；」分隔。
+- example 直接取題目中含有這個字的那一句（可以稍微截短），example_translation 是那句的繁體中文翻譯。
+- 值為 null 的欄位省略。"""
+
+ENGLISH_LETTERS = re.compile(r"[A-Za-z]{3,}")
+
+
+def _is_english(text: str) -> bool:
+    letters = sum(len(match) for match in ENGLISH_LETTERS.findall(text))
+    return letters > len(text) * 0.4
+
+
+def extract_from_questions(db: Session, data: ExtractRequest) -> ExtractedWords:
+    """從考古題英文題挑生字，回傳草稿（不會自動加入）。"""
+    if data.source == "wrong":
+        candidate_ids = review_service.wrong_question_ids(db, status="all")
+    else:
+        candidate_ids = list(reversed(bank_service.query_question_ids(db, QuestionFilter())))
+    questions = [
+        question
+        for question in bank_service.get_questions_with_paper(db, candidate_ids)
+        if "英文" in question.tags or _is_english(question.stem + " ".join(question.options))
+    ][: data.max_questions]
+    if not questions:
+        return ExtractedWords(
+            drafts=[], question_count=0, skipped_existing=0,
+            message="沒有找到英文題目。" + ("先去寫考古題，答錯的英文題才會出現在這裡。" if data.source == "wrong" else ""),
+        )  # fmt: skip
+
+    blocks = []
+    for index, question in enumerate(questions, start=1):
+        text = "\n".join(filter(None, [question.passage, question.stem, " / ".join(question.options)]))
+        blocks.append(f"【第 {index} 題】\n{text.replace('{{blank}}', '____')}")
+    prompt = f"以下是 {len(questions)} 題英文考題，請挑出最多 {min(40, len(questions) * 3)} 個值得背的字：\n\n" + "\n\n".join(blocks)
+    try:
+        completion = ai_service.complete(db, "vocab_extract", EXTRACT_WORDS_SYSTEM, prompt)
+    except ai_service.AiUnavailable as error:
+        raise VocabError(str(error), status_code=503) from error
+
+    drafts = parse_word_drafts(completion.text)
+    existing = set(db.scalars(select(Word.term_key)))
+    fresh = [word for word in drafts if _term_key(word.term) not in existing]
+    return ExtractedWords(
+        drafts=fresh,
+        question_count=len(questions),
+        skipped_existing=len(drafts) - len(fresh),
+        message=None if fresh else "這些題目裡的生字都已經在單字庫了。",
+    )
+
+
+def parse_word_drafts(text: str) -> list[WordIn]:
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    match = re.search(r"[\[{].*[\]}]", cleaned, re.DOTALL)
+    if match is None:
+        return []
+    try:
+        payload = json.loads(match.group())
+    except json.JSONDecodeError:
+        return []
+    items = payload.get("words", []) if isinstance(payload, dict) else payload
+    words, seen = [], set()
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            word = WordIn.model_validate({key: value for key, value in item.items() if value not in (None, "")})
+        except ValueError:
+            continue
+        key = _term_key(word.term)
+        if key not in seen:
+            seen.add(key)
+            words.append(word.model_copy(update={"tags": sorted(set(word.tags) | {"考古題"})}))
+    return words
+
+
+def add_words(db: Session, data: WordBatchIn) -> ImportResult:
+    return upsert_words(db, data.words, data.source)

@@ -97,3 +97,22 @@ class BuiltinList(BaseModel):
     name: str
     title: str
     count: int
+
+
+class ExtractRequest(BaseModel):
+    source: Literal["wrong", "all"] = "wrong"
+    """wrong＝只看答錯過的英文題，all＝全部英文題"""
+    max_questions: int = Field(default=15, ge=1, le=30)
+
+
+class ExtractedWords(BaseModel):
+    drafts: list[WordIn]
+    """AI 挑出的生字草稿，尚未加入單字庫"""
+    question_count: int
+    skipped_existing: int
+    message: str | None = None
+
+
+class WordBatchIn(BaseModel):
+    words: list[WordIn] = Field(min_length=1, max_length=200)
+    source: str = Field(default="考古題生字", max_length=100)

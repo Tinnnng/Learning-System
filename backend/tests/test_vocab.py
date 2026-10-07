@@ -143,3 +143,47 @@ def test_vocab_api(client):
     assert client.get("/api/vocab/stats").json()["daily_done"] == 1
     assert client.post("/api/vocab/import", files={"file": ("x.txt", b"a")}).status_code == 400
     assert client.post("/api/vocab/builtin/nope/import").status_code == 404
+
+
+def test_extract_words_from_english_questions(db, words):
+    from app.modules.ai import service as ai_service
+    from app.modules.ai.providers.fake import FakeProvider
+    from app.modules.bank import service as bank_service
+    from app.modules.vocab.schemas import ExtractRequest, WordBatchIn
+    from tests.factories import make_bundle
+
+    bundle = make_bundle("english", subject="法學知識與英文", questions=2)
+    bundle.questions[0].stem = "The company decided to {{blank}} the merger until next quarter."
+    bundle.questions[0].options = ["postpone", "accelerate", "dismiss", "endorse"]
+    bundle.questions[0].tags = ["英文"]
+    bundle.questions[1].stem = "依憲法規定，下列何者正確？"
+    bank_service.upsert_paper(db, bundle)
+
+    fake = FakeProvider(
+        [
+            '{"words": [{"term": "merger", "part_of_speech": "n.", "meaning": "合併", "example": "The company decided to postpone the merger.", "example_translation": "公司決定延後合併。"},'
+            ' {"term": "Postpone", "part_of_speech": "v.", "meaning": "延期"}, {"term": "", "meaning": "壞資料"}]}'
+        ]
+    )
+    ai_service.set_provider(fake)
+    try:
+        result = service.extract_from_questions(db, ExtractRequest(source="all"))
+    finally:
+        ai_service.set_provider(None)
+
+    assert result.question_count == 1  # 只送英文題
+    assert "____" in fake.calls[0]["prompt"] and "依憲法" not in fake.calls[0]["prompt"]
+    assert [w.term for w in result.drafts] == ["merger"]  # postpone 已在單字庫，壞資料略過
+    assert result.skipped_existing == 1
+    assert "考古題" in result.drafts[0].tags
+
+    added = service.add_words(db, WordBatchIn(words=result.drafts))
+    assert added.created == 1
+    assert service.list_words(db, search="merger").items[0].source == "考古題生字"
+
+
+def test_extract_words_without_english_questions(db):
+    from app.modules.vocab.schemas import ExtractRequest
+
+    result = service.extract_from_questions(db, ExtractRequest(source="wrong"))
+    assert result.drafts == [] and "沒有找到英文題目" in result.message

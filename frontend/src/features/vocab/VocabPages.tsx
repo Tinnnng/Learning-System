@@ -23,6 +23,7 @@ import {
   uploadWords,
   type WordStatus,
 } from './api'
+import { ExtractWordsDialog } from './ExtractWordsDialog'
 import { QuizRunner } from './QuizRunner'
 
 function VocabTabs() {
@@ -203,6 +204,7 @@ function ImportPanel() {
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [extracting, setExtracting] = useState(false)
   const builtin = useQuery({ queryKey: ['vocab', 'builtin'], queryFn: fetchBuiltin })
   const onDone = (data: ImportResult) => {
     setResult(data)
@@ -252,6 +254,14 @@ function ImportPanel() {
           ))}
         </div>
       )}
+      <div className="flex flex-col gap-2 border-t border-rule pt-4">
+        <span className="text-sm text-muted">從考古題找生字</span>
+        <Button variant="secondary" onClick={() => setExtracting(true)}>
+          <Icon name="spark" size={17} />
+          讓 AI 從英文題挑生字
+        </Button>
+      </div>
+      <ExtractWordsDialog open={extracting} onClose={() => setExtracting(false)} />
       {(upload.isError || builtinImport.isError) && <ErrorState error={upload.error ?? builtinImport.error} />}
       {result && (
         <p className="m-0 rounded-md bg-ok-soft/60 px-3 py-2 text-sm" role="status">

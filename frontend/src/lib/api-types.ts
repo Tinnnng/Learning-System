@@ -450,7 +450,11 @@ export interface paths {
         /** List Words */
         get: operations["list_words_api_vocab_words_get"];
         put?: never;
-        post?: never;
+        /**
+         * Add Words
+         * @description 把確認過的單字加入單字庫（同一個字已存在就更新）。
+         */
+        post: operations["add_words_api_vocab_words_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -539,6 +543,26 @@ export interface paths {
         put?: never;
         /** Import Builtin */
         post: operations["import_builtin_api_vocab_builtin__name__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocab/extract-from-questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract From Questions
+         * @description 請 AI 從考古題的英文題挑生字，回傳草稿（不會自動加入單字庫）。
+         */
+        post: operations["extract_from_questions_api_vocab_extract_from_questions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1155,12 +1179,37 @@ export interface components {
              */
             my_answer?: string[] | null;
         };
+        /** ExtractRequest */
+        ExtractRequest: {
+            /**
+             * Source
+             * @default wrong
+             * @enum {string}
+             */
+            source: "wrong" | "all";
+            /**
+             * Max Questions
+             * @default 15
+             */
+            max_questions: number;
+        };
         /** ExtractResult */
         ExtractResult: {
             /** Drafts */
             drafts: components["schemas"]["EventIn"][];
             /** Warnings */
             warnings: string[];
+        };
+        /** ExtractedWords */
+        ExtractedWords: {
+            /** Drafts */
+            drafts: components["schemas"]["WordIn"][];
+            /** Question Count */
+            question_count: number;
+            /** Skipped Existing */
+            skipped_existing: number;
+            /** Message */
+            message?: string | null;
         };
         /** FilterOptions */
         FilterOptions: {
@@ -2019,6 +2068,31 @@ export interface components {
             daily_done: number;
             /** Daily Total */
             daily_total: number;
+        };
+        /** WordBatchIn */
+        WordBatchIn: {
+            /** Words */
+            words: components["schemas"]["WordIn"][];
+            /**
+             * Source
+             * @default 考古題生字
+             */
+            source: string;
+        };
+        /** WordIn */
+        WordIn: {
+            /** Term */
+            term: string;
+            /** Meaning */
+            meaning: string;
+            /** Part Of Speech */
+            part_of_speech?: string | null;
+            /** Example */
+            example?: string | null;
+            /** Example Translation */
+            example_translation?: string | null;
+            /** Tags */
+            tags?: string[];
         };
         /** WordOut */
         WordOut: {
@@ -2990,6 +3064,39 @@ export interface operations {
             };
         };
     };
+    add_words_api_vocab_words_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WordBatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     wrong_words_api_vocab_wrong_get: {
         parameters: {
             query?: never;
@@ -3101,6 +3208,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_from_questions_api_vocab_extract_from_questions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtractRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractedWords"];
                 };
             };
             /** @description Validation Error */

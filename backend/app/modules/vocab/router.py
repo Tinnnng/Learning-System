@@ -9,11 +9,14 @@ from app.modules.vocab.schemas import (
     AnswerResult,
     BuiltinList,
     DailyQuiz,
+    ExtractedWords,
+    ExtractRequest,
     ImportResult,
     QuizItem,
     VocabStats,
     WordOut,
     WordPage,
+    WordBatchIn,
     WordStatus,
 )
 
@@ -84,3 +87,18 @@ def import_builtin(name: str, db: Session = Depends(get_db)) -> ImportResult:
         return service.import_builtin(db, name)
     except service.VocabError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.post("/extract-from-questions", response_model=ExtractedWords)
+def extract_from_questions(data: ExtractRequest, db: Session = Depends(get_db)) -> ExtractedWords:
+    """請 AI 從考古題的英文題挑生字，回傳草稿（不會自動加入單字庫）。"""
+    try:
+        return service.extract_from_questions(db, data)
+    except service.VocabError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.post("/words", response_model=ImportResult)
+def add_words(data: WordBatchIn, db: Session = Depends(get_db)) -> ImportResult:
+    """把確認過的單字加入單字庫（同一個字已存在就更新）。"""
+    return service.add_words(db, data)
