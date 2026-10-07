@@ -303,7 +303,7 @@ function ImportPanel() {
       <h2 className="m-0 font-display text-lg font-bold">匯入單字</h2>
       <div className="flex flex-col gap-2">
         <p className="m-0 text-sm text-muted">
-          CSV 或 Excel，第一列放欄位名稱：<span className="text-ink">單字、中文</span> 必填，可加 詞性、例句、例句翻譯、標籤。同一個字重新匯入會更新。
+          CSV 或 Excel，第一列放欄位名稱：<span className="text-ink">單字、中文</span> 必填，可加 詞性、例句、例句翻譯、標籤（或分類）。單字庫已經有的字會合併中文意思，原本的詞性、例句與作答進度保留。
         </p>
         <input
           ref={fileRef}
@@ -350,7 +350,7 @@ function ImportPanel() {
       {(upload.isError || builtinImport.isError) && <ErrorState error={upload.error ?? builtinImport.error} />}
       {result && (
         <p className="m-0 rounded-md bg-ok-soft/60 px-3 py-2 text-sm" role="status">
-          新增 {result.created} 個、更新 {result.updated} 個{result.skipped > 0 && `、略過 ${result.skipped} 列`}。
+          新增 {result.created} 個{result.updated > 0 && `；${result.updated} 個已經在單字庫，意思已合併（原本的例句與詞性保留）`}{result.skipped > 0 && `；略過 ${result.skipped} 列`}。
           {result.errors.slice(0, 3).map((error) => (
             <span key={error} className="block text-xs text-muted">
               {error}

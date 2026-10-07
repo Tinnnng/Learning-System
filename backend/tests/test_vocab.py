@@ -79,6 +79,31 @@ def test_resubmitted_answer_is_recorded_once(db, words):
         service.answer(db, data.model_copy(update={"word_id": words["deadline"].id}), now=NOW)
 
 
+def test_reimport_merges_instead_of_overwriting(db, words):
+    """重複的字合併：意思取聯集、原本的詞性與例句保留，原本沒有的才補上。"""
+    service.upsert_words(
+        db,
+        [
+            WordIn(term="negotiate", meaning="協商；談判", part_of_speech="vt.", example="Another sentence."),
+            WordIn(term="itinerary", meaning="行程表", part_of_speech="n.", example="Check the itinerary."),
+            WordIn(term="itinerary", meaning="旅行路線", tags=["旅遊"]),  # 同一個檔案內重複、沒填詞性
+        ],
+        source="x",
+    )
+    by_term = {word.term: word for word in service.list_words(db, limit=100).items}
+    negotiate, itinerary = by_term["negotiate"], by_term["itinerary"]
+    assert (negotiate.meaning, negotiate.part_of_speech) == ("協商；談判", "v.")
+    assert negotiate.example == "We need to negotiate the contract."
+    assert (itinerary.meaning, itinerary.part_of_speech) == ("行程表；旅行路線", "n.")
+    assert itinerary.example == "Check the itinerary." and "旅遊" in itinerary.tags
+
+
+def test_merge_meanings():
+    assert service.merge_meanings("應徵者；申請人", "應徵者") == "應徵者；申請人"
+    assert service.merge_meanings("資格；條件", "資格; 資歷") == "資格；條件；資歷"
+    assert service.merge_meanings("發票", "發票；帳單") == "發票；帳單"
+
+
 def test_quiz_items(words):
     from app.modules.vocab.models import Word
 

@@ -78,25 +78,48 @@ def _term_key(term: str) -> str:
 # ---------- 匯入 ----------
 
 
+MEANING_SEPARATOR = re.compile(r"\s*[；;]\s*")
+
+
+def merge_meanings(old: str, new: str) -> str:
+    """合併兩個中文意思：以「；」分開的義項取聯集，原本的順序在前（「應徵者；申請人」＋「應徵者」＝「應徵者；申請人」）。"""
+    senses: dict[str, str] = {}
+    for sense in [*MEANING_SEPARATOR.split(old), *MEANING_SEPARATOR.split(new)]:
+        if sense.strip():
+            senses.setdefault(match_key(sense, keep_spaces=False), sense.strip())
+    return "；".join(senses.values())
+
+
 def upsert_words(db: Session, words: list[WordIn], source: str | None) -> ImportResult:
-    """同一個字（不分大小寫）已存在就更新內容，作答紀錄保留。"""
+    """同一個字（比對規則見 _term_key）已存在時合併，不覆蓋：中文意思取聯集；詞性、例句保留原本的，
+    原本沒有才補上；分類標籤合併。作答紀錄保留。同一個檔案內的重複列也照這個規則合併。"""
     existing = {word.term_key: word for word in db.scalars(select(Word))}
     created = updated = 0
     for item in words:
         key = _term_key(item.term)
         word = existing.get(key)
         if word is None:
-            word = Word(term_key=key, source=source)
+            word = Word(
+                term_key=key,
+                source=source,
+                term=item.term.strip(),
+                meaning=item.meaning,
+                part_of_speech=item.part_of_speech,
+                example=item.example,
+                example_translation=item.example_translation,
+                tags=sorted(set(item.tags)),
+            )
             db.add(word)
             existing[key] = word
             created += 1
-        else:
-            updated += 1
-        word.term = item.term.strip()
-        word.meaning = item.meaning
-        word.part_of_speech = item.part_of_speech
-        word.example = item.example
-        word.example_translation = item.example_translation
+            continue
+        updated += 1
+        word.meaning = merge_meanings(word.meaning, item.meaning)
+        word.part_of_speech = word.part_of_speech or item.part_of_speech
+        if not word.example:
+            word.example, word.example_translation = item.example, item.example_translation
+        elif not word.example_translation and word.example == item.example:
+            word.example_translation = item.example_translation  # 同一句例句，補上翻譯
         word.tags = sorted(set(word.tags or []) | set(item.tags))
     db.commit()
     return ImportResult(created=created, updated=updated, skipped=0, errors=[])

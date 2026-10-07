@@ -11,8 +11,8 @@ from pydantic import ValidationError
 from app.modules.vocab.schemas import WordIn
 
 COLUMN_ALIASES = {
-    "term": {"term", "word", "單字", "英文", "vocabulary"},
-    "meaning": {"meaning", "中文", "意思", "解釋", "definition", "翻譯"},
+    "term": {"term", "word", "單字", "英文", "vocabulary", "英文單字", "生字"},
+    "meaning": {"meaning", "中文", "意思", "解釋", "definition", "翻譯", "中文意思", "中文解釋", "字義", "意義", "中譯"},
     "part_of_speech": {"part_of_speech", "pos", "詞性"},
     "example": {"example", "例句", "sentence"},
     "example_translation": {"example_translation", "例句翻譯", "例句中文"},
