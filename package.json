@@ -4,8 +4,10 @@
   "scripts": {
     "setup": "cd backend && uv sync && uv run alembic upgrade head && cd ../frontend && npm install",
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:lan": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web:lan\"",
     "dev:api": "cd backend && uv run uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8000",
     "dev:web": "npm --prefix frontend run dev",
+    "dev:web:lan": "cd frontend && node scripts/dev-lan.mjs",
     "test": "cd backend && uv run pytest -q && cd ../frontend && npm test",
     "migrate": "cd backend && uv run alembic upgrade head",
     "gen:api": "cd backend && uv run python -m app.dump_openapi ../frontend/openapi.json && cd ../frontend && npx -y openapi-typescript@7 openapi.json -o src/lib/api-types.ts && node -e \"require('fs').unlinkSync('openapi.json')\""
