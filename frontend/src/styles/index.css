@@ -218,6 +218,21 @@
   }
 }
 
+/* 換題：像翻筆記本，下一題從右邊翻進來、上一題從左邊翻回來（只動 transform／opacity） */
+@keyframes page-next {
+  from {
+    opacity: 0.001;
+    transform: perspective(1600px) translateX(32px) rotateY(-7deg);
+  }
+}
+
+@keyframes page-prev {
+  from {
+    opacity: 0.001;
+    transform: perspective(1600px) translateX(-32px) rotateY(7deg);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

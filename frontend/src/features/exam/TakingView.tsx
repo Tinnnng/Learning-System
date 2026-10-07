@@ -41,6 +41,9 @@ export function TakingView({ session }: { session: SessionOut }) {
   const enteredAt = useRef<Record<number, number>>({})
   const isPractice = session.mode === 'practice'
   const item = items.find((entry) => entry.position === current) ?? items[0]
+  // 記住換題方向，決定翻頁動畫從哪一邊進來（在 render 中依 current 推導，不需要 effect）
+  const [turn, setTurn] = useState({ position: current, forward: true })
+  if (turn.position !== current) setTurn({ position: current, forward: current > turn.position })
 
   useEffect(() => {
     enteredAt.current[current] ??= Date.now()
@@ -226,9 +229,16 @@ export function TakingView({ session }: { session: SessionOut }) {
       </div>
 
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_290px]">
-        <section aria-label="題目" className="min-w-0 rounded-lg bg-sheet px-4 py-6 shadow-sheet sm:px-8 sm:py-8">
+        <section aria-label="題目" className="min-w-0 overflow-x-clip rounded-lg bg-sheet px-4 py-6 shadow-sheet sm:px-8 sm:py-8">
           {view === 'single' ? (
-            <div key={item.position} className="animate-[rise-in_var(--dur)_var(--ease-out)]">
+            <div
+              key={item.position}
+              className={cx(
+                turn.forward
+                  ? 'origin-left animate-[page-next_var(--dur-slow)_var(--ease-out)]'
+                  : 'origin-right animate-[page-prev_var(--dur-slow)_var(--ease-out)]',
+              )}
+            >
               {block(item)}
               <nav aria-label="換題" className="mt-8 flex items-center justify-between gap-3 border-t border-rule pt-5">
                 <Button variant="ghost" onClick={() => goTo(current - 1)} disabled={current <= 1}>
