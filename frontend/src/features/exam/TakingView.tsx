@@ -201,7 +201,7 @@ export function TakingView({ session }: { session: SessionOut }) {
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="eyebrow">{isPractice ? '練習・作答後立刻對答案' : '模擬考・交卷才評分'}</span>
+          <span className="eyebrow-hand">{isPractice ? '練習・作答後立刻對答案' : '模擬考・交卷才評分'}</span>
           <h1 className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
         </div>
         <Segmented

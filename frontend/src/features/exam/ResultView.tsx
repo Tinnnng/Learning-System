@@ -60,7 +60,7 @@ export function ResultView({ session }: { session: SessionOut }) {
     <div className="flex flex-col gap-8">
       <header className="grid gap-6 border-b border-line pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
         <div className="flex flex-col gap-1">
-          <span className="eyebrow">
+          <span className="eyebrow-hand">
             {session.mode === 'mock' ? '模擬考' : '練習'}・{formatDateTime(session.started_at)}
           </span>
           <h1 className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
@@ -137,7 +137,7 @@ export function ResultView({ session }: { session: SessionOut }) {
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_290px]">
         <section aria-label="逐題檢討" className="min-w-0 rounded-lg bg-sheet px-4 py-6 shadow-sheet sm:px-8">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="eyebrow m-0">逐題檢討</h2>
+            <h2 className="eyebrow-hand m-0">逐題檢討</h2>
             <Segmented
               label="篩選題目"
               value={filter}
@@ -167,7 +167,7 @@ export function ResultView({ session }: { session: SessionOut }) {
         </section>
 
         <aside className="flex flex-col gap-4 rounded-lg bg-sheet p-5 shadow-sheet lg:sticky lg:top-24">
-          <h2 className="eyebrow m-0">題號一覽</h2>
+          <h2 className="eyebrow-hand m-0">題號一覽</h2>
           <AnswerGrid
             cells={session.items.map((item) => ({
               position: item.position,

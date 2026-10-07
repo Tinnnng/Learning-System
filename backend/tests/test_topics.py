@@ -130,3 +130,16 @@ def test_essays_are_tagged_too(db, fake):
     assert service.tag_subject(db, TagRequest(subject="資料庫")).tagged == 2
     assert "選項：" not in fake.calls[1]["prompt"].split("[2]")[1]  # 申論題沒有選項就不送
     assert service.overview(db).subjects[0].questions == 2
+
+
+def test_topic_names_ignore_fullwidth_and_punctuation(db, fake, question_ids):
+    """AI 給的名稱只差全形半形、標點或空白時算同一個知識點；C++ 和 C# 這類符號不同的不能合併。"""
+    _reply(fake, {"topics": ["TCP/IP", "ＴＣＰ／ＩＰ", "作業系統。", "作業系統", "C++", "C#"]})
+    _reply(fake, {"tags": {"1": ["ｔｃｐ／ｉｐ", "TCP/IP"], "2": ["作業 系統"], "3": ["C#"], "4": ["C++。"]}})
+
+    result = service.tag_subject(db, TagRequest(subject="行政法"))
+    assert result.topics == ["TCP/IP", "作業系統", "C++", "C#"]
+    by_topic = {stat.topic: stat.question_ids for stat in service.overview(db).subjects[0].topics}
+    assert by_topic["TCP/IP"] == [question_ids[0]]
+    assert by_topic["作業系統"] == [question_ids[1]]
+    assert (by_topic["C#"], by_topic["C++"]) == ([question_ids[2]], [question_ids[3]])

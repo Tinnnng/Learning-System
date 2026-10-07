@@ -100,13 +100,13 @@ def test_explain_sends_official_answer_and_caches(db, fake_ai, question_id):
     assert again.messages[0].kind == "explanation"
 
 
-def test_follow_up_and_limits(db, fake_ai, question_id):
+def test_follow_up_and_cost(db, fake_ai, question_id):
     fake_ai.replies = ["詳解", "追問的回答"]
     tutor_service.explain(db, question_id)
     thread = tutor_service.ask(db, question_id, "為什麼 A 不對？")
     assert [m.role for m in thread.messages] == ["assistant", "user", "assistant"]
     assert "先前的對話" in fake_ai.calls[1]["prompt"] and "助教：詳解" in fake_ai.calls[1]["prompt"]
-    assert thread.remaining_questions == tutor_service.MAX_FOLLOW_UPS - 1
+    assert thread.cost_usd == 0.002  # 詳解＋追問各 0.001（FakeProvider），不限追問次數
 
     flagged = tutor_service.flag(db, thread.messages[0].id)
     assert flagged.messages[0].flagged
@@ -114,6 +114,46 @@ def test_follow_up_and_limits(db, fake_ai, question_id):
     regenerated = tutor_service.explain(db, question_id, regenerate=True)
     assert len(regenerated.messages) == 1  # 重新產生會清掉舊的對話
     assert tutor_service.explanations(db, [question_id, 999]) == {question_id: regenerated.messages[0].content}
+
+
+def test_cancel_stops_request(db, fake_ai, question_id, client):
+    import threading
+
+    from app.modules.ai.providers.base import ProviderCancelled
+
+    started, finished = threading.Event(), threading.Event()
+
+    class SlowProvider:
+        name = "slow"
+
+        def complete(self, system, prompt, images=None, cancel=None):
+            started.set()
+            assert cancel is not None and cancel.wait(5)
+            finished.set()
+            raise ProviderCancelled("已中斷，這次沒有產生內容。")
+
+    ai_service.set_provider(SlowProvider())
+    errors = []
+
+    def run():
+        try:
+            tutor_service.explain(db, question_id, request_id="req-1")
+        except tutor_service.TutorError as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    assert started.wait(5)
+    assert client.post("/api/ai/requests/req-1/cancel").json() == {"cancelled": True}
+    worker.join(5)
+    assert finished.is_set() and errors[0].status_code == 409
+    assert tutor_service.get_thread(db, question_id).messages == []  # 中斷不留紀錄
+
+    # 先按中斷、請求才到：開始時立刻中斷
+    ai_service.set_provider(fake_ai)
+    assert client.post("/api/ai/requests/req-2/cancel").json() == {"cancelled": False}
+    with pytest.raises(tutor_service.TutorError, match="中斷"):
+        tutor_service.explain(db, question_id, request_id="req-2")
 
 
 def test_tutor_api_reports_ai_unavailable(client, db, question_id, monkeypatch):
@@ -150,6 +190,92 @@ def test_event_validation():
         EventIn(title="x", date=date(2026, 12, 5), end_date=date(2026, 12, 1))
     with pytest.raises(ValueError):
         EventIn(title="x", date=date(2026, 12, 5), time="25:00")
+
+
+def test_extraction_groups_exams_and_fixes_roc_year():
+    reply = json.dumps(
+        {
+            "events": [
+                {"title": "116年公務人員高等考試三級考試", "kind": "exam", "date": "2027-07-04", "end_date": "2027-07-06"},
+                {"title": "116年普通考試", "kind": "exam", "date": "2027-07-02", "end_date": "2027-07-03"},
+                {"title": "116年特種考試地方政府公務人員考試", "kind": "exam", "date": "2027-12-04"},
+                {"title": "116年專門職業及技術人員高等考試律師考試", "kind": "exam", "date": "2027-08-07"},
+                {"title": "116年國防法務官考試", "kind": "exam", "date": "2026-12-18", "end_date": "2026-12-19"},
+            ],
+            "problem": None,
+        },
+        ensure_ascii=False,
+    )
+    result = calendar_service.parse_extraction(reply, exams_only=True)
+    assert result.groups == ["地方特考", "專技人員", "高考", "普考", "其他"]
+    assert [d.group for d in result.drafts] == result.groups  # 依分類順序排好
+    officer = result.drafts[-1]
+    assert (officer.date, officer.end_date) == (date(2027, 12, 18), date(2027, 12, 19))  # 116 年 → 2027，不是 2026
+
+
+@pytest.mark.parametrize(
+    ("title", "group"),
+    [
+        ("116年公務人員初等考試", "初等考試"),
+        ("116年公務人員特種考試警察人員考試", "其他特考"),
+        ("116年特種考試離島地區公務人員考試", "地方特考"),
+        ("116年交通事業鐵路人員升資考試", "升等考試"),
+        ("資料結構期中考", "學校考試"),
+    ],
+)
+def test_classify_exam(title, group):
+    assert calendar_service.classify_exam(title) == group
+
+
+def test_exam_lines_keep_wrapped_dates():
+    page = "\n".join(
+        [
+            "--- 第 1 頁 ---",
+            "考　選　部",
+            "116年考試期日計畫表",
+            "序號 考試名稱 預定考試日期",
+            "116年特種考試地方政府公務人員考試   三等  116.09.07(二)-  第一試筆試  1.分臺北考區舉行",
+            "         四等   09.16(四)    116.12.04(六)-  南、高雄、屏東、宜蘭、花蓮",
+            "                               12.06(一)     2.公職專技人員第二試口試",
+            "15     116150                  10.03(日)     3.中央選舉委員會尚未確定",
+            "這一行是無關的說明文字，會被濾掉",
+        ]
+    )
+    kept = calendar_service.exam_lines_only(page)
+    assert "116.12.04" in kept and "12.06(一)" in kept and "10.03(日)" in kept
+    assert "無關的說明" not in kept
+
+
+def test_text_pdf_reads_every_page():
+    import pymupdf
+
+    document = pymupdf.open()
+    for number in range(6):
+        document.new_page().insert_textbox(pymupdf.Rect(40, 40, 560, 800), f"page {number} " + "exam schedule text " * 15)
+    text, images, warnings = calendar_service._pdf_content(document.tobytes())
+    assert images == [] and warnings == []
+    assert "--- 第 6 頁 ---" in text  # 有文字層就不受「最多 4 頁」限制
+
+
+def test_same_event_is_not_added_twice(db, fake_ai):
+    exam = EventIn(title="115年 期中考", kind="exam", date=date(2026, 11, 10), end_date=date(2026, 11, 14))
+    first = calendar_service.create(db, exam, source="photo")
+    again = calendar_service.create(db, exam.model_copy(update={"title": "１１５年期中考。"}), source="manual")
+    assert again.id == first.id and len(calendar_service.list_events(db)) == 1
+    other_day = calendar_service.create(db, exam.model_copy(update={"date": date(2026, 11, 11)}))
+    assert other_day.id != first.id  # 不同日期是不同行程
+
+    fake_ai.replies = [
+        json.dumps(
+            {"events": [
+                {"title": "115年期中考", "kind": "exam", "date": "2026-11-10", "end_date": "2026-11-14"},
+                {"title": "115年期末考", "kind": "exam", "date": "2027-01-11"},
+            ]},
+            ensure_ascii=False,
+        )
+    ]  # fmt: skip
+    result = calendar_service.extract_from_file(db, b"fake-image", "image/jpeg")
+    assert [(d.title, d.exists) for d in result.drafts] == [("115年期中考", True), ("115年期末考", False)]
 
 
 def test_parse_extraction_tolerates_fences_and_bad_items():
@@ -253,23 +379,36 @@ def test_text_pdf_sends_only_exam_lines(db, fake_ai):
     assert result.drafts[0].end_date == date(2026, 11, 7)
 
 
+def _fake_cli(monkeypatch, script: str) -> ClaudeCodeProvider:
+    """把 claude 指令換成一段 Python，測試程序管理（不會呼叫真的模型）。"""
+    import sys
+
+    provider = ClaudeCodeProvider("claude", "claude-haiku-4-5", 60)
+    monkeypatch.setattr(provider, "command", lambda system: [sys.executable, "-c", script])
+    return provider
+
+
 def test_claude_code_disables_thinking(monkeypatch):
-    captured = {}
+    script = (
+        "import json, os, sys; sys.stdin.read(); "
+        "print(json.dumps({'type': 'result', 'is_error': False, 'result': os.environ['MAX_THINKING_TOKENS'], 'usage': {}}))"
+    )
+    assert _fake_cli(monkeypatch, script).complete("系統", "問題").text == "0"
 
-    def fake_run(command, **kwargs):
-        captured.update(kwargs)
 
-        class Result:
-            returncode = 0
-            stdout = json.dumps({"type": "result", "is_error": False, "result": "ok", "usage": {}})
-            stderr = ""
+def test_claude_code_cancel_kills_process(monkeypatch):
+    import threading
+    import time
 
-        return Result()
+    from app.modules.ai.providers.base import ProviderCancelled
 
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/claude")
-    monkeypatch.setattr("subprocess.run", fake_run)
-    ClaudeCodeProvider("claude", "claude-haiku-4-5", 60).complete("系統", "問題")
-    assert captured["env"]["MAX_THINKING_TOKENS"] == "0"
+    provider = _fake_cli(monkeypatch, "import time; time.sleep(30)")
+    cancel = threading.Event()
+    threading.Timer(0.5, cancel.set).start()
+    started = time.monotonic()
+    with pytest.raises(ProviderCancelled):
+        provider.complete("系統", "問題", cancel=cancel)
+    assert time.monotonic() - started < 5
 
 
 # ---------- 訂閱 iCal ----------
@@ -335,6 +474,27 @@ def test_subscribe_imports_future_events_and_classifies(db, remote_ics):
 
     calendar_service.unsubscribe(db, result.subscription.id)
     assert calendar_service.list_events(db) == []
+
+
+def test_subscription_with_repeated_uids(db, remote_ics):
+    """重複事件的例外場次（RECURRENCE-ID）和來源重複的 UID，不能讓同步撞到唯一限制。"""
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    future = calendar_service.today() + timedelta(days=30)
+    fmt = lambda d: d.strftime("%Y%m%d")  # noqa: E731
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "X-WR-CALNAME:週考"]
+    for day, recurrence in [(future, None), (future + timedelta(days=7), future + timedelta(days=7)), (future, None)]:
+        lines += ["BEGIN:VEVENT", "UID:weekly", f"DTSTART;VALUE=DATE:{fmt(day)}", "SUMMARY:週考"]
+        if recurrence:
+            lines.append(f"RECURRENCE-ID;VALUE=DATE:{fmt(recurrence)}")
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    remote_ics["data"] = "\r\n".join(lines).encode()
+
+    result = calendar_service.subscribe(db, SubscriptionIn(url="https://example.com/weekly.ics"))
+    assert result.added == 2  # 主事件＋一個例外場次；完全重複的 UID 只取一次
+    again = calendar_service.sync(db, result.subscription.id)
+    assert (again.added, again.updated) == (0, 2)
 
 
 def test_subscription_without_deadlines_and_errors(db, remote_ics):

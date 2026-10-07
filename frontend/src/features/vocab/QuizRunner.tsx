@@ -77,9 +77,11 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
   const nextRef = useRef<HTMLButtonElement>(null)
   const item = items[index]
   const result = item ? results[index] : undefined
+  // 這次測驗的 id（手機用 dev:lan 的 http 連線沒有 crypto.randomUUID）；每題作答的 id＝測驗 id＋題目位置
+  const [runId] = useState(() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
 
   const answer = useMutation({
-    mutationFn: (response: string) => answerWord(item, response, context),
+    mutationFn: (response: string) => answerWord(item, response, context, `${runId}-${index}`),
     onSuccess: (data) => {
       setResults((old) => ({ ...old, [index]: data }))
       queryClient.invalidateQueries({ queryKey: ['vocab'] })
@@ -123,7 +125,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <span className="eyebrow">{TYPE_LABELS[item.quiz_type]}</span>
+        <span className="eyebrow-hand">{TYPE_LABELS[item.quiz_type]}</span>
         <span className="flex gap-1.5" role="img" aria-label={`第 ${index + 1} 個，共 ${items.length} 個`}>
           {items.map((entry, position) => {
             const done = results[position] ?? (entry.answered ? { is_correct: entry.is_correct } : null)

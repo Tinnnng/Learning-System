@@ -149,7 +149,7 @@ export function PaperPage() {
         </section>
 
         <aside className="order-1 rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24 lg:order-2">
-          <h2 className="m-0 mb-5 font-hand text-lg font-bold">開始寫這份試卷</h2>
+          <h2 className="m-0 mb-5 font-display text-lg font-bold">開始寫這份試卷</h2>
           <StartPanel
             filter={{ paper_ids: [data.id] }}
             questionCount={choiceCount}

@@ -71,6 +71,16 @@ def test_text_files_are_listed_and_importable(client, data_dir):
         target.unlink()
 
 
+def test_text_files_with_same_stem_get_different_keys(tmp_path):
+    from app.modules.ingest.adapters.text_file import TextFileAdapter
+
+    body = "# 科目：程式設計\n\n1. 題目\n(A) 甲\n(B) 乙\n答案：A\n"
+    (tmp_path / "期中考.txt").write_text(body, encoding="utf-8")
+    (tmp_path / "期中考.md").write_text(body.replace("程式設計", "資料結構"), encoding="utf-8")
+    keys = {TextFileAdapter().load(tmp_path / name).paper.source_key for name in ["期中考.txt", "期中考.md"]}
+    assert len(keys) == 2
+
+
 def test_extract_pptx_docx_pdf(tmp_path):
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[5])
@@ -92,8 +102,25 @@ def test_extract_pptx_docx_pdf(tmp_path):
     docx_text = lecture.extract_markdown(tmp_path / "notes.docx")
     assert "## 遞迴" in docx_text and "函式呼叫自己" in docx_text
     assert "## 第 1 頁" in lecture.extract_markdown(tmp_path / "slides.pdf")
-    with pytest.raises(ValueError, match="另存"):
+    with pytest.raises(ValueError, match="不支援"):
+        lecture.extract_markdown(tmp_path / "slides.odp")
+    with pytest.raises(ValueError, match="找不到"):
         lecture.extract_markdown(tmp_path / "old.ppt")
+
+
+def test_extract_pptx_saves_slide_pictures(tmp_path):
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 40, 30), False)
+    picture.clear_with(200)
+    (tmp_path / "scan.png").write_bytes(picture.tobytes("png"))
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    slide.shapes.add_picture(str(tmp_path / "scan.png"), Inches(1), Inches(1))
+    presentation.save(tmp_path / "scanned.pptx")
+
+    assert "[圖片]" in lecture.extract_markdown(tmp_path / "scanned.pptx")
+    text = lecture.extract_markdown(tmp_path / "scanned.pptx", image_dir=tmp_path / "images")
+    saved = tmp_path / "images" / "slide-01-1.png"
+    assert saved.exists() and f"[圖片：{saved.as_posix()}]" in text
 
 
 def test_list_converted_ignores_unsupported_files(db, data_dir):

@@ -1,14 +1,15 @@
 /**
  * AI 助教：題目揭曉答案後才出現。打開後由使用者決定要不要請 AI 詳解（約 10 秒），
  * 也可以不看詳解直接發問。詳解存在資料庫，同一題再看不花用量。可以追問、回報解釋有誤、重新產生。
+ * 追問不限次數，但會顯示這題與本月已用的額度；送出後可以按「中斷」（終止 AI，避免誤按浪費用量）。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { RichText } from '@/components/RichText'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, apiRequest } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import type { components } from '@/lib/api-types'
 
@@ -18,9 +19,24 @@ type AiStatus = components['schemas']['AiStatus']
 const fetchThread = (id: number) => api.get<Thread>(`/tutor/questions/${id}`)
 const fetchStatus = () => api.get<AiStatus>('/ai/status')
 
+function isCancelled(error: unknown) {
+  return (error instanceof DOMException && error.name === 'AbortError') || (error instanceof ApiError && error.status === 409)
+}
+
 function errorText(error: unknown) {
+  if (isCancelled(error)) return '已中斷，這次沒有產生內容。'
   if (error instanceof ApiError && typeof error.detail === 'string') return error.detail
   return 'AI 暫時無法使用，請稍後再試。'
+}
+
+// 手機用 dev:lan（http）連線時不是安全環境，沒有 crypto.randomUUID
+const requestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+
+const usd = (value: number) => `$${value > 0 && value < 0.01 ? value.toFixed(3) : value.toFixed(2)}`
+
+interface Running {
+  id: string
+  controller: AbortController
 }
 
 interface AiTutorProps {
@@ -35,6 +51,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const key = ['tutor', questionId]
+  const running = useRef<Running | null>(null)
   const thread = useQuery({ queryKey: key, queryFn: () => fetchThread(questionId), enabled: open })
   const status = useQuery({ queryKey: ['ai', 'status'], queryFn: fetchStatus, enabled: open })
 
@@ -42,13 +59,34 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
     queryClient.setQueryData(key, data)
     queryClient.invalidateQueries({ queryKey: ['ai', 'status'] })
   }
+
+  /** 送出會花用量的請求：附上 request_id，之後可以中斷 */
+  const send = (path: string, body: Record<string, unknown>) => {
+    const current = { id: requestId(), controller: new AbortController() }
+    running.current = current
+    return apiRequest<Thread>(path, {
+      method: 'POST',
+      body: JSON.stringify({ ...body, request_id: current.id }),
+      signal: current.controller.signal,
+    }).finally(() => {
+      if (running.current === current) running.current = null
+    })
+  }
+  const stop = () => {
+    const current = running.current
+    if (!current) return
+    // 先請後端終止 AI 程序（不再花用量），再放棄等待回應
+    void api.post(`/ai/requests/${current.id}/cancel`).catch(() => undefined)
+    current.controller.abort()
+  }
+
   const explain = useMutation({
     mutationFn: (regenerate: boolean) =>
-      api.post<Thread>(`/tutor/questions/${questionId}/explain`, { regenerate, my_answer: myAnswer ?? null }),
+      send(`/tutor/questions/${questionId}/explain`, { regenerate, my_answer: myAnswer ?? null }),
     onSuccess: onThread,
   })
   const ask = useMutation({
-    mutationFn: (content: string) => api.post<Thread>(`/tutor/questions/${questionId}/messages`, { content }),
+    mutationFn: (content: string) => send(`/tutor/questions/${questionId}/messages`, { content }),
     onSuccess: (data) => {
       onThread(data)
       setDraft('')
@@ -63,7 +101,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const hasExplanation = messages.some((message) => message.kind === 'explanation')
   const busy = explain.isPending || ask.isPending
   const error = explain.error ?? ask.error
-
+  const cancelled = isCancelled(error)
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -110,11 +148,14 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         </div>
       )}
 
-      {explain.isPending && !hasExplanation && (
-        <p className="m-0 flex items-center gap-2 text-sm text-muted" role="status">
-          <span className="h-3 w-2 animate-pulse rounded-full border border-accent" />
-          AI 正在看這一題，大約 10 秒…
-        </p>
+      {explain.isPending && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p className="m-0 flex items-center gap-2 text-sm text-muted" role="status">
+            <span className="h-3 w-2 animate-pulse rounded-full border border-accent" />
+            {hasExplanation ? 'AI 重新產生中…' : 'AI 正在看這一題，大約 10 秒…'}
+          </p>
+          <StopButton onClick={stop} />
+        </div>
       )}
 
       <ol className="m-0 flex list-none flex-col gap-4 p-0">
@@ -145,15 +186,15 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         )}
       </ol>
 
-      {(ask.isPending || (explain.isPending && hasExplanation)) && (
+      {ask.isPending && (
         <p className="m-0 text-sm text-muted" role="status">
           AI 回覆中…
         </p>
       )}
-      {error && (
-        <p className="m-0 text-sm text-bad" role="alert">
+      {error && !busy && (
+        <p className={cx('m-0 text-sm', cancelled ? 'text-muted' : 'text-bad')} role={cancelled ? 'status' : 'alert'}>
           {errorText(error)}
-          {explain.isError && !hasExplanation && (
+          {explain.isError && !hasExplanation && !cancelled && (
             <button type="button" className="ml-2 underline" onClick={() => explain.mutate(false)}>
               再試一次
             </button>
@@ -161,7 +202,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         </p>
       )}
 
-      {thread.data && thread.data.remaining_questions > 0 && (
+      {thread.data && (
         <form onSubmit={submit} className="flex gap-2">
           <label htmlFor={`ask-${questionId}`} className="sr-only">
             追問 AI 助教
@@ -174,18 +215,31 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
             placeholder={hasExplanation ? '還有哪裡不懂？例如：為什麼 (B) 不對？' : '直接問，例如：為什麼 (B) 不對？'}
             className="h-10 min-w-0 flex-1 rounded-md border border-line bg-sheet px-3 text-sm text-ink outline-none focus:border-ink"
           />
-          <Button type="submit" size="sm" disabled={!draft.trim() || busy} aria-label="送出">
-            <Icon name="send" size={16} />
-          </Button>
+          {ask.isPending ? (
+            <StopButton onClick={stop} />
+          ) : (
+            <Button type="submit" size="sm" disabled={!draft.trim() || busy} aria-label="送出">
+              <Icon name="send" size={16} />
+            </Button>
+          )}
         </form>
       )}
 
       {status.data && (
         <p className="m-0 text-[11px] text-muted">
-          {thread.data && `還可以發問 ${thread.data.remaining_questions} 次・`}
-          本月 AI 用量 ${status.data.month_cost_usd.toFixed(2)}／${status.data.month_budget_usd.toFixed(0)}（{status.data.model}）
+          {thread.data && `這題已用 ${usd(thread.data.cost_usd)}・`}
+          本月已用 {usd(status.data.month_cost_usd)}（{status.data.month_calls} 次，{status.data.model}）
         </p>
       )}
     </section>
+  )
+}
+
+function StopButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="button" variant="danger" size="sm" onClick={onClick}>
+      <Icon name="stop" size={16} />
+      中斷
+    </Button>
   )
 }

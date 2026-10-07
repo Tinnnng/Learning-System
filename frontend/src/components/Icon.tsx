@@ -34,6 +34,7 @@ const PATHS = {
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
   send: 'M4 12 20 4l-6 16-2.5-6.5Z',
+  stop: 'M7.5 7.5h9v9h-9Z',
   refresh: 'M20 11a8 8 0 0 0-14.5-4.5M4 4.5V8h3.5M4 13a8 8 0 0 0 14.5 4.5M20 19.5V16h-3.5',
 } as const
 

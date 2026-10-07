@@ -16,15 +16,17 @@ export type WordStatus = 'new' | 'learning' | 'wrong' | 'mastered'
 export const fetchDaily = () => api.get<DailyQuiz>('/vocab/daily')
 export const fetchStats = () => api.get<VocabStats>('/vocab/stats')
 export const fetchWrongWords = () => api.get<WordOut[]>('/vocab/wrong')
-export const fetchQuiz = (source: 'wrong' | 'due' | 'new' | 'all', count = 10) =>
+export const fetchQuiz = (source: 'wrong' | 'due' | 'new' | 'all' | 'next', count = 10) =>
   api.get<QuizItem[]>(`/vocab/quiz?source=${source}&count=${count}`)
 
-export const answerWord = (item: QuizItem, response: string, context: QuizContext) =>
+/** clientId：這一次作答的 id，網路重試或連點重送時帶同一個，後端只記一次 */
+export const answerWord = (item: QuizItem, response: string, context: QuizContext, clientId: string) =>
   api.post<VocabAnswerResult>('/vocab/answers', {
     word_id: item.word_id,
     quiz_type: item.quiz_type,
     response,
     context,
+    client_id: clientId,
   })
 
 export const fetchWords = (params: { search?: string; status?: WordStatus | null; offset?: number; limit?: number }) => {

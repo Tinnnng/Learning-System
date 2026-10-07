@@ -11,9 +11,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
+from threading import Event
 
-from app.modules.ai.providers.base import Completion, ImageInput, ProviderError
+from app.modules.ai.providers.base import Completion, ImageInput, ProviderCancelled, ProviderError
 
 
 class ClaudeCodeProvider:
@@ -93,25 +95,43 @@ class ClaudeCodeProvider:
             raw={"session_id": result.get("session_id"), "duration_ms": result.get("duration_ms")},
         )
 
-    def complete(self, system: str, prompt: str, images: list[ImageInput] | None = None) -> Completion:
-        try:
-            # 在空的暫存資料夾執行，避免讀到任何專案的 CLAUDE.md
-            with tempfile.TemporaryDirectory(prefix="ls-ai-") as workdir:
-                process = subprocess.run(
-                    self.command(system),
-                    input=self.message(prompt, images),
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=self.timeout,
-                    cwd=workdir,
-                    # 關掉延伸思考：實測擷取行事曆時思考會吃掉 1.5 萬 token、拖到 2 分鐘以上
-                    env={**os.environ, "MAX_THINKING_TOKENS": "0"},
-                )
-        except subprocess.TimeoutExpired as error:
-            raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。") from error
-        if process.returncode != 0 and "\"type\":\"result\"" not in process.stdout.replace(" ", ""):
-            detail = (process.stderr or process.stdout).strip().splitlines()[-1:] or ["未知錯誤"]
+    def complete(
+        self, system: str, prompt: str, images: list[ImageInput] | None = None, cancel: Event | None = None
+    ) -> Completion:
+        # 在空的暫存資料夾執行，避免讀到任何專案的 CLAUDE.md
+        with tempfile.TemporaryDirectory(prefix="ls-ai-") as workdir:
+            process = subprocess.Popen(
+                self.command(system),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                cwd=workdir,
+                # 關掉延伸思考：實測擷取行事曆時思考會吃掉 1.5 萬 token、拖到 2 分鐘以上
+                env={**os.environ, "MAX_THINKING_TOKENS": "0"},
+            )
+            stdout, stderr = self._wait(process, self.message(prompt, images), cancel)
+        if process.returncode != 0 and "\"type\":\"result\"" not in stdout.replace(" ", ""):
+            detail = (stderr or stdout).strip().splitlines()[-1:] or ["未知錯誤"]
             hint = "（如果是登入問題，請在終端機執行 claude 重新登入）" if "login" in detail[0].lower() or "auth" in detail[0].lower() else ""
             raise ProviderError(f"Claude Code 執行失敗：{detail[0]}{hint}")
-        return self.parse(process.stdout, self.model)
+        return self.parse(stdout, self.model)
+
+    def _wait(self, process: subprocess.Popen, message: str, cancel: Event | None) -> tuple[str, str]:
+        """等程序結束；每 0.3 秒檢查一次有沒有被中斷或逾時，是的話直接終止程序（不再花用量）。"""
+        deadline = time.monotonic() + self.timeout
+        pending_input: str | None = message
+        while True:
+            try:
+                return process.communicate(input=pending_input, timeout=0.3)
+            except subprocess.TimeoutExpired:
+                pending_input = None  # 輸入在第一次 communicate 已經送出，重試時不能再給
+            if cancel is not None and cancel.is_set():
+                process.kill()
+                process.communicate()
+                raise ProviderCancelled("已中斷，這次沒有產生內容。")
+            if time.monotonic() > deadline:
+                process.kill()
+                process.communicate()
+                raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。")

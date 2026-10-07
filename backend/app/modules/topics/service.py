@@ -8,6 +8,7 @@ AI 依科目標記：先讀這科所有題目的摘要整理出知識點清單�
 import json
 import math
 import re
+import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -15,6 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.text import match_key, strip_edge_punct
 from app.modules.ai import service as ai_service
 from app.modules.bank import service as bank_service
 from app.modules.bank.schemas import QuestionFilter, QuestionOut
@@ -74,6 +76,16 @@ def _complete(db: Session, feature: str, system: str, prompt: str) -> str:
         raise TopicsError(str(error), 503) from error
 
 
+def _topic_key(name: str) -> str:
+    """知識點名稱的比對鍵：不分全形半形、大小寫、空白與前後標點（TCP/IP＝ＴＣＰ／ＩＰ、作業系統＝作業系統。）。"""
+    return match_key(name, strip_punct=True, keep_spaces=False)
+
+
+def _topic_name(text: str) -> str:
+    """AI 給的知識點名稱整理成顯示用：全形英數轉半形、去掉前後標點。"""
+    return strip_edge_punct(_clean(unicodedata.normalize("NFKC", text), 30))
+
+
 def _clean(text: str, limit: int) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text if len(text) <= limit else text[:limit] + "…"
@@ -109,9 +121,11 @@ def _build_taxonomy(db: Session, subject: str, questions: list[QuestionOut], exi
     ]
     lines += [f"- {_summary(question)}" for question in _sample(questions, TAXONOMY_SAMPLE)]
     payload = _parse_json(_complete(db, "topics_taxonomy", TAXONOMY_SYSTEM, "\n".join(lines)))
-    topics = []
+    topics: list[str] = []
+    keys = {_topic_key(OTHER)}
     for topic in payload.get("topics") or []:
-        if isinstance(topic, str) and (name := _clean(topic, 30)) and name not in topics and name != OTHER:
+        if isinstance(topic, str) and (name := _topic_name(topic)) and (key := _topic_key(name)) not in keys:
+            keys.add(key)
             topics.append(name)
     if not topics:
         raise TopicsError("AI 沒有整理出知識點，請再試一次", 502)
@@ -128,16 +142,16 @@ def _classify(db: Session, subject: str, topics: list[str], batch: list[Question
             lines.append(f"選項：{' ／ '.join(_clean(option, 40) for option in question.options)}")
     payload = _parse_json(_complete(db, "topics_classify", CLASSIFY_SYSTEM, "\n".join(lines)))
     raw = payload.get("tags") if isinstance(payload.get("tags"), dict) else {}
-    # 題號有時會寫成 "[1]"、"1." 之類；知識點名稱比對時忽略空白
+    # 題號有時會寫成 "[1]"、"1." 之類；知識點名稱比對時忽略空白、全形半形與前後標點
     by_index = {int(match[0]): names for key, names in raw.items() if (match := re.search(r"\d+", str(key)))}
-    allowed = {re.sub(r"\s+", "", topic): topic for topic in topics}
+    allowed = {_topic_key(topic): topic for topic in topics}
 
     result = {}
     for index, question in enumerate(batch, start=1):
         names = by_index.get(index) or []
         if isinstance(names, str):
             names = [names]
-        picked = [allowed[key] for name in names if isinstance(name, str) and (key := re.sub(r"\s+", "", name)) in allowed]
+        picked = [allowed[key] for name in names if isinstance(name, str) and (key := _topic_key(name)) in allowed]
         result[question.id] = list(dict.fromkeys(picked))[:2] or [OTHER]
     return result
 

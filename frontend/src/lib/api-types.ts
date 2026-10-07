@@ -492,7 +492,7 @@ export interface paths {
         };
         /**
          * Practice Quiz
-         * @description 自由練習。source=wrong 是錯題單字集中複習。
+         * @description 自由練習。source=wrong 是錯題單字集中複習；next 是每日單字寫完後「再測一組」（避開今天出現過的字）。
          */
         get: operations["practice_quiz_api_vocab_quiz_get"];
         put?: never;
@@ -643,6 +643,26 @@ export interface paths {
          * @description 請 AI 從考古題的英文題挑生字，回傳草稿（不會自動加入單字庫）。
          */
         post: operations["extract_from_questions_api_vocab_extract_from_questions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/requests/{request_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Request
+         * @description 中斷進行中的 AI 呼叫（終止 Claude Code 程序，不再花用量）。
+         */
+        post: operations["cancel_request_api_ai_requests__request_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1152,6 +1172,11 @@ export interface components {
         AskIn: {
             /** Content */
             content: string;
+            /**
+             * Request Id
+             * @description 同 ExplainIn.request_id
+             */
+            request_id?: string | null;
         };
         /** Asset */
         Asset: {
@@ -1393,6 +1418,11 @@ export interface components {
              * @description 使用者選的答案（原始選項字母），讓 AI 針對錯誤說明
              */
             my_answer?: string[] | null;
+            /**
+             * Request Id
+             * @description 前端產生的 id，按「中斷」時用 POST /api/ai/requests/{id}/cancel
+             */
+            request_id?: string | null;
         };
         /** ExtractRequest */
         ExtractRequest: {
@@ -1411,9 +1441,47 @@ export interface components {
         /** ExtractResult */
         ExtractResult: {
             /** Drafts */
-            drafts: components["schemas"]["EventIn"][];
+            drafts: components["schemas"]["ExtractedEvent"][];
+            /**
+             * Groups
+             * @default []
+             */
+            groups: string[];
             /** Warnings */
             warnings: string[];
+        };
+        /** ExtractedEvent */
+        ExtractedEvent: {
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @default exam
+             * @enum {string}
+             */
+            kind: "exam" | "deadline" | "other";
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Time */
+            time?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Group */
+            group: string;
+            /**
+             * Exists
+             * @default false
+             */
+            exists: boolean;
         };
         /** ExtractedWords */
         ExtractedWords: {
@@ -2450,8 +2518,8 @@ export interface components {
             question_id: number;
             /** Messages */
             messages: components["schemas"]["MessageOut"][];
-            /** Remaining Questions */
-            remaining_questions: number;
+            /** Cost Usd */
+            cost_usd: number;
         };
         /** UpsertResult */
         UpsertResult: {
@@ -2468,6 +2536,11 @@ export interface components {
              * @description 資料庫有、但這次匯入沒有的題號（保留不刪除）
              */
             questions_not_in_import: number[];
+            /**
+             * Questions Moved
+             * @description 手動新增的題目被匯入檔的同題號佔用，挪到的新題號（內容保留）
+             */
+            questions_moved?: number[];
         };
         /** ValidationError */
         ValidationError: {
@@ -2639,6 +2712,11 @@ export interface components {
              * @enum {string}
              */
             context: "daily" | "wrong" | "practice";
+            /**
+             * Client Id
+             * @description 同一次作答重送時帶相同的 id，只會記錄一次
+             */
+            client_id?: string | null;
         };
     };
     responses: never;
@@ -3562,7 +3640,7 @@ export interface operations {
     practice_quiz_api_vocab_quiz_get: {
         parameters: {
             query?: {
-                source?: "wrong" | "due" | "new" | "all";
+                source?: "wrong" | "due" | "new" | "all" | "next";
                 count?: number;
             };
             header?: never;
@@ -3836,6 +3914,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtractedWords"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_request_api_ai_requests__request_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
                 };
             };
             /** @description Validation Error */

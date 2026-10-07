@@ -8,7 +8,8 @@
    ```bash
    uv run python -m app.modules.ingest.cli extract ../data/inbox/lecture/第3章.pptx --out ../data/drafts/lecture/第3章.md
    ```
-   有 `[圖片]` 標記的投影片，若圖片內容重要，用 PyMuPDF 或請使用者提供截圖確認。舊版 `.ppt`／`.doc` 請使用者先另存成新格式。
+   - 舊版 `.ppt`／`.doc` 會自動用本機的 PowerPoint／Word 另存成 `.pptx`／`.docx`（放在輸出檔旁邊），需要 Windows 並安裝 Office。
+   - 投影片裡的圖片會存到 `<輸出檔名>-images/slide-NN-M.<副檔名>`，Markdown 裡標成 `[圖片：路徑]`。很多教材是**整頁掃描成圖片**（抽出的文字很少），這時要用 Read 逐張看圖出題。
 2. **詢問使用者**（沒說的話）：出幾題、難度、要涵蓋哪些章節。預設每份教材 10–20 題，均勻涵蓋各主題。
 3. **出題**，寫成匯入檔 `data/converted/lecture-<英文代碼>.json`（格式即 `ImportBundle`，見下方範例）。
 4. **檢查並匯入**：

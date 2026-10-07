@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from threading import Event
 from typing import Protocol
 
 
@@ -23,7 +24,15 @@ class ProviderError(Exception):
     """模型呼叫失敗（未安裝、未登入、逾時、回傳錯誤）。訊息會顯示給使用者，要寫清楚怎麼解決。"""
 
 
+class ProviderCancelled(ProviderError):
+    """使用者按了中斷，模型呼叫被終止。"""
+
+
 class LLMProvider(Protocol):
     name: str
 
-    def complete(self, system: str, prompt: str, images: list[ImageInput] | None = None) -> Completion: ...
+    def complete(
+        self, system: str, prompt: str, images: list[ImageInput] | None = None, cancel: Event | None = None
+    ) -> Completion:
+        """cancel 被設定時要盡快停止呼叫並丟出 ProviderCancelled。"""
+        ...

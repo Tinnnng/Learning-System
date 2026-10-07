@@ -11,12 +11,13 @@
 | AI 省 token | 呼叫時一律用精簡參數：自訂 `--system-prompt`、`--tools ""`、`--strict-mcp-config`、`--setting-sources ""`、`--no-session-persistence`、`--effort low`（一次約 400 token，不加會變 2.6 萬）。AI 詳解存資料庫重複使用；每月用量上限可設定 |
 | 行事曆 | 手動輸入＋拍照由 AI 辨識（使用者確認後才加入）＋首頁考試倒數＋匯出 .ics |
 | 題型範圍 | 選擇題（單選、複選/多答案給分）＋**申論題**（2026-10-07 使用者決定加入）。申論題：出題時由使用者選擇要不要包含（預設不含）；**參考答案與得分要點由 Claude Code 匯入時離線撰寫**；系統內打字作答，對照參考答案勾選得分要點自評，可按按鈕請 AI 建議（使用者確認才算分） |
+| 題庫分類 | 2026-10-07 使用者決定：題庫只用「考試類型」「年度」篩選；同年度＋考試＋類科合成一組顯示成「115普考－一般行政」，點進去才看各科（沒有類科的期中考用科目當組名） |
 | 錯題掌握 | 同一題**連續答對 5 次**才移出錯題本（中間答錯一次就歸零重算）。申論題：得分低於配分 60% 進錯題本，**連續 2 次 80% 以上**才移出。次數與比例放在設定檔，不寫死 |
 | 期中考題目來源 | ① 上課教材（PPT／PDF／DOCX）→ Claude Code 離線**分析教材並出題**；② 現成題目文字檔 → 直接匯入 |
 | 前端 | React + TypeScript + Vite + Tailwind CSS |
 | 後端 | Python + FastAPI + SQLAlchemy + SQLite（單一 `.db` 檔） |
 | PDF 處理 | PyMuPDF（裁切圖片、產生頁面截圖） |
-| 視覺方向 | **B 螢光筆與原子筆**（2026-10-07 使用者改選，原本的 A 答案卡已停用）：白紙＋藍色原子筆＋黃色螢光筆；選取＝螢光筆從左刷到右，答對綠色、答錯粉紅；標題與批註用霞鶩文楷（`font-hand`），題目內文用 Noto Sans TC；品牌名「劃重點」；錯題掌握進度仍用「正」字筆畫。提案頁：https://claude.ai/artifact/Svn3CjyBqNR9zpoaNdPLBG |
+| 視覺方向 | **B 螢光筆與原子筆**（2026-10-07 使用者改選，原本的 A 答案卡已停用）：白紙＋藍色原子筆＋黃色螢光筆；選取＝螢光筆從左刷到右，答對綠色、答錯粉紅；標題與批註用霞鶩文楷（`font-hand`），題目內文用 Noto Sans TC；品牌名「劃重點」；錯題掌握進度仍用「正」字筆畫。提案頁：https://claude.ai/artifact/Svn3CjyBqNR9zpoaNdPLBG 。**2026-10-07 使用者決定：螢光筆與手寫字只留在作答相關頁面**（作答、交卷結果、單字測驗、錯題匯出），其他頁面用方向 A「白紙」：標題 `font-display`（Noto Sans 粗體）、小標 `.eyebrow`（作答頁用 `.eyebrow-hand`），動效統一是原子筆的線（頁首手繪底線、導覽滑動底線、列表滑過的 `.pen-underline`、完成事項 `.pen-strike`、換頁 `.route-enter`、列表 `.stagger`、數字 `CountUp`）。提案頁：https://claude.ai/artifact/KuNSf4QBEHQ9npgiF5b2Qi |
 | Git | 獨立存放庫 https://github.com/Tinnnng/Learning-System （private），不要和其他專案混在一起 |
 
 ## 工作流程規則
@@ -32,7 +33,7 @@
 - **後端模組註冊**：`app/modules/registry.py` 列出啟用的模組；`main.py` 依清單自動掛載 router，不手動逐一 import。新增功能只要建資料夾並在清單加一行。
 - **前端功能註冊**：每個 `features/<name>/` 匯出自己的路由與導覽項目，`app/registry.ts` 統一收集。新增頁面不需要改動其他功能的程式碼。
 - 模組之間只透過對方 `service.py` 公開的函式互相呼叫，**不可直接查詢其他模組的資料表**，也不可互相 import 內部檔案。
-- 共用的東西（資料庫連線、設定、工具函式）放 `core/`，`core/` 不可以 import 任何模組。
+- 共用的東西（資料庫連線、設定、工具函式）放 `core/`，`core/` 不可以 import 任何模組。判斷「是不是同一筆」的文字比對一律用 `core/text.py` 的 `match_key`（全形半形、大小寫、空白、零寬字元、前後句讀），不要各模組自己寫。
 - **題目來源用轉接器（adapter）設計**：`ingest/adapters/` 下每種匯入檔格式一個轉接器，全部輸出同一種 `ImportBundle`。之後要支援新格式，只要加一個轉接器並登記到 `ADAPTERS`。
 - 可調參數（錯題掌握次數、每日單字數等）集中在設定，不寫死在程式中。
 
@@ -121,7 +122,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 
 品質目標：**Awwwards / Webby Awards / FWA 獲獎網站等級**，不是一般後台模板。
 
-- 螢光筆效果統一用 `.marker` class（`--marker-color`、`--marker-scale` 控制顏色與長度），螢光色只當底色，文字一律用 `--ink`。
+- 螢光筆只用在作答相關頁面：單行用 `.marker`，會換行的文字（選項）用 `.marker-text`（`--marker-color`、`--marker-scale` 控制顏色與長度），螢光色只當底色，文字一律用 `--ink`。其他頁面不要用螢光筆與 `font-hand`。
 - 先在 `frontend/src/styles/` 定義 design tokens（色彩、字級比例、間距、圓角、陰影、動效時間與曲線），所有元件只用 token，不寫死數值。
 - 日間／夜間模式：兩套都要獨立調色，夜間不是單純反轉顏色；預設跟隨系統，可手動切換並記住。
 - 動效要有意義（引導注意力、回饋操作結果），並遵守 `prefers-reduced-motion`。
@@ -151,6 +152,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 | `cd frontend && npm run build` / `npm run lint` | 型別檢查＋建置 / oxlint |
 | `npm run gen:api` | 後端 API 改了之後，重新產生前端型別 `frontend/src/lib/api-types.ts`（不要手改） |
 | `cd frontend && MSYS_NO_PATHCONV=1 node scripts/screenshots.mjs <輸出資料夾> / /bank ...` | 設計自檢截圖（桌機／手機 × 日／夜），需先 npm run dev |
+| `LS_API_PORT=8010 LS_WEB_PORT=5180 npx vite`（在 frontend/） | 使用者自己的 dev 伺服器佔著 8000／5173 時，另開一組（後端用 `--port 8010` 並以 `LS_DATA_DIR` 指向資料副本），截圖腳本用 `BASE_URL=http://localhost:5180` |
 
 - 後端 API 文件：http://127.0.0.1:8000/docs
 - 前端一律用 `@/lib/api` 以 `/api/...` 相對路徑呼叫後端，開發時由 Vite proxy 轉送。

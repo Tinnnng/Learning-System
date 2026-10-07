@@ -51,10 +51,10 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
         <span>{days[0].slice(5).replace('-', '/')}</span>
         <span className="flex gap-4">
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-[var(--radius-marker)] bg-ok-hl" /> 答對
+            <span className="h-2.5 w-2.5 rounded-full bg-ok-hl" /> 答對
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-[var(--radius-marker)] bg-bad-hl" /> 答錯
+            <span className="h-2.5 w-2.5 rounded-full bg-bad-hl" /> 答錯
           </span>
         </span>
         <span>今天</span>
@@ -68,7 +68,7 @@ function AccuracyList({ title, stats }: { title: string; stats: Overview['by_sub
   return (
     <section className="flex flex-col gap-3" aria-label={title}>
       <h2 className="eyebrow m-0">{title}</h2>
-      <ul className="m-0 flex list-none flex-col gap-4 p-0">
+      <ul className="stagger m-0 flex list-none flex-col gap-4 p-0">
         {stats.map((stat) => {
           const weak = stat.accuracy < 0.6
           return (

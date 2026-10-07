@@ -1,0 +1,32 @@
+"""比對「是不是同一筆」用的文字正規化。只用來產生比對鍵，不改使用者看到的原文。"""
+
+import re
+import unicodedata
+
+# 零寬字元與 BOM：從網頁、Excel 複製時常夾帶，肉眼看不到
+_INVISIBLE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+# 前後的句讀、引號與括號（中間的標點保留，例如 e-mail、TCP/IP）。
+# 不去掉 + # 這類符號：C++、C# 和 C 是不同的東西。
+_EDGE_CHARS = "\"'“”‘’「」『』《》〈〉()（）[]【】.,;:!?。，、；：！？…·"
+_EDGE_PUNCT = re.compile(f"^[{re.escape(_EDGE_CHARS)}]+|[{re.escape(_EDGE_CHARS)}]+$")
+
+
+def strip_edge_punct(text: str) -> str:
+    """去掉前後的句讀、引號與括號，給顯示用的名稱整理（例如 AI 回傳的「作業系統。」）。"""
+    return _EDGE_PUNCT.sub("", text.strip()).strip() or text.strip()
+
+
+def match_key(text: str, *, strip_punct: bool = False, keep_spaces: bool = True) -> str:
+    """產生比對鍵：全形轉半形（NFKC）、不分大小寫、去掉零寬字元、空白合併成一個。
+
+    strip_punct：去掉前後的標點與引號（「invoice.」「“invoice”」都算 invoice）。
+    keep_spaces=False：空白完全不算（「比例 原則」和「比例原則」算同一個）。
+    """
+    key = unicodedata.normalize("NFKC", text)
+    key = _INVISIBLE.sub("", key).casefold()
+    key = " ".join(key.split())
+    if strip_punct:
+        key = _EDGE_PUNCT.sub("", key).strip()
+    if not keep_spaces:
+        key = key.replace(" ", "")
+    return key

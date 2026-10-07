@@ -245,7 +245,7 @@ export function WrongBookPage() {
           <p className="m-0 border-b border-accent py-3 text-sm text-muted">
             共 <span className="tabular text-ink">{entries.length}</span> 題，點題目展開正確答案與作答紀錄
           </p>
-          <ul className="m-0 list-none p-0">
+          <ul className="stagger m-0 list-none p-0">
             {entries.map((entry) => (
               <WrongRow key={entry.question.id} entry={entry} now={now} />
             ))}

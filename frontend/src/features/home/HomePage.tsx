@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button, ButtonLink } from '@/components/Button'
+import { CountUp } from '@/components/CountUp'
 import { Icon } from '@/components/Icon'
 import { PageHeader } from '@/components/PageHeader'
 import { ErrorState, Loading } from '@/components/States'
 import { cx } from '@/lib/cx'
-import { formatDateTime, percent, score, shortName, todayLabel } from '@/lib/format'
+import { formatDateTime, score, shortName, todayLabel } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { SessionSummary } from '@/lib/types'
 import { fetchCountdown, fetchOverview, fetchPapers, fetchSessions, fetchVocabStats } from './api'
@@ -19,8 +20,9 @@ function Bubbles({ total, done, label }: { total: number; done: number; label: s
         <span
           key={index}
           className={cx(
-            'h-2.5 w-6 rounded-[var(--radius-marker)] transition-colors duration-[var(--dur)]',
-            index < done ? 'bg-hl' : 'bg-line',
+            // 原子筆的短線：完成幾個就描深幾段
+            'h-[3px] w-6 rounded-full transition-colors duration-[var(--dur-slow)]',
+            index < done ? 'bg-accent' : 'bg-line',
           )}
         />
       ))}
@@ -37,21 +39,19 @@ interface TaskRowProps {
   done?: boolean
 }
 
-/** 今天的任務：左邊是手寫的編號，完成的項目整個標題被螢光筆劃過 */
+/** 今天的任務：左邊是編號，完成的項目被原子筆一筆劃掉（像在清單上劃掉做完的事） */
 function TaskRow({ index, title, detail, status, action, done }: TaskRowProps) {
   return (
     <li className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[auto_1fr_auto] sm:items-center">
       <span
-        className={cx('grid w-8 place-items-center font-hand text-2xl leading-none', done ? 'text-ok' : 'text-accent')}
+        className={cx('grid w-8 place-items-center font-display text-2xl leading-none', done ? 'text-ok' : 'text-accent')}
         aria-hidden="true"
       >
         {done ? <Icon name="check" size={22} /> : index}
       </span>
       <div className="flex min-w-0 flex-col gap-1.5">
         <h3 className="m-0 text-base font-medium">
-          <span className={cx('marker [--marker-color:var(--ok-hl)]', done ? '[--marker-scale:1]' : '[--marker-scale:0]')}>
-            {title}
-          </span>
+          <span className={cx('pen-strike', done ? '[--strike:1] text-ink-soft' : '[--strike:0]')}>{title}</span>
         </h3>
         <div className="text-sm text-muted">{detail}</div>
         {status}
@@ -118,7 +118,7 @@ export function HomePage() {
           nextExam ? (
             <Link to="/calendar" className="group flex items-baseline gap-2 rounded-md px-3 py-1 transition-colors hover:bg-accent-faint">
               <span className="text-sm text-muted">距離{nextExam.title}</span>
-              <span className="font-hand text-3xl font-bold leading-none text-accent tabular-nums">{nextExam.days_until}</span>
+              <CountUp value={nextExam.days_until} className="font-display text-3xl font-bold leading-none text-accent tabular-nums" />
               <span className="text-sm text-accent">天</span>
             </Link>
           ) : (
@@ -136,7 +136,7 @@ export function HomePage() {
           <h2 id="tasks-title" className="sr-only">
             今日任務
           </h2>
-          <ol className="m-0 list-none p-0">
+          <ol className="stagger m-0 list-none p-0">
             <TaskRow
               index={1}
               title="每日單字"
@@ -227,17 +227,22 @@ export function HomePage() {
               到目前為止
             </h2>
             <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-5">
-              {[
-                ['作答正確率', stats.attempts ? percent(stats.accuracy) : '—'],
-                ['寫過的題目', `${stats.answered_questions}`],
-                ['錯題本', `${stats.wrong_book}`],
-                ['已掌握', `${stats.mastered}`],
-                ['學過的單字', `${words.studied}`],
-                ['錯題單字', `${words.wrong_list}`],
-              ].map(([label, value]) => (
+              {(
+                [
+                  ['作答正確率', stats.attempts ? Math.round(stats.accuracy * 100) : null, '%'],
+                  ['寫過的題目', stats.answered_questions, ''],
+                  ['錯題本', stats.wrong_book, ''],
+                  ['已掌握', stats.mastered, ''],
+                  ['學過的單字', words.studied, ''],
+                  ['錯題單字', words.wrong_list, ''],
+                ] as const
+              ).map(([label, value, unit]) => (
                 <div key={label} className="flex flex-col gap-0.5 border-l-2 border-rule pl-3">
                   <dt className="text-xs text-muted">{label}</dt>
-                  <dd className="tabular m-0 text-xl text-ink">{value}</dd>
+                  <dd className="tabular m-0 text-xl text-ink">
+                    {value === null ? '—' : <CountUp value={value} />}
+                    {value !== null && unit}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -251,7 +256,7 @@ export function HomePage() {
               最近交卷
             </h2>
             {recent.data && recent.data.length > 0 ? (
-              <ul className="-mx-3 m-0 list-none p-0">
+              <ul className="stagger -mx-3 m-0 list-none p-0">
                 {recent.data.map((session) => (
                   <SessionRow key={session.id} session={session} />
                 ))}

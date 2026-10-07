@@ -74,10 +74,10 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
             <ol className="m-0 flex list-none flex-col gap-2 p-0">
               {options.map((option, index) => (
                 <li key={index} className="flex gap-3">
-                  <span className={cx('font-hand text-lg', answer.includes(LETTERS[index]) ? 'text-ok' : 'text-accent')}>
+                  <span className={cx('font-display text-lg', answer.includes(LETTERS[index]) ? 'text-ok' : 'text-accent')}>
                     {LETTERS[index]}
                   </span>
-                  <span className={cx('marker', answer.includes(LETTERS[index]) ? '[--marker-color:var(--ok-hl)]' : '[--marker-scale:0]')}>
+                  <span className={cx(answer.includes(LETTERS[index]) && 'font-medium text-ok')}>
                     <RichText inline>{option || '（空白）'}</RichText>
                   </span>
                 </li>
@@ -193,8 +193,8 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
                     aria-label={`把 ${letter} 設為正確答案`}
                     onClick={() => toggleAnswer(letter)}
                     className={cx(
-                      'grid h-10 w-10 flex-none place-items-center rounded-md border font-hand text-lg transition-colors',
-                      correct ? 'border-ok bg-ok-hl text-ink' : 'border-line text-accent hover:bg-sheet-tint',
+                      'grid h-10 w-10 flex-none place-items-center rounded-md border font-display text-lg transition-colors',
+                      correct ? 'border-ok bg-ok-soft text-ok' : 'border-line text-accent hover:bg-sheet-tint',
                     )}
                   >
                     {letter}

@@ -102,10 +102,21 @@ def parse(data: bytes, timezone: str, today: date) -> tuple[str | None, list[Rem
     tz = ZoneInfo(timezone)
     name = calendar.get("X-WR-CALNAME")
     events: list[RemoteEvent] = []
+    seen: set[str] = set()
     for component in calendar.walk("VEVENT"):
         start = component.get("DTSTART")
         if start is None or not component.get("UID"):
             continue
+        # 同一個 UID 可能出現好幾次：重複事件的「例外場次」會帶 RECURRENCE-ID，用它區分成不同場；
+        # 完全重複的 UID（資料來源的錯誤）只取第一筆，否則同步時會撞到唯一限制而整個訂閱壞掉
+        uid = str(component.get("UID"))
+        recurrence = component.get("RECURRENCE-ID")
+        if recurrence is not None:
+            uid = f"{uid}#{recurrence.to_ical().decode()}"
+        uid = uid[:300]
+        if uid in seen:
+            continue
+        seen.add(uid)
         start_date, start_time = _to_local(start.dt, tz)
         end_date = None
         end = component.get("DTEND")
@@ -120,7 +131,7 @@ def parse(data: bytes, timezone: str, today: date) -> tuple[str | None, list[Rem
         description = str(component.get("DESCRIPTION") or "").strip() or None
         events.append(
             RemoteEvent(
-                uid=str(component.get("UID")),
+                uid=uid,
                 title=title[:200],
                 kind=classify(title),
                 date=start_date,

@@ -7,13 +7,14 @@
   answers <pdf>                       解析答案 PDF
   build  <資料夾> <source_key|--all>  草稿 + 答案 + 截圖 → data/converted/<source_key>.json
 期中考：
-  extract <教材檔> [--out 檔案]       抽出 PPTX/DOCX/PDF 文字並標示投影片/頁碼（教材出題用）
+  extract <教材檔> [--out 檔案]       抽出 PPTX/DOCX/PDF（舊版 PPT/DOC 自動轉檔）文字並標示投影片/頁碼，投影片圖片存到 <檔名>-images/
 通用：
   check  <檔案...>                    檢查匯入檔
   import <檔案...> | --all            檢查後匯入題庫（有 error 的不會匯入）
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -95,7 +96,13 @@ def cmd_draft(args: argparse.Namespace) -> int:
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
-    text = lecture.extract_markdown(Path(args.file))
+    # 舊版 .ppt/.doc 轉出的新格式放在輸出檔旁邊（drafts/），不放回 inbox
+    convert_dir = Path(args.out).parent if args.out else None
+    # 投影片圖片存在輸出檔旁的 <檔名>-images/，Markdown 會寫出圖片路徑，方便看圖出題
+    image_dir = Path(args.out).with_name(Path(args.out).stem + "-images") if args.out else None
+    if image_dir is not None and image_dir.exists():
+        shutil.rmtree(image_dir)
+    text = lecture.extract_markdown(Path(args.file), convert_dir, image_dir)
     if args.out:
         output = Path(args.out)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--force", action="store_true", help="覆蓋已存在的草稿")
     p.set_defaults(func=cmd_draft)
 
-    p = commands.add_parser("extract", help="抽出教材（PPTX/DOCX/PDF）文字，標示投影片或頁碼")
+    p = commands.add_parser("extract", help="抽出教材（PPTX/DOCX/PDF，舊版 PPT/DOC 自動用 Office 轉檔）文字，標示投影片或頁碼")
     p.add_argument("file")
     p.add_argument("--out", help="輸出成 Markdown 檔，不指定就印在畫面上")
     p.set_defaults(func=cmd_extract)

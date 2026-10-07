@@ -57,6 +57,28 @@ def test_upsert_updates_existing_term_case_insensitive(db, words):
     assert page.items[0].meaning == "發票；帳單"
 
 
+@pytest.mark.parametrize("variant", ["ｉｎｖｏｉｃｅ", "invoice.", "“invoice”", "invoice\u200b", "\ufeffINVOICE"])
+def test_upsert_ignores_fullwidth_punctuation_and_invisible_chars(db, words, variant):
+    result = service.upsert_words(db, [WordIn(term=variant, meaning="發票")], source="x")
+    assert (result.created, result.updated) == (0, 1)
+    assert service.list_words(db, limit=100).total == len(WORDS)
+
+
+def test_resubmitted_answer_is_recorded_once(db, words):
+    """同一次作答重送（同一個 client_id）只記一次，不能連送幾次就把錯題的連續答對刷滿。"""
+    from app.modules.vocab.models import WordAttempt
+
+    word = words["invoice"]
+    service.answer(db, AnswerIn(word_id=word.id, quiz_type="spelling", response="x", context="wrong"), now=NOW)
+    data = AnswerIn(word_id=word.id, quiz_type="spelling", response="invoice", context="wrong", client_id="try-1")
+    results = [service.answer(db, data, now=NOW) for _ in range(5)]
+    assert all(result.is_correct for result in results)
+    assert db.query(WordAttempt).filter_by(word_id=word.id).count() == 2
+    assert results[-1].word.progress.correct_streak == 1 and results[-1].word.status == "wrong"
+    with pytest.raises(service.VocabError, match="重複"):
+        service.answer(db, data.model_copy(update={"word_id": words["deadline"].id}), now=NOW)
+
+
 def test_quiz_items(words):
     from app.modules.vocab.models import Word
 
@@ -99,6 +121,20 @@ def test_daily_answer_records_and_blocks_repeat(db, words):
     assert daily.done == 1 and daily.items[0].answered and daily.items[0].is_correct is False
     with pytest.raises(service.VocabError, match="已經作答過"):
         service.answer(db, AnswerIn(word_id=word.id, quiz_type=item.quiz_type, response=word.meaning, context="daily"), now=NOW)
+
+
+def test_next_round_skips_words_seen_today(db, words):
+    daily_ids = {item.word_id for item in service.get_daily(db, now=NOW).items}
+    first = service.build_quiz(db, "next", count=5, seed=1, now=NOW)
+    assert len(first) == 2 and not daily_ids & {item.word_id for item in first}  # 7 個字扣掉今天的 5 個
+
+    item = first[0]
+    service.answer(db, AnswerIn(word_id=item.word_id, quiz_type=item.quiz_type, response="x"), now=NOW)
+    second = service.build_quiz(db, "next", count=5, seed=2, now=NOW)
+    assert [i.word_id for i in second] == [first[1].word_id]  # 再測一組時避開剛剛寫過的字
+
+    tomorrow = service.build_quiz(db, "next", count=5, seed=3, now=NOW + timedelta(days=1))
+    assert tomorrow[0].word_id == item.word_id  # 隔天：昨天答錯、到期的字排第一
 
 
 def test_due_words_are_picked_first_the_next_day(db, words):

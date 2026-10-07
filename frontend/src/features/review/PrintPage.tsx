@@ -73,7 +73,7 @@ export function PrintPage() {
       </p>
 
       <header className="flex flex-col gap-1 border-b border-line pb-4">
-        <span className="eyebrow">{todayLabel()}</span>
+        <span className="eyebrow-hand">{todayLabel()}</span>
         <h1 className="m-0 font-hand text-[30px] font-bold">{title}</h1>
         <p className="m-0 text-sm text-muted">
           共 {entries.length} 題。前半部是題目，可以先寫一遍；解答與詳解在後半部。
@@ -85,7 +85,7 @@ export function PrintPage() {
       ) : (
         <>
           <section aria-label="題目" className="flex flex-col">
-            <h2 className="eyebrow m-0 mb-2">題目</h2>
+            <h2 className="eyebrow-hand m-0 mb-2">題目</h2>
             <ol className="m-0 list-none p-0">
               {entries.map(({ question }, index) => (
                 <li key={question.id} className="print-avoid-break flex flex-col gap-3 border-b border-rule py-5 last:border-b-0">
@@ -114,7 +114,7 @@ export function PrintPage() {
 
           <section aria-label="解答" className="print-page-break flex flex-col gap-6">
             <div className="flex flex-col gap-3">
-              <h2 className="eyebrow m-0">答案一覽</h2>
+              <h2 className="eyebrow-hand m-0">答案一覽</h2>
               <ol className="m-0 grid list-none grid-cols-5 gap-x-4 gap-y-2 p-0">
                 {entries.map(({ question }, index) => (
                   <li key={question.id} className="flex items-baseline gap-2 border-b border-rule pb-1">
@@ -127,7 +127,7 @@ export function PrintPage() {
 
             {entries.some(({ question }) => explanationFor(question.id, question.explanation) || noteFor.get(question.id)) && (
               <div className="flex flex-col">
-                <h2 className="eyebrow m-0 mb-2">詳解與筆記</h2>
+                <h2 className="eyebrow-hand m-0 mb-2">詳解與筆記</h2>
                 <ol className="m-0 list-none p-0">
                   {entries.map(({ question, progress }, index) => {
                     const note = noteFor.get(question.id)

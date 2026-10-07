@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.text import match_key
 from app.modules.ai import service as ai_service
 from app.modules.calendar import subscriptions
 from app.modules.calendar.models import CalendarEvent, CalendarSubscription
@@ -18,6 +19,7 @@ from app.modules.calendar.schemas import (
     Countdown,
     EventIn,
     EventOut,
+    ExtractedEvent,
     ExtractResult,
     PresetCalendar,
     PresetList,
@@ -30,6 +32,7 @@ ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 PDF_TYPE = "application/pdf"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_PDF_PAGES = 4
+"""掃描檔（要轉圖片給 AI 看）最多幾頁；有文字層的 PDF 不受限，只受 MAX_TEXT_CHARS 限制。"""
 PDF_TARGET_LONG_SIDE = 2200
 """PDF 每頁轉成長邊約 2200 像素的圖片，小字也看得清楚。"""
 LOW_RESOLUTION_LONG_SIDE = 1000
@@ -52,9 +55,35 @@ events 每個元素：
 - 學校行事曆常把同一件事寫成「11/2-11/6 期中考試週」，請照寫的日期範圍輸出。
 - 一場考試若有多個科目分不同時間，每個科目一筆，title 寫「考試名稱－科目」。
 - 值為 null 的欄位直接省略，讓輸出越短越好。
+- 國家考試的考試期日計畫表：只輸出「考試日期」，不要把報名日期當成考試；title 寫完整考試名稱（例如「116年特種考試地方政府公務人員考試」）。
+- 同一列合辦的考試若備註寫明各自的日期（例如「7月2日至3日普通考試；7月4日至6日高考三級考試」），拆成多筆，title 分別寫。
+- 表格抽出的文字會換行錯位：日期後面接「-」（例如「116.12.04(六)-」）代表是區間的開始，結束日期在下面幾行單獨出現（例如「12.06(一)」），要合併成 date 與 end_date，不要只取其中一個。
+- 分好幾試的考試（第一試筆試、第二試口試、體能測驗），每一試一筆，title 後面加「（第二試口試）」這類說明。
 - 不要猜。如果圖片解析度太低、文字太小或模糊而讀不出日期，events 給 []，problem 寫一句原因（例如「圖片解析度太低，事項欄的文字讀不出來」）。"""
 
 EXAMS_ONLY_RULE = "\n只需要考試（kind 為 exam）：期中考、期末考、檢定考、國家考試等，其他行程一律不要輸出。"
+
+# 辨識結果的考試分類（依序比對，先符合的為準）。順序也是畫面上分組的順序。
+EXAM_GROUPS: list[tuple[str, re.Pattern[str]]] = [
+    ("地方特考", re.compile(r"地方政府|地方特考|離島地區")),
+    ("升等考試", re.compile(r"升官等|升資|升等")),
+    ("專技人員", re.compile(r"專門職業|專技|技術人員")),
+    ("初等考試", re.compile(r"初等考試|初考")),
+    ("其他特考", re.compile(r"特種考試|特考")),
+    ("高考", re.compile(r"高等考試|高考")),
+    ("普考", re.compile(r"普通考試|普考")),
+    ("學校考試", re.compile(r"期中|期末|小考|會考|段考|模擬考|學期")),
+]
+OTHER_GROUP = "其他"
+GROUP_ORDER = [name for name, _ in EXAM_GROUPS] + [OTHER_GROUP]
+
+
+def classify_exam(title: str) -> str:
+    """依考試名稱分類。專技高考、特考的「高等」要先被專技／特考吃掉，所以高考、普考排在後面。"""
+    for name, pattern in EXAM_GROUPS:
+        if pattern.search(title):
+            return name
+    return OTHER_GROUP
 
 
 class CalendarError(Exception):
@@ -103,7 +132,21 @@ def _apply(event: CalendarEvent, data: EventIn) -> None:
         setattr(event, field, value)
 
 
+def _event_key(title: str, start: date, end: date | None) -> tuple[str, date, date]:
+    """判斷「同一個行程」：名稱不分全形半形、大小寫、空白與前後標點，加上起訖日期。"""
+    return match_key(title, strip_punct=True, keep_spaces=False), start, end or start
+
+
+def _existing_keys(db: Session, dates: set[date]) -> dict[tuple[str, date, date], CalendarEvent]:
+    events = db.scalars(select(CalendarEvent).where(CalendarEvent.date.in_(dates))) if dates else []
+    return {_event_key(event.title, event.date, event.end_date): event for event in events}
+
+
 def create(db: Session, data: EventIn, source: str = "manual") -> EventOut:
+    """新增行程。同名、同日期的行程已經存在時直接回傳那一筆，不重複新增（例如同一份公告辨識兩次）。"""
+    same = _existing_keys(db, {data.date}).get(_event_key(data.title, data.date, data.end_date))
+    if same is not None:
+        return _out(same, today())
     event = CalendarEvent(source=source, created_at=datetime.now(UTC).replace(tzinfo=None))
     _apply(event, data)
     db.add(event)
@@ -143,6 +186,26 @@ def countdown(db: Session, limit: int = 5) -> Countdown:
     return Countdown(next_exam=next_exam, upcoming=upcoming[:limit])
 
 
+ROC_TITLE_YEAR = re.compile(r"(\d{2,3})\s*年")
+
+
+def _fix_roc_year(draft: EventIn) -> EventIn:
+    """AI 偶爾把民國年換算錯（116 年的考試寫成 2026 年）。名稱寫「116年」的考試不可能早於西元 2027 年，
+    早了就把年份補正（結束日期一起平移）。"""
+    match = ROC_TITLE_YEAR.search(draft.title)
+    if match is None:
+        return draft
+    earliest = int(match.group(1)) + 1911
+    if not 2000 < earliest < 2200 or draft.date.year >= earliest:
+        return draft
+    shift = earliest - draft.date.year
+    try:
+        end = draft.end_date.replace(year=draft.end_date.year + shift) if draft.end_date else None
+        return draft.model_copy(update={"date": draft.date.replace(year=earliest), "end_date": end})
+    except ValueError:  # 2 月 29 日平移到非閏年：保留原樣讓使用者自己改
+        return draft
+
+
 def parse_extraction(text: str, exams_only: bool = False) -> ExtractResult:
     """解析 AI 回傳的 JSON（{"events": [...], "problem": ...}，也接受舊的純陣列）。
     格式錯的項目略過並提出警告，不讓整批失敗。"""
@@ -173,25 +236,31 @@ def parse_extraction(text: str, exams_only: bool = False) -> ExtractResult:
             continue
         if exams_only and draft.kind != "exam":
             continue
-        drafts.append(draft)
+        draft = _fix_roc_year(draft)
+        drafts.append(ExtractedEvent(**draft.model_dump(), group=classify_exam(draft.title)))
     if problem:
         warnings.insert(0, f"AI：{problem}")
     if not drafts and not warnings:
         warnings.append("照片中沒有找到考試日期。" if exams_only else "照片中沒有找到日期。")
-    return ExtractResult(drafts=drafts, warnings=warnings)
+    drafts.sort(key=lambda draft: (GROUP_ORDER.index(draft.group), draft.date))
+    groups = [name for name in GROUP_ORDER if any(draft.group == name for draft in drafts)]
+    return ExtractResult(drafts=drafts, groups=groups, warnings=warnings)
 
 
 def _pdf_content(data: bytes) -> tuple[str | None, list[bytes], list[str]]:
     """回傳 (文字, 圖片, 警告)。有文字層就只回傳文字；掃描檔才轉成高解析度圖片。"""
     with pymupdf.open(stream=data, filetype="pdf") as document:
         warnings = []
+        texts = [page.get_text("text", sort=True).strip() for page in document]
+        # 最後一頁常常只剩幾行（備註、簽名），不因此改用圖片
+        if texts and all(len(text) >= PDF_TEXT_MIN_CHARS for text in texts[:-1]) and len(texts[-1]) >= 20:
+            joined = "\n\n".join(f"--- 第 {index} 頁 ---\n{text}" for index, text in enumerate(texts, start=1))
+            if len(joined) > MAX_TEXT_CHARS:
+                warnings.append("PDF 文字太多，只辨識前面的部分。")
+            return joined, [], warnings
         if len(document) > MAX_PDF_PAGES:
             warnings.append(f"PDF 有 {len(document)} 頁，只辨識前 {MAX_PDF_PAGES} 頁。")
         pages = list(document)[:MAX_PDF_PAGES]
-        texts = [page.get_text("text", sort=True).strip() for page in pages]
-        if all(len(text) >= PDF_TEXT_MIN_CHARS for text in texts):
-            joined = "\n\n".join(f"--- 第 {index} 頁 ---\n{text}" for index, text in enumerate(texts, start=1))
-            return joined[:MAX_TEXT_CHARS], [], warnings
         images = []
         for page in pages:
             zoom = PDF_TARGET_LONG_SIDE / max(page.rect.width, page.rect.height)
@@ -201,6 +270,8 @@ def _pdf_content(data: bytes) -> tuple[str | None, list[bytes], list[str]]:
 
 EXAM_LINE = re.compile(r"考|測驗|檢定|會考")
 PAGE_HEADER_LINES = 3
+DATE_TOKEN = re.compile(r"\d{2,3}[./]\d{1,2}[./]\d{1,2}|\d{1,2}[./]\d{1,2}|[(（][一二三四五六日][)）]|日")
+"""表格裡換行的日期（例如「06.13(日)」），去掉之後幾乎沒剩其他字，就是上一行考試的結束日期。"""
 
 
 def exam_lines_only(document_text: str) -> str:
@@ -212,8 +283,23 @@ def exam_lines_only(document_text: str) -> str:
         if not lines:
             continue
         kept += lines[: PAGE_HEADER_LINES + 1]
-        kept += [line for line in lines[PAGE_HEADER_LINES + 1 :] if EXAM_LINE.search(line)]
+        kept += [line for line in lines[PAGE_HEADER_LINES + 1 :] if EXAM_LINE.search(line) or _date_only(line)]
     return "\n".join(kept)
+
+
+ROC_DATE = re.compile(r"\d{3}[./]\d{1,2}[./]\d{1,2}")
+"""民國年完整日期（116.12.04）：考選部計畫表裡區間的開始日期，同一行常常只有考區說明、沒有「考」字。"""
+LEADING_DATE = re.compile(r"^(\s*\d+\s+)*\s*\d{1,2}\.\d{1,2}\s*[(（][一二三四五六日][)）]")
+"""以「12.06(一)」開頭的行（前面可能有序號、考試代碼）：表格換行後的結束日期。"""
+
+
+def _date_only(line: str) -> bool:
+    if ROC_DATE.search(line) or LEADING_DATE.search(line):
+        return True
+    if not re.search(r"\d{1,2}[./]\d{1,2}", line):
+        return False
+    rest = re.sub(r"[\s\d\-－~～、，。,.:：]", "", DATE_TOKEN.sub("", line))
+    return len(rest) <= 4
 
 
 def _resolution_warning(data: bytes) -> str | None:
@@ -254,12 +340,15 @@ def extract_from_file(db: Session, data: bytes, media_type: str, exams_only: boo
     if document_text and exams_only:
         document_text = exam_lines_only(document_text)
     if document_text:
-        prompt += f"\n\n以下是文件的文字內容（由 PDF 抽出，表格排版可能錯位）：\n{document_text}"
+        prompt += f"\n\n以下是文件的文字內容（由 PDF 抽出，表格排版可能錯位）：\n{document_text[:MAX_TEXT_CHARS]}"
     try:
         completion = ai_service.complete(db, "calendar_extract", system, prompt, images=images)
     except ai_service.AiUnavailable as error:
         raise CalendarError(str(error), status_code=503) from error
     result = parse_extraction(completion.text, exams_only=exams_only)
+    existing = _existing_keys(db, {draft.date for draft in result.drafts})
+    for draft in result.drafts:
+        draft.exists = _event_key(draft.title, draft.date, draft.end_date) in existing
     if result.drafts:
         notices = [notice for notice in notices if "像素" not in notice]  # 讀得出來就不用提解析度
     return result.model_copy(update={"warnings": notices + result.warnings})

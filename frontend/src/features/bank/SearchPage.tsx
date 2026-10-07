@@ -66,7 +66,7 @@ function Highlighted({ text, words }: { text: string; words: string[] }) {
     <>
       {text.split(pattern).map((part, index) =>
         index % 2 === 1 ? (
-          <mark key={index} className="marker bg-transparent text-ink [--marker-scale:1]">
+          <mark key={index} className="rounded-[2px] bg-accent-faint text-accent-strong underline decoration-accent decoration-[1.5px] underline-offset-[3px]">
             {part}
           </mark>
         ) : (
@@ -92,7 +92,7 @@ function SearchRow({ hit, words }: { hit: SearchHit; words: string[] }) {
         <span className="text-xs text-muted">
           {question.paper.year && `${question.paper.year} 年`}
           {question.paper.exam_type}｜{shortName(question.paper.subject)}　{question.label ?? `第 ${question.number} 題`}
-          {question.type === 'essay' && <span className="ml-2 rounded-sm bg-hl-soft px-1.5 py-0.5 text-ink">申論</span>}
+          {question.type === 'essay' && <span className="ml-2 rounded-sm bg-accent-faint px-1.5 py-0.5 text-accent-strong">申論</span>}
           {field && <span className="ml-2 rounded-sm bg-sheet-tint px-1.5 py-0.5">命中{field}</span>}
         </span>
         <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>
@@ -198,7 +198,7 @@ export function SearchPage() {
             找到 {result.total} 題{result.total > result.items.length && `，先顯示前 ${result.items.length} 題`}
           </p>
           <div className="rounded-lg bg-sheet px-3 shadow-sheet sm:px-5">
-            <ul className="m-0 list-none p-0">
+            <ul className="stagger m-0 list-none p-0">
               {result.items.map((hit) => (
                 <SearchRow key={hit.question.id} hit={hit} words={words} />
               ))}

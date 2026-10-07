@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -74,6 +74,8 @@ class Question(Base):
     page_snapshot: Mapped[str | None] = mapped_column(String(300))
     source_ref: Mapped[dict | None] = mapped_column(JSON)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    added_in_app: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    """在系統裡手動新增的題目（試卷頁「新增題目」）。重新匯入試卷時不會被同題號的匯入題目覆蓋。"""
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

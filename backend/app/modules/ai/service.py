@@ -1,6 +1,7 @@
 """AI 的公開介面：其他模組呼叫 complete()，這裡負責選模型、檢查每月上限、記錄用量。"""
 
 from datetime import UTC, datetime
+from threading import Event, Lock
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -8,16 +9,37 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.modules.ai.models import AiUsage
-from app.modules.ai.providers.base import Completion, ImageInput, LLMProvider, ProviderError
+from app.modules.ai.providers.base import Completion, ImageInput, LLMProvider, ProviderCancelled, ProviderError
 from app.modules.ai.providers.claude_code import ClaudeCodeProvider
 from app.modules.ai.providers.fake import FakeProvider
 from app.modules.ai.schemas import AiStatus
 
-__all__ = ["AiUnavailable", "Completion", "ImageInput", "complete", "set_provider", "status"]
+__all__ = ["AiCancelled", "AiUnavailable", "Completion", "ImageInput", "cancel", "complete", "set_provider", "status"]
 
 
 class AiUnavailable(Exception):
     """AI 關閉、超過每月上限或呼叫失敗。訊息直接顯示給使用者。"""
+
+
+class AiCancelled(AiUnavailable):
+    """使用者按了中斷。"""
+
+
+# 進行中的 AI 呼叫：request_id → 中斷旗標。前端送出時附上 request_id，按「中斷」時呼叫 cancel()。
+_running: dict[str, Event] = {}
+_running_lock = Lock()
+
+
+def cancel(request_id: str) -> bool:
+    """中斷進行中的呼叫；呼叫還沒開始也會記下來，開始時立刻中斷。回傳是否找到進行中的呼叫。"""
+    with _running_lock:
+        event = _running.get(request_id)
+        if event is None:
+            _running[request_id] = Event()
+            _running[request_id].set()
+            return False
+        event.set()
+        return True
 
 
 _override: LLMProvider | None = None
@@ -66,8 +88,14 @@ def status(db: Session) -> AiStatus:
 
 
 def complete(
-    db: Session, feature: str, system: str, prompt: str, images: list[ImageInput] | None = None
+    db: Session,
+    feature: str,
+    system: str,
+    prompt: str,
+    images: list[ImageInput] | None = None,
+    request_id: str | None = None,
 ) -> Completion:
+    """request_id：給前端「中斷」按鈕用，見 cancel()。"""
     provider = _provider()
     if provider is None:
         raise AiUnavailable("AI 功能已關閉（backend/.env 的 LS_AI_PROVIDER）。")
@@ -77,10 +105,20 @@ def complete(
             f"本月 AI 用量已達上限（{current.month_budget_usd} 美元等值），下個月會自動恢復；"
             "要提高上限請修改 backend/.env 的 LS_AI_MONTHLY_BUDGET_USD。"
         )
+    flag: Event | None = None
+    if request_id:
+        with _running_lock:
+            flag = _running.setdefault(request_id, Event())
     try:
-        completion = provider.complete(system, prompt, images)
+        completion = provider.complete(system, prompt, images, cancel=flag)
+    except ProviderCancelled as error:
+        raise AiCancelled(str(error)) from error
     except ProviderError as error:
         raise AiUnavailable(str(error)) from error
+    finally:
+        if request_id:
+            with _running_lock:
+                _running.pop(request_id, None)
     db.add(
         AiUsage(
             created_at=datetime.now(UTC).replace(tzinfo=None),

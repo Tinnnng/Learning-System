@@ -31,6 +31,23 @@ def test_reimport_keeps_question_ids_and_merges_categories(db):
     assert paper.questions[0].stem == "修改後的題幹"
 
 
+def test_reimport_does_not_overwrite_questions_added_in_app(db):
+    from app.modules.bank.schemas import QuestionEdit
+
+    paper_id = service.upsert_paper(db, make_bundle(questions=1)).paper_id
+    mine = service.add_question(db, paper_id, QuestionEdit(stem="我自己加的題", options=["是", "否"], answer=["B"]))
+    assert mine.number == 2
+
+    result = service.upsert_paper(db, make_bundle(questions=2))  # 官方檔後來也有第 2 題
+    assert result.questions_moved == [3] and result.questions_created == 1
+    by_id = {q.id: q for q in service.get_paper(db, paper_id).questions}
+    assert (by_id[mine.id].number, by_id[mine.id].stem, by_id[mine.id].answer_source) == (3, "我自己加的題", "manual")
+    assert sorted((q.number, q.stem) for q in by_id.values())[1] == (2, "第 2 題題幹")
+
+    again = service.upsert_paper(db, make_bundle(questions=2))  # 再匯入一次：不再挪動、不再新增
+    assert (again.questions_moved, again.questions_created, again.questions_updated) == ([], 0, 2)
+
+
 def test_list_papers_filters(db):
     service.upsert_paper(db, make_bundle("paper-a", exam_type="普考", categories=["一般行政"]))
     service.upsert_paper(db, make_bundle("paper-b", exam_type="高考", categories=["資訊處理"]))

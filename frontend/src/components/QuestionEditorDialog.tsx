@@ -51,7 +51,7 @@ function EditorBody({ initial, onClose, onSave, note }: Omit<QuestionEditorDialo
 
   return (
     <div className="flex flex-col gap-5">
-      {note && <p className="m-0 rounded-md bg-hl-soft px-4 py-2 text-sm text-ink-soft">{note}</p>}
+      {note && <p className="m-0 rounded-md bg-accent-faint px-4 py-2 text-sm text-ink-soft">{note}</p>}
       <QuestionEditor value={value} onChange={setValue} />
       {error && (
         <p className="m-0 text-sm text-bad" role="alert">

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/Button'
+import { CountUp } from '@/components/CountUp'
 import { Switch } from '@/components/Controls'
 import { Dialog } from '@/components/Dialog'
 import { Icon } from '@/components/Icon'
@@ -15,6 +16,7 @@ import {
   deleteEvent,
   type EventIn,
   type EventOut,
+  type ExtractedEvent,
   extractFromFile,
   fetchCountdown,
   fetchEvents,
@@ -31,9 +33,10 @@ const iso = (year: number, month: number, day: number) => `${year}-${pad(month +
 const todayIso = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
 
 function dateLabel(event: Pick<EventOut, 'date' | 'end_date' | 'time'>) {
+  const thisYear = Number(todayIso().slice(0, 4))
   const format = (value: string) => {
-    const [, month, day] = value.split('-').map(Number)
-    return `${month}/${day}`
+    const [year, month, day] = value.split('-').map(Number)
+    return year === thisYear ? `${month}/${day}` : `${year}/${month}/${day}`
   }
   const weekday = WEEKDAYS[new Date(`${event.date}T00:00:00`).getDay()]
   return `${format(event.date)}（${weekday}）${event.end_date ? `～${format(event.end_date)}` : ''}${event.time ? ` ${event.time}` : ''}`
@@ -52,12 +55,12 @@ function Countdown() {
   return (
     <section aria-label="下一場考試" className="flex flex-wrap items-end gap-x-8 gap-y-3 rounded-lg bg-sheet px-6 py-6 shadow-sheet sm:px-8">
       <div className="flex items-baseline gap-2 text-accent">
-        <span className="font-hand text-[64px] font-bold leading-none tabular-nums">{exam.days_until}</span>
+        <CountUp value={exam.days_until} duration={900} className="font-display text-[64px] font-bold leading-none tabular-nums" />
         <span className="text-lg">天</span>
       </div>
       <div className="flex flex-col gap-1 pb-1">
         <span className="eyebrow">距離下一場考試</span>
-        <span className="font-hand text-xl font-bold">{exam.title}</span>
+        <span className="font-display text-xl font-bold">{exam.title}</span>
         <span className="text-sm text-muted">
           {dateLabel(exam)}
           {exam.location && `・${exam.location}`}
@@ -93,7 +96,7 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
   return (
     <section aria-label="月曆" className="flex flex-col gap-3 rounded-lg bg-sheet p-4 shadow-sheet sm:p-6">
       <div className="flex items-center justify-between">
-        <h2 className="m-0 font-hand text-lg font-bold">
+        <h2 className="m-0 font-display text-lg font-bold">
           {cursor.year} 年 {cursor.month + 1} 月
         </h2>
         <div className="flex gap-1">
@@ -147,19 +150,50 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
   )
 }
 
+type Draft = ExtractedEvent & { selected: boolean; editing: boolean }
+
+/** 整組勾選：全選／全不選，部分勾選時顯示半勾 */
+function GroupCheckbox({ label, drafts, onChange }: { label: string; drafts: Draft[]; onChange: (selected: boolean) => void }) {
+  const selected = drafts.filter((draft) => draft.selected).length
+  return (
+    <label className="flex min-h-11 cursor-pointer items-center gap-3">
+      <input
+        type="checkbox"
+        checked={selected === drafts.length}
+        ref={(element) => {
+          if (element) element.indeterminate = selected > 0 && selected < drafts.length
+        }}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-[18px] w-[18px] accent-[var(--ink)]"
+      />
+      <span className="font-medium text-ink">{label}</span>
+      <span className="text-sm text-muted tabular-nums">
+        {selected > 0 ? `已選 ${selected}／${drafts.length}` : `${drafts.length} 場`}
+      </span>
+    </label>
+  )
+}
+
 function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const [drafts, setDrafts] = useState<Array<EventIn & { selected: boolean }>>([])
+  const [drafts, setDrafts] = useState<Draft[]>([])
   const [examsOnly, setExamsOnly] = useState(true)
   const extract = useMutation({
     mutationFn: (file: File) => extractFromFile(file, examsOnly),
-    onSuccess: (result) => setDrafts(result.drafts.map((draft) => ({ ...draft, selected: true }))),
+    // 只有一類（例如學校的期中考）就預設全選；國家考試計畫表有很多類，讓使用者自己勾要考的
+    onSuccess: (result) =>
+      // 已經在行事曆的不勾，避免重複加入
+      setDrafts(
+        result.drafts.map((draft) => ({ ...draft, selected: !draft.exists && result.groups.length <= 1, editing: false })),
+      ),
   })
+  const update = (index: number, change: Partial<Draft>) =>
+    setDrafts((current) => current.map((item, position) => (position === index ? { ...item, ...change } : item)))
   const save = useMutation({
     mutationFn: async () => {
-      for (const { selected, ...draft } of drafts) {
+      for (const { selected, editing: _editing, group: _group, ...draft } of drafts) {
         if (selected) await createEvent(draft, 'photo')
       }
     },
@@ -189,7 +223,7 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
               取消
             </Button>
             <Button onClick={() => save.mutate()} disabled={selectedCount === 0 || save.isPending}>
-              加入 {selectedCount} 個行程
+              加入 {selectedCount} 個考試
             </Button>
           </>
         ) : undefined
@@ -242,31 +276,63 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
             {warning}
           </p>
         ))}
-        {drafts.map((draft, index) => (
-          <fieldset
-            key={index}
-            className={cx(
-              'm-0 flex flex-col gap-3 rounded-md border px-4 py-4 transition-opacity',
-              draft.selected ? 'border-rule' : 'border-line opacity-55',
-            )}
-          >
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={draft.selected}
-                onChange={(event) =>
-                  setDrafts(drafts.map((item, position) => (position === index ? { ...item, selected: event.target.checked } : item)))
-                }
-                className="h-4 w-4 accent-[var(--ink)]"
-              />
-              加入這個行程
-            </label>
-            <EventForm
-              value={draft}
-              onChange={(next) => setDrafts(drafts.map((item, position) => (position === index ? { ...item, ...next } : item)))}
-            />
-          </fieldset>
-        ))}
+        {drafts.length > 0 && (
+          <p className="m-0 text-sm text-ink-soft">
+            找到 {drafts.length} 場考試，勾選要加入行事曆的（可以整類勾選，也可以逐場挑）。
+          </p>
+        )}
+        {(extract.data?.groups ?? []).map((group) => {
+          const members = drafts.map((draft, index) => ({ draft, index })).filter(({ draft }) => draft.group === group)
+          if (members.length === 0) return null
+          return (
+            <fieldset key={group} className="m-0 flex flex-col rounded-md border border-line p-0">
+              <legend className="sr-only">{group}</legend>
+              <div className="border-b border-line px-4">
+                <GroupCheckbox
+                  label={group}
+                  drafts={members.map(({ draft }) => draft)}
+                  onChange={(selected) =>
+                    setDrafts((current) => current.map((item) => (item.group === group ? { ...item, selected } : item)))
+                  }
+                />
+              </div>
+              <ul className="m-0 flex list-none flex-col p-0">
+                {members.map(({ draft, index }) => (
+                  <li key={index} className="flex flex-col gap-3 border-b border-line px-4 py-2 last:border-b-0">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id={`draft-${index}`}
+                        checked={draft.selected}
+                        onChange={(event) => update(index, { selected: event.target.checked })}
+                        className="mt-[3px] h-[18px] w-[18px] shrink-0 accent-[var(--ink)]"
+                      />
+                      <label htmlFor={`draft-${index}`} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5">
+                        <span className={cx('text-[15px] leading-snug', draft.selected ? 'text-ink' : 'text-ink-soft')}>
+                          {draft.title}
+                        </span>
+                        <span className="text-sm text-muted tabular-nums">
+                          {dateLabel(draft)}
+                          {draft.location && `・${draft.location}`}
+                          {draft.exists && <span className="ml-2 text-accent">已在行事曆</span>}
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => update(index, { editing: !draft.editing })}
+                        aria-expanded={draft.editing}
+                        className="min-h-11 shrink-0 px-1 text-sm text-muted hover:text-ink"
+                      >
+                        {draft.editing ? '收合' : '修改'}
+                      </button>
+                    </div>
+                    {draft.editing && <EventForm value={draft} onChange={(next) => update(index, next)} />}
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          )
+        })}
         {save.isError && <ErrorState error={save.error} />}
       </div>
     </Dialog>
@@ -390,7 +456,7 @@ export function CalendarPage() {
             {upcoming.length === 0 ? (
               <EmptyState title="還沒有行程">新增考試日期，或拍下考試公告讓 AI 幫你找出日期。</EmptyState>
             ) : (
-              <ul className="m-0 list-none rounded-lg bg-sheet px-4 p-0 shadow-sheet sm:px-6">{upcoming.map(row)}</ul>
+              <ul className="stagger m-0 list-none rounded-lg bg-sheet px-4 p-0 shadow-sheet sm:px-6">{upcoming.map(row)}</ul>
             )}
             <div className="mt-6">
               <SubscriptionPanel />

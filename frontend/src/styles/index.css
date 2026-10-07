@@ -29,6 +29,7 @@
 
   --font-sans: var(--font-sans);
   --font-hand: var(--font-hand);
+  --font-display: var(--font-display);
   --font-mono: var(--font-mono);
 
   --text-xs: var(--text-xs);
@@ -107,20 +108,98 @@
     transition: transform var(--dur-marker) var(--ease-marker), background-color var(--dur) ease;
   }
 
+  /* 會換行的文字（作答頁的選項）用的螢光筆：畫在文字本身的背景上，而不是 ::before。
+     ::before 在跨行的 inline 元素上只會從第一行開頭延伸到最後一行結尾，選項換行時色塊比字短、形狀也不對。
+     box-decoration-break: slice 讓各行背景接成一條長帶，background-size 從 0 長到 100% 時
+     會先刷完第一行、再接著刷第二行，像真的螢光筆一路劃過去；長度一定和文字一樣長。 */
+  .marker-text {
+    --marker-band: var(--marker-color, var(--hl));
+    padding-inline: 3px;
+    margin-inline: -3px;
+    background-image: linear-gradient(
+      transparent 24%,
+      var(--marker-band) 24%,
+      var(--marker-band) 88%,
+      transparent 88%
+    );
+    background-repeat: no-repeat;
+    background-size: calc(var(--marker-scale, 1) * 100%) 100%;
+    -webkit-box-decoration-break: slice;
+    box-decoration-break: slice;
+    transition: background-size var(--dur-marker-text, var(--dur-marker)) var(--ease-marker);
+  }
+
   /* 數字對齊 */
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
 
-  /* 小標：原子筆寫的批註 */
+  /* 小標：原子筆藍的小字標籤 */
   .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  /* 作答頁的小標：手寫批註 */
+  .eyebrow-hand {
     font-family: var(--font-hand);
     font-size: var(--text-sm);
     letter-spacing: 0.04em;
     color: var(--accent);
     font-weight: 400;
   }
+
+  /* 原子筆底線：滑過列表時，標題底下從左畫一條線（父層要有 group） */
+  .pen-underline {
+    background-image: linear-gradient(var(--pen, var(--accent)), var(--pen, var(--accent)));
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0 1.5px;
+    padding-bottom: 1px;
+    -webkit-box-decoration-break: slice;
+    box-decoration-break: slice;
+    transition: background-size var(--dur-slow) var(--ease-pen);
+  }
+  .group:hover .pen-underline,
+  .group:focus-visible .pen-underline {
+    background-size: 100% 1.5px;
+  }
+
+  /* 原子筆劃掉：完成的事項被一筆劃過去（--strike 從 0 到 1） */
+  .pen-strike {
+    background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: calc(var(--strike, 0) * 100%) 1.5px;
+    -webkit-box-decoration-break: slice;
+    box-decoration-break: slice;
+    transition: background-size var(--dur-pen) var(--ease-pen);
+  }
+
+  /* 換頁時內容依序進場：頁面最外層的每個區塊錯開 60ms 淡入上移 */
+  .route-enter > * > * {
+    animation: rise-in var(--dur-slow) var(--ease-out) both;
+  }
+  .route-enter > * > :nth-child(2) { animation-delay: 60ms; }
+  .route-enter > * > :nth-child(3) { animation-delay: 120ms; }
+  .route-enter > * > :nth-child(4) { animation-delay: 180ms; }
+  .route-enter > * > :nth-child(n + 5) { animation-delay: 240ms; }
+
+  /* 列表逐行出現（篩選改變、新項目加入時也會播放） */
+  .stagger > * {
+    animation: rise-in var(--dur-slow) var(--ease-out) both;
+  }
+  .stagger > :nth-child(2) { animation-delay: calc(var(--stagger) * 1); }
+  .stagger > :nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
+  .stagger > :nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
+  .stagger > :nth-child(5) { animation-delay: calc(var(--stagger) * 4); }
+  .stagger > :nth-child(6) { animation-delay: calc(var(--stagger) * 5); }
+  .stagger > :nth-child(7) { animation-delay: calc(var(--stagger) * 6); }
+  .stagger > :nth-child(8) { animation-delay: calc(var(--stagger) * 7); }
+  .stagger > :nth-child(n + 9) { animation-delay: calc(var(--stagger) * 8); }
 
   /* 題目內容（Markdown 渲染結果） */
   .prose-question {
@@ -277,6 +356,14 @@
 }
 
 /* 螢光筆刷過（用在進場動畫） */
+/* 原子筆在品牌圖示上寫一下 */
+@keyframes scribble {
+  0%, 100% { transform: rotate(0) translate(0, 0); }
+  25% { transform: rotate(-14deg) translate(-1px, 1px); }
+  50% { transform: rotate(-4deg) translate(1px, -1px); }
+  75% { transform: rotate(-12deg) translate(0, 1px); }
+}
+
 @keyframes swipe {
   from {
     transform: scaleX(0);

@@ -64,10 +64,11 @@ export function OptionBubble({ letter, text, state, disabled, multiple, onSelect
       <span className="min-w-0 flex-1 pt-0.5 text-question leading-[1.75]">
         <span
           className={cx(
-            'marker box-decoration-clone [--marker-scale:0]',
+            // 長選項換行時，螢光筆會一路刷過每一行（見 index.css 的 .marker-text）
+            'marker-text [--marker-scale:0]',
             // 滑過未選的選項：螢光筆先露出一小截
-            !disabled && !color && 'group-hover:[--marker-scale:0.06]',
-            state === 'answer' && '[&::before]:delay-[220ms]',
+            !disabled && !color && 'group-hover:[--marker-scale:0.04]',
+            state === 'answer' && 'delay-[220ms]',
             state === 'wrong' && 'line-through decoration-bad decoration-2',
           )}
           style={color ? ({ '--marker-color': color, '--marker-scale': 1 } as CSSProperties) : undefined}

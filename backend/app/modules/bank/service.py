@@ -38,11 +38,13 @@ def upsert_paper(db: Session, data: PaperUpsert) -> UpsertResult:
     - 類科取聯集（同一份試卷從不同類科資料夾匯入時會合併）。
     - 題目以題號比對：已存在就更新內容、保留 id（作答紀錄不會斷掉）；
       資料庫有但這次沒匯入的題目不刪除，只回報題號。
+    - 在系統裡手動新增的題目（added_in_app）不會被同題號的匯入題目覆蓋：手動題挪到最後面，匯入題另外新增。
     """
     paper = db.scalar(
         select(ExamPaper)
         .where(ExamPaper.source_key == data.paper.source_key)
         .options(selectinload(ExamPaper.categories), selectinload(ExamPaper.questions))
+        .execution_options(populate_existing=True)  # 同一個 session 剛新增的題目也要看得到
     )
     created = paper is None
     if paper is None:
@@ -59,6 +61,19 @@ def upsert_paper(db: Session, data: PaperUpsert) -> UpsertResult:
             existing_categories.add(name)
 
     existing_questions = {question.number: question for question in paper.questions}
+    # 先把被匯入題號佔到的手動題挪到最後面（題號＋1 起跳，避開匯入檔與現有題號），再處理匯入的題目
+    next_number = max([*existing_questions, *(q.number for q in data.questions), 0]) + 1
+    moved: list[int] = []
+    for incoming in data.questions:
+        manual = existing_questions.get(incoming.number)
+        if manual is not None and manual.added_in_app:
+            del existing_questions[incoming.number]
+            manual.number = next_number
+            existing_questions[next_number] = manual
+            moved.append(next_number)
+            next_number += 1
+    if moved:
+        db.flush()
     questions_created = questions_updated = 0
     for incoming in data.questions:
         values = incoming.model_dump(mode="json")
@@ -79,6 +94,7 @@ def upsert_paper(db: Session, data: PaperUpsert) -> UpsertResult:
         questions_created=questions_created,
         questions_updated=questions_updated,
         questions_not_in_import=sorted(set(existing_questions) - imported_numbers),
+        questions_moved=moved,
     )
 
 
@@ -320,7 +336,7 @@ def add_question(db: Session, paper_id: int, data: QuestionEdit) -> QuestionOut:
     if paper is None:
         raise BankError("找不到這份試卷", status_code=404)
     last = db.scalar(select(func.max(Question.number)).where(Question.paper_id == paper_id)) or 0
-    question = Question(paper_id=paper_id, number=last + 1, answer_source="manual", assets=[])
+    question = Question(paper_id=paper_id, number=last + 1, answer_source="manual", assets=[], added_in_app=True)
     _apply_edit(question, data)
     db.add(question)
     db.commit()

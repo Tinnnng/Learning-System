@@ -31,7 +31,7 @@ def daily(db: Session = Depends(get_db)) -> DailyQuiz:
 
 @router.get("/quiz", response_model=list[QuizItem])
 def practice_quiz(source: service.QuizSource = "wrong", count: int = 10, db: Session = Depends(get_db)) -> list[QuizItem]:
-    """自由練習。source=wrong 是錯題單字集中複習。"""
+    """自由練習。source=wrong 是錯題單字集中複習；next 是每日單字寫完後「再測一組」（避開今天出現過的字）。"""
     return service.build_quiz(db, source, count)
 
 

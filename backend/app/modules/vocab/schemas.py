@@ -75,6 +75,7 @@ class AnswerIn(BaseModel):
     quiz_type: QuizType
     response: str
     context: QuizContext = "practice"
+    client_id: str | None = Field(default=None, max_length=64, description="同一次作答重送時帶相同的 id，只會記錄一次")
 
 
 class AnswerResult(BaseModel):

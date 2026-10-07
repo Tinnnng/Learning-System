@@ -3,7 +3,7 @@
 原則：
 - 正確答案以官方（或出題者）公布的為準，AI 只負責解釋理由，不重新判斷答案。
 - 第一次產生的詳解存資料庫，之後直接讀取；重新產生才會再花用量。
-- 追問只帶最近幾則對話，並限制每題追問次數，控制用量。
+- 追問只帶最近幾則對話控制用量；不限次數，但顯示這題花了多少，送出後可以中斷。
 """
 
 from datetime import UTC, datetime
@@ -17,7 +17,6 @@ from app.modules.bank.schemas import OPTION_LETTERS, QuestionWithPaper
 from app.modules.tutor.models import TutorMessage
 from app.modules.tutor.schemas import MessageOut, TutorThread
 
-MAX_FOLLOW_UPS = 8
 HISTORY_MESSAGES = 6
 HISTORY_CHARS = 800
 
@@ -79,7 +78,6 @@ def _messages(db: Session, question_id: int) -> list[TutorMessage]:
 
 def get_thread(db: Session, question_id: int) -> TutorThread:
     messages = _messages(db, question_id)
-    asked = sum(1 for message in messages if message.role == "user")
     return TutorThread(
         question_id=question_id,
         messages=[
@@ -88,18 +86,26 @@ def get_thread(db: Session, question_id: int) -> TutorThread:
             )
             for m in messages
         ],
-        remaining_questions=max(0, MAX_FOLLOW_UPS - asked),
+        cost_usd=round(sum(m.cost_usd or 0 for m in messages), 4),
     )
 
 
-def _call(db: Session, feature: str, system: str, prompt: str) -> str:
+def _call(db: Session, feature: str, system: str, prompt: str, request_id: str | None) -> ai_service.Completion:
     try:
-        return ai_service.complete(db, feature, system, prompt).text
+        return ai_service.complete(db, feature, system, prompt, request_id=request_id)
+    except ai_service.AiCancelled as error:
+        raise TutorError(str(error), status_code=409) from error
     except ai_service.AiUnavailable as error:
         raise TutorError(str(error), status_code=503) from error
 
 
-def explain(db: Session, question_id: int, regenerate: bool = False, my_answer: list[str] | None = None) -> TutorThread:
+def explain(
+    db: Session,
+    question_id: int,
+    regenerate: bool = False,
+    my_answer: list[str] | None = None,
+    request_id: str | None = None,
+) -> TutorThread:
     """取得 AI 詳解；已經有就直接回傳（不花用量），regenerate 才重新產生。"""
     question = _get_question(db, question_id)
     existing = [m for m in _messages(db, question_id) if m.kind == "explanation"]
@@ -107,19 +113,27 @@ def explain(db: Session, question_id: int, regenerate: bool = False, my_answer: 
         return get_thread(db, question_id)
 
     prompt = question_context(question, my_answer) + "\n\n請解釋這一題。"
-    text = _call(db, "tutor_explain", SYSTEM_PROMPT, prompt)
+    completion = _call(db, "tutor_explain", SYSTEM_PROMPT, prompt, request_id)
     if regenerate:
         db.execute(delete(TutorMessage).where(TutorMessage.question_id == question_id))
-    db.add(TutorMessage(question_id=question_id, role="assistant", kind="explanation", content=text, flagged=False, created_at=_now()))
+    db.add(
+        TutorMessage(
+            question_id=question_id,
+            role="assistant",
+            kind="explanation",
+            content=completion.text,
+            flagged=False,
+            cost_usd=completion.cost_usd,
+            created_at=_now(),
+        )
+    )
     db.commit()
     return get_thread(db, question_id)
 
 
-def ask(db: Session, question_id: int, content: str) -> TutorThread:
+def ask(db: Session, question_id: int, content: str, request_id: str | None = None) -> TutorThread:
     question = _get_question(db, question_id)
     thread = get_thread(db, question_id)
-    if thread.remaining_questions <= 0:
-        raise TutorError(f"這題已經追問 {MAX_FOLLOW_UPS} 次了，為了控制用量先到這裡；可以「重新產生」從頭開始。", status_code=429)
 
     history = thread.messages[-HISTORY_MESSAGES:]
     lines = [question_context(question), "", "先前的對話："]
@@ -127,11 +141,21 @@ def ask(db: Session, question_id: int, content: str) -> TutorThread:
         speaker = "學生" if message.role == "user" else "助教"
         lines.append(f"{speaker}：{message.content[:HISTORY_CHARS]}")
     lines += ["", f"學生的新問題：{content}"]
-    text = _call(db, "tutor_chat", FOLLOW_UP_SYSTEM, "\n".join(lines))
+    completion = _call(db, "tutor_chat", FOLLOW_UP_SYSTEM, "\n".join(lines), request_id)
 
     now = _now()
     db.add(TutorMessage(question_id=question_id, role="user", kind="chat", content=content, flagged=False, created_at=now))
-    db.add(TutorMessage(question_id=question_id, role="assistant", kind="chat", content=text, flagged=False, created_at=now))
+    db.add(
+        TutorMessage(
+            question_id=question_id,
+            role="assistant",
+            kind="chat",
+            content=completion.text,
+            flagged=False,
+            cost_usd=completion.cost_usd,
+            created_at=now,
+        )
+    )
     db.commit()
     return get_thread(db, question_id)
 

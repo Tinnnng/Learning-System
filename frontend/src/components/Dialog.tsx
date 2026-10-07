@@ -37,7 +37,7 @@ export function Dialog({ open, onClose, title, children, actions, wide }: Dialog
       )}
     >
       <div className="flex max-h-[85dvh] flex-col">
-        <h2 className="m-0 border-b border-rule px-6 py-4 font-hand text-lg font-bold">{title}</h2>
+        <h2 className="m-0 border-b border-rule px-6 py-4 font-display text-lg font-bold">{title}</h2>
         <div className="overflow-y-auto px-6 py-5">{children}</div>
         {actions && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-6 py-4">{actions}</div>}
       </div>

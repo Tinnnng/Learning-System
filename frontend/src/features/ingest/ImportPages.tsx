@@ -48,7 +48,7 @@ function FileRow({ file }: { file: ConvertedFile }) {
   return (
     <li className="grid gap-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 flex-col gap-1">
-        <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-hand text-[17px] font-semibold text-ink hover:text-accent">
+        <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-display text-[17px] font-semibold text-ink hover:text-accent">
           {report ? shortName(report.subject) : file.name}
         </Link>
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
@@ -99,7 +99,7 @@ export function ImportListPage() {
         </EmptyState>
       ) : (
         <section className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
-          <ul className="m-0 list-none p-0">
+          <ul className="stagger m-0 list-none p-0">
             {files.data.map((file) => (
               <FileRow key={file.name} file={file} />
             ))}

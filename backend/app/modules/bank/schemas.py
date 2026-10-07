@@ -79,6 +79,9 @@ class UpsertResult(BaseModel):
     questions_created: int
     questions_updated: int
     questions_not_in_import: list[int] = Field(description="資料庫有、但這次匯入沒有的題號（保留不刪除）")
+    questions_moved: list[int] = Field(
+        default_factory=list, description="手動新增的題目被匯入檔的同題號佔用，挪到的新題號（內容保留）"
+    )
 
 
 class QuestionOut(QuestionIn):

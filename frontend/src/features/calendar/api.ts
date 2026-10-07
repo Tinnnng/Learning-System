@@ -4,6 +4,7 @@ import type { components } from '@/lib/api-types'
 export type EventOut = components['schemas']['EventOut']
 export type EventIn = components['schemas']['EventIn']
 export type ExtractResult = components['schemas']['ExtractResult']
+export type ExtractedEvent = components['schemas']['ExtractedEvent']
 export type Countdown = components['schemas']['Countdown']
 
 export const fetchEvents = (start: string, end: string) => api.get<EventOut[]>(`/calendar/events?start=${start}&end=${end}`)

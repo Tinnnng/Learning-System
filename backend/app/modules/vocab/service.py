@@ -14,9 +14,11 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.text import match_key
 from app.modules.ai import service as ai_service
 from app.modules.bank import service as bank_service
 from app.modules.bank.schemas import QuestionFilter
@@ -45,7 +47,8 @@ from app.modules.vocab.schemas import (
 
 BUILTIN_DIR = Path(__file__).parent / "data"
 BUILTIN_LISTS = {"toeic_core": "多益核心單字"}
-QuizSource = Literal["wrong", "due", "new", "all"]
+QuizSource = Literal["wrong", "due", "new", "all", "next"]
+"""next＝「再測一組」：每日單字寫完後再開一組，選字方式和每日一樣，但避開今天已經出現過的字。"""
 
 
 class VocabError(Exception):
@@ -68,7 +71,8 @@ def today(now: datetime | None = None) -> str:
 
 
 def _term_key(term: str) -> str:
-    return " ".join(term.lower().split())
+    """同一個字的比對鍵：不分大小寫、全形半形、空白、零寬字元與前後標點（「ｉｎｖｏｉｃｅ」「invoice.」都是 invoice）。"""
+    return match_key(term, strip_punct=True)
 
 
 # ---------- 匯入 ----------
@@ -213,6 +217,37 @@ def _attempt_counts(db: Session) -> dict[int, int]:
     return {p.word_id: p.attempts for p in db.scalars(select(WordProgress))}
 
 
+def _pick_words(
+    db: Session,
+    words: dict[int, Word],
+    count: int,
+    rng: random.Random,
+    now: datetime,
+    attempts: dict[int, int],
+    exclude: set[int] | None = None,
+) -> list[int]:
+    """每日單字的選字順序：先抽間隔複習到期的，再補沒學過的新單字，最後隨機補滿。"""
+    exclude = exclude or set()
+    candidates = [wid for wid in words if wid not in exclude]
+    chosen = [wid for wid in srs_service.due_item_ids(db, "word", now=now) if wid in words and wid not in exclude][:count]
+    new_words = [wid for wid in candidates if wid not in attempts and wid not in chosen]
+    rng.shuffle(new_words)
+    chosen += new_words[: count - len(chosen)]
+    rest = [wid for wid in candidates if wid not in chosen]
+    rng.shuffle(rest)
+    chosen += rest[: count - len(chosen)]
+    return chosen
+
+
+def _seen_today(db: Session, now: datetime) -> set[int]:
+    """今天已經出現過的字：今天的每日單字，加上今天作答過的字（任何一種測驗）。"""
+    local = now.astimezone(ZoneInfo(get_settings().timezone))
+    start = _naive(local.replace(hour=0, minute=0, second=0, microsecond=0))
+    seen = set(db.scalars(select(WordAttempt.word_id).where(WordAttempt.answered_at >= start)))
+    daily = db.get(DailySet, today(now))
+    return seen | set(daily.word_ids if daily else [])
+
+
 def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     now = now or _utc_now()
     day = today(now)
@@ -224,15 +259,8 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     daily = db.get(DailySet, day)
     if daily is None:
         rng = random.Random(day)
-        count = get_settings().daily_vocab_count
         attempts = _attempt_counts(db)
-        chosen = [wid for wid in srs_service.due_item_ids(db, "word", now=now) if wid in words][:count]
-        new_words = [wid for wid in words if wid not in attempts and wid not in chosen]
-        rng.shuffle(new_words)
-        chosen += new_words[: count - len(chosen)]
-        rest = [wid for wid in words if wid not in chosen]
-        rng.shuffle(rest)
-        chosen += rest[: count - len(chosen)]
+        chosen = _pick_words(db, words, get_settings().daily_vocab_count, rng, now, attempts)
         types = [quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)) for wid in chosen]
         daily = DailySet(day=day, word_ids=chosen, quiz_types=types)
         db.add(daily)
@@ -255,12 +283,21 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     return DailyQuiz(day=day, items=items, done=sum(1 for item in items if item.answered), total=len(items))
 
 
-def build_quiz(db: Session, source: QuizSource, count: int = 10, seed: int | None = None) -> list[QuizItem]:
-    """自由練習／錯題單字集中複習的題目（不會保存，每次產生都不同）。"""
+def build_quiz(
+    db: Session, source: QuizSource, count: int = 10, seed: int | None = None, now: datetime | None = None
+) -> list[QuizItem]:
+    """自由練習／錯題單字集中複習／再測一組的題目（不會保存，每次產生都不同）。"""
     rng = random.Random(seed)
     pool = list(db.scalars(select(Word).order_by(Word.id)))
     words = {word.id: word for word in pool}
     attempts = _attempt_counts(db)
+    if source == "next":
+        now = now or _utc_now()
+        ids = _pick_words(db, words, count, rng, now, attempts, exclude=_seen_today(db, now))
+        return [
+            quiz.build_item(words[wid], quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)), pool, rng)
+            for wid in ids
+        ]
     if source == "wrong":
         ids = [word.id for word in wrong_words(db)]
     elif source == "due":
@@ -299,11 +336,29 @@ def _update_progress(db: Session, word_id: int, correct: bool, answered_at: date
         progress.last_wrong_at = answered_at
 
 
+def _replayed(db: Session, word: Word, client_id: str | None) -> AnswerResult | None:
+    """同一次作答被重送：回傳第一次的結果，不再記錄（避免連送幾次就把錯題「連續答對」刷滿）。"""
+    if not client_id:
+        return None
+    attempt = db.scalar(select(WordAttempt).where(WordAttempt.client_id == client_id))
+    if attempt is None:
+        return None
+    if attempt.word_id != word.id:
+        raise VocabError("作答 id 重複", status_code=409)
+    return AnswerResult(
+        is_correct=attempt.is_correct,
+        expected=quiz.expected_answer(word, attempt.quiz_type),
+        word=_words_out(db, [word])[0],
+    )
+
+
 def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerResult:
     now = now or _utc_now()
     word = db.get(Word, data.word_id)
     if word is None:
         raise VocabError("找不到這個單字", status_code=404)
+    if (replay := _replayed(db, word, data.client_id)) is not None:
+        return replay
 
     day = today(now) if data.context == "daily" else None
     if day is not None:
@@ -325,11 +380,19 @@ def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerRe
             response=data.response,
             is_correct=correct,
             answered_at=_naive(now),
+            client_id=data.client_id,
         )
     )
     _update_progress(db, word.id, correct, _naive(now))
     srs_service.review(db, "word", word.id, "good" if correct else "again", now=now)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # 兩個相同的重送同時進來：另一個已經記錄了，回傳那一次的結果
+        db.rollback()
+        if (replay := _replayed(db, word, data.client_id)) is not None:
+            return replay
+        raise
     return AnswerResult(
         is_correct=correct,
         expected=quiz.expected_answer(word, data.quiz_type),

@@ -11,7 +11,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { ZhengTally } from '@/components/ZhengTally'
 import { cx } from '@/lib/cx'
 import { relativeDay, todayLabel } from '@/lib/format'
-import type { ImportResult, QuizItem, WordOut } from '@/lib/types'
+import type { ImportResult, QuizItem, VocabAnswerResult, WordOut } from '@/lib/types'
 import {
   fetchBuiltin,
   fetchDaily,
@@ -57,16 +57,31 @@ function Sheet({ children, className }: { children: ReactNode; className?: strin
   return <section className={cx('rounded-lg bg-sheet px-5 py-7 shadow-sheet sm:px-9 sm:py-9', className)}>{children}</section>
 }
 
+/** 每日單字寫完後的「再測一組」：第幾組、題目、寫完的結果 */
+interface ExtraRound {
+  number: number
+  items: QuizItem[]
+  results: VocabAnswerResult[] | null
+}
+
 export function DailyPage() {
   const daily = useQuery({ queryKey: ['vocab', 'daily'], queryFn: fetchDaily, staleTime: Infinity })
   const stats = useQuery({ queryKey: ['vocab', 'stats'], queryFn: fetchStats })
   const [finished, setFinished] = useState(false)
+  const [round, setRound] = useState<ExtraRound | null>(null)
+  const roundSize = daily.data?.total || 5
+  // 再測一組：選字方式和每日一樣（到期 → 新單字 → 隨機），避開今天已經出現過的字
+  const nextRound = useMutation({
+    mutationFn: () => fetchQuiz('next', roundSize),
+    onSuccess: (items) => setRound({ number: (round?.number ?? 0) + 1, items, results: null }),
+  })
 
   const done = daily.data && daily.data.total > 0 && (finished || daily.data.done >= daily.data.total)
+  const startNext = () => nextRound.mutate()
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader eyebrow={todayLabel()} title="每日單字" description="每天抽 5 個字：先複習該複習的，再補新單字。今天的題目整天都一樣，可以分次寫完。" />
+      <PageHeader eyebrow={todayLabel()} title="每日單字" description="每天抽 5 個字：先複習該複習的，再補新單字，可以分次寫完。寫完還想背，可以「再測一組」新的字。" />
       <VocabTabs />
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Sheet>
@@ -78,11 +93,24 @@ export function DailyPage() {
             <EmptyState title="單字庫是空的" action={<ButtonLink to="/vocab/words">匯入單字</ButtonLink>}>
               匯入自己的單字表，或使用內建的多益核心單字。
             </EmptyState>
+          ) : round && round.items.length > 0 && !round.results ? (
+            <div className="flex flex-col gap-5">
+              <span className="eyebrow">再測一組・第 {round.number} 組</span>
+              <QuizRunner
+                key={round.number}
+                items={round.items}
+                context="practice"
+                onFinish={(results) => setRound({ ...round, results })}
+              />
+            </div>
+          ) : round ? (
+            <RoundDone round={round} onNext={startNext} pending={nextRound.isPending} />
           ) : done ? (
-            <DailyDone />
+            <DailyDone onNext={startNext} pending={nextRound.isPending} />
           ) : (
             <QuizRunner items={daily.data.items} context="daily" onFinish={() => setFinished(true)} />
           )}
+          {nextRound.isError && <ErrorState error={nextRound.error} onRetry={startNext} />}
         </Sheet>
         {stats.data && (
           <aside className="flex flex-col gap-4">
@@ -106,22 +134,79 @@ export function DailyPage() {
   )
 }
 
-function DailyDone() {
+function NextRoundButton({ onNext, pending, primary }: { onNext: () => void; pending: boolean; primary?: boolean }) {
+  return (
+    <Button variant={primary ? 'primary' : 'secondary'} onClick={onNext} disabled={pending}>
+      <Icon name="refresh" size={17} />
+      {pending ? '抽題中…' : '再測一組'}
+    </Button>
+  )
+}
+
+/** 再測一組寫完：這組的成績，可以繼續下一組 */
+function RoundDone({ round, onNext, pending }: { round: ExtraRound; onNext: () => void; pending: boolean }) {
+  if (round.items.length === 0) {
+    return (
+      <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
+        <span className="eyebrow">再測一組</span>
+        <p className="m-0 font-display text-2xl font-bold">今天把單字庫的字都測過了</p>
+        <p className="m-0 text-muted">可以到單字庫匯入更多單字，或明天再來。</p>
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink to="/vocab/words">匯入單字</ButtonLink>
+          <ButtonLink to="/" variant="secondary">
+            回今日
+          </ButtonLink>
+        </div>
+      </div>
+    )
+  }
+  const results = round.results ?? []
+  const correct = results.filter((result) => result.is_correct).length
+  return (
+    <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
+      <span className="eyebrow">第 {round.number} 組完成</span>
+      <p className="m-0 font-display text-2xl font-bold">
+        {results.length} 個單字答對 <span className="tabular text-accent">{correct}</span> 個
+      </p>
+      <p className="m-0 text-muted">
+        {correct < results.length ? '答錯的字已經收進錯題單字。' : '全對！'}這組的字也會依記憶曲線排進之後的複習。
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <NextRoundButton onNext={onNext} pending={pending} primary />
+        {correct < results.length && (
+          <ButtonLink to="/vocab/wrong" variant="secondary">
+            複習錯題單字
+          </ButtonLink>
+        )}
+        <ButtonLink to="/" variant="ghost">
+          回今日
+        </ButtonLink>
+      </div>
+    </div>
+  )
+}
+
+function DailyDone({ onNext, pending }: { onNext: () => void; pending: boolean }) {
   const daily = useQuery({ queryKey: ['vocab', 'daily'], queryFn: fetchDaily })
   const correct = daily.data?.items.filter((item) => item.is_correct).length ?? 0
   const total = daily.data?.total ?? 0
   return (
     <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
       <span className="eyebrow">今天完成了</span>
-      <p className="m-0 font-hand text-2xl font-bold">
+      <p className="m-0 font-display text-2xl font-bold">
         {total} 個單字答對 <span className="tabular text-accent">{correct}</span> 個
       </p>
       <p className="m-0 text-muted">
-        {correct < total ? '答錯的字已經收進錯題單字，明天會優先再出現。' : '全對！明天見。'}
+        {correct < total ? '答錯的字已經收進錯題單字，明天會優先再出現。' : '全對！'}還想多背幾個，可以再測一組新的字。
       </p>
       <div className="flex flex-wrap gap-2">
-        {correct < total && <ButtonLink to="/vocab/wrong">複習錯題單字</ButtonLink>}
-        <ButtonLink to="/" variant="secondary">
+        <NextRoundButton onNext={onNext} pending={pending} primary />
+        {correct < total && (
+          <ButtonLink to="/vocab/wrong" variant="secondary">
+            複習錯題單字
+          </ButtonLink>
+        )}
+        <ButtonLink to="/" variant="ghost">
           回今日
         </ButtonLink>
       </div>
@@ -179,7 +264,7 @@ export function WrongWordsPage() {
         <EmptyState title="沒有錯題單字">每日複習答錯的單字會收進這裡。</EmptyState>
       ) : (
         <section className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
-          <ul className="m-0 list-none p-0">
+          <ul className="stagger m-0 list-none p-0">
             {wrong.data.map((word) => (
               <WordLine
                 key={word.id}
@@ -215,7 +300,7 @@ function ImportPanel() {
 
   return (
     <aside className="flex flex-col gap-5 rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24">
-      <h2 className="m-0 font-hand text-lg font-bold">匯入單字</h2>
+      <h2 className="m-0 font-display text-lg font-bold">匯入單字</h2>
       <div className="flex flex-col gap-2">
         <p className="m-0 text-sm text-muted">
           CSV 或 Excel，第一列放欄位名稱：<span className="text-ink">單字、中文</span> 必填，可加 詞性、例句、例句翻譯、標籤。同一個字重新匯入會更新。
@@ -323,7 +408,7 @@ export function WordsPage() {
               <p className="m-0 border-b border-accent py-3 text-sm text-muted">
                 共 <span className="tabular text-ink">{words.data.total}</span> 個單字
               </p>
-              <ul className="m-0 list-none p-0">
+              <ul className="stagger m-0 list-none p-0">
                 {words.data.items.map((word) => (
                   <WordLine
                     key={word.id}

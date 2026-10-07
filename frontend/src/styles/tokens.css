@@ -1,5 +1,8 @@
 /*
- * Design tokens — 方向 B「螢光筆與原子筆」
+ * Design tokens — 「白紙＋原子筆」，作答頁另外加上「螢光筆」
+ * 2026-10-07 使用者決定：螢光筆（--hl、.marker、.marker-text）與手寫字（font-hand）只用在作答相關頁面
+ * （作答、交卷結果、單字測驗、錯題匯出）；其他頁面是方向 A「白紙」：標題用 font-display（Noto Sans 粗體），
+ * 動效統一是原子筆的線（頁首底線、導覽底線、劃掉完成的事）。
  * 元件只能使用這裡的變數（透過 Tailwind 的 bg-paper、text-ink、bg-hl… 或 var(--…)），不寫死顏色與數值。
  * 日間：白紙＋藍色原子筆＋黃色螢光筆；夜間：深藍書桌＋螢光筆發光，各自調色而不是直接反轉。
  * 螢光筆色（--hl、--ok-hl、--bad-hl）只當「底色」用，文字一律用 --ink，對比才夠。
@@ -32,6 +35,8 @@
   /* 字體 */
   --font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
   --font-hand: 'LXGW WenKai TC', 'Kaiti TC', 'DFKai-SB', 'BiauKai', var(--font-sans);
+  /** 非作答頁的標題字：同一套 Noto Sans，靠字重與字距做層級 */
+  --font-display: var(--font-sans);
   /** 手寫批註感：只用在標題、小標、回饋與選項字母，不用在長段落 */
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
 
@@ -70,6 +75,9 @@
   --dur: 220ms;
   --dur-slow: 420ms;
   --dur-marker: 380ms;
+  --dur-pen: 640ms; /* 原子筆畫一條線 */
+  --ease-pen: cubic-bezier(0.55, 0, 0.2, 1); /* 下筆稍慢、收筆輕 */
+  --stagger: 38ms; /* 列表逐行出現的間隔 */
 
   --content-width: 1120px;
   --reading-width: 720px;

@@ -42,7 +42,7 @@ function SnapshotRow({
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule py-4 last:border-b-0">
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className={cx('text-[17px] text-ink', latest && 'marker [--marker-scale:1]')}>{relativeDay(snapshot.created_at)}</span>
+          <span className={cx('text-[17px] text-ink', latest && 'font-medium underline decoration-accent decoration-2 underline-offset-[6px]')}>{relativeDay(snapshot.created_at)}</span>
           <span className="font-mono text-sm text-muted">{formatDateTime(snapshot.created_at)}</span>
         </span>
         <span className="flex items-center gap-2 text-xs text-muted">
@@ -150,7 +150,7 @@ export function BackupPage() {
               <EmptyState title="還沒有備份">按「立即備份」建立第一份；之後每天第一次開啟系統也會自動備份。</EmptyState>
             </div>
           ) : (
-            <ul className="m-0 list-none p-0">
+            <ul className="stagger m-0 list-none p-0">
               {snapshots.map((snapshot) => (
                 <SnapshotRow
                   key={snapshot.name}
@@ -166,7 +166,7 @@ export function BackupPage() {
 
         <aside className="flex flex-col gap-6">
           <section className="flex flex-col gap-3 rounded-lg border border-rule px-5 py-5">
-            <h2 className="m-0 font-hand text-lg font-bold">從檔案還原</h2>
+            <h2 className="m-0 font-display text-lg font-bold">從檔案還原</h2>
             <p className="m-0 text-sm text-muted">選之前下載的備份 zip（例如從另一台電腦帶過來的）。</p>
             <input
               ref={fileInput}

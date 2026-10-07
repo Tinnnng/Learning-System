@@ -29,12 +29,12 @@ def get_thread(question_id: int, db: Session = Depends(get_db)) -> TutorThread:
 
 @router.post("/questions/{question_id}/explain", response_model=TutorThread)
 def explain(question_id: int, data: ExplainIn, db: Session = Depends(get_db)) -> TutorThread:
-    return _run(lambda: service.explain(db, question_id, data.regenerate, data.my_answer))
+    return _run(lambda: service.explain(db, question_id, data.regenerate, data.my_answer, data.request_id))
 
 
 @router.post("/questions/{question_id}/messages", response_model=TutorThread)
 def ask(question_id: int, data: AskIn, db: Session = Depends(get_db)) -> TutorThread:
-    return _run(lambda: service.ask(db, question_id, data.content))
+    return _run(lambda: service.ask(db, question_id, data.content, data.request_id))
 
 
 @router.post("/messages/{message_id}/flag", response_model=TutorThread)

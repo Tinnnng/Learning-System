@@ -34,9 +34,18 @@ class EventOut(EventIn):
     """距離今天幾天（今天＝0，已過去為負數）"""
 
 
+class ExtractedEvent(EventIn):
+    group: str
+    """考試分類（高考、普考、地方特考…），讓使用者整組勾選要加入哪些"""
+    exists: bool = False
+    """行事曆裡已經有同名、同日期的行程（預設不勾，避免重複加入）"""
+
+
 class ExtractResult(BaseModel):
-    drafts: list[EventIn]
-    """AI 辨識出的事件，尚未儲存，使用者確認後再逐一新增"""
+    drafts: list[ExtractedEvent]
+    """AI 辨識出的事件，尚未儲存，使用者勾選後再逐一新增"""
+    groups: list[str] = []
+    """drafts 出現的分類，依固定順序排列"""
     warnings: list[str]
 
 

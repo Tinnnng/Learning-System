@@ -41,7 +41,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="ruled flex flex-col items-start gap-3 rounded-lg border border-dashed border-rule px-6 py-10">
-      <h2 className="m-0 font-hand text-lg font-bold">{title}</h2>
+      <h2 className="m-0 font-display text-lg font-bold">{title}</h2>
       {children && <div className="max-w-[56ch] text-muted">{children}</div>}
       {action}
     </div>

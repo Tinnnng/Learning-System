@@ -44,7 +44,7 @@ function TopicRow({
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-b border-rule py-3.5 last:border-b-0">
       <span className="flex min-w-0 flex-col gap-1.5">
         <span className="flex items-baseline gap-2">
-          <span className={cx('truncate text-[15px] text-ink', stat.weak && 'marker [--marker-color:var(--bad-hl)] [--marker-scale:1]')}>
+          <span className={cx('truncate text-[15px] text-ink', stat.weak && 'underline decoration-bad decoration-wavy decoration-[1.5px] underline-offset-[5px]')}>
             {stat.topic}
           </span>
           <span
@@ -104,7 +104,7 @@ function SubjectCard({
     <section className="flex flex-col gap-3 rounded-lg bg-sheet px-5 py-5 shadow-sheet sm:px-6" aria-label={subject.subject}>
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="m-0 font-hand text-lg font-bold [word-break:keep-all]">{shortName(subject.subject)}</h2>
+          <h2 className="m-0 font-display text-lg font-bold [word-break:keep-all]">{shortName(subject.subject)}</h2>
           <span className="text-xs text-muted">
             {subject.topics.length > 0 ? `${subject.topics.length} 個知識點・` : ''}已標記 {subject.tagged}／{subject.questions} 題
           </span>
@@ -126,7 +126,7 @@ function SubjectCard({
         </p>
       ) : (
         <>
-          <ul className="m-0 list-none p-0">
+          <ul className="stagger m-0 list-none p-0">
             {visible.map((stat) => (
               <TopicRow key={stat.topic} stat={stat} threshold={threshold} onPractice={() => onPractice(stat.question_ids)} disabled={practicing} />
             ))}
@@ -227,12 +227,12 @@ export function TopicsPage() {
           <section aria-label="你的弱點" className="flex flex-col gap-3">
             <h2 className="eyebrow m-0">你的弱點</h2>
             {data.weak.length > 0 ? (
-              <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
+              <ul className="stagger m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
                 {data.weak.slice(0, 6).map((stat) => (
                   <li key={`${stat.subject}-${stat.topic}`} className="flex flex-col gap-2 rounded-lg border border-rule bg-sheet px-4 py-4">
                     <span className="text-xs text-muted">{shortName(stat.subject)}</span>
                     <span className="flex items-baseline justify-between gap-3">
-                      <span className="marker text-lg text-ink [--marker-color:var(--bad-hl)] [--marker-scale:1]">{stat.topic}</span>
+                      <span className="text-lg text-ink underline decoration-bad decoration-wavy decoration-[1.5px] underline-offset-[5px]">{stat.topic}</span>
                       <span className="tabular text-bad">{percent(stat.accuracy ?? 0)}</span>
                     </span>
                     <span className="text-xs text-muted">

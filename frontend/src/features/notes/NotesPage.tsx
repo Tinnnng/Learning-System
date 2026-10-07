@@ -41,7 +41,7 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
           </span>
           <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>{plainText(question.stem)}</span>
           {note.note && !open && (
-            <span className="mt-1 w-fit max-w-full truncate rounded-sm bg-hl-soft px-2 py-0.5 font-hand text-sm text-ink">{note.note}</span>
+            <span className="mt-1 w-fit max-w-full truncate border-l-2 border-accent bg-sheet-tint py-0.5 pr-2 pl-2.5 text-sm text-ink-soft">{note.note}</span>
           )}
         </span>
       </button>
@@ -133,7 +133,7 @@ export function NotesPage() {
         </EmptyState>
       ) : (
         <section aria-label="收藏與筆記列表" className="rounded-lg bg-sheet px-3 shadow-sheet sm:px-5">
-          <ul className="m-0 list-none p-0">
+          <ul className="stagger m-0 list-none p-0">
             {entries.map((entry) => (
               <NotedRow key={entry.question.id} entry={entry} />
             ))}

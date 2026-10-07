@@ -86,10 +86,10 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
         disabled={note.isPending}
         placeholder="在這裡寫筆記：自己的理解、容易錯的地方…"
         className={cx(
-          'ml-2 min-h-11 w-[calc(100%-0.5rem)] resize-none rounded-md border border-dashed px-3 py-2 font-hand text-[15px] leading-relaxed text-ink',
+          'ml-2 min-h-11 w-[calc(100%-0.5rem)] resize-none rounded-md border border-dashed px-3 py-2 font-display text-[15px] leading-relaxed text-ink',
           'outline-none transition-colors duration-[var(--dur)] [field-sizing:content] placeholder:text-muted/70',
-          value ? 'border-transparent bg-hl-soft' : 'border-line bg-transparent hover:border-rule',
-          'focus:border-accent focus:bg-hl-soft',
+          value ? 'border-transparent bg-sheet-tint' : 'border-line bg-transparent hover:border-rule',
+          'focus:border-accent focus:bg-sheet-tint',
         )}
       />
     </div>

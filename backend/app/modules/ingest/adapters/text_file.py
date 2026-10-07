@@ -53,8 +53,10 @@ class TextFileAdapter:
 
 
 def _default_key(path: Path) -> str:
-    # 檔名可能是中文，source_key 只能用英數，所以用檔名的雜湊；同一個檔名重新匯入會更新同一份題組
-    return "text-" + hashlib.sha1(path.stem.encode("utf-8")).hexdigest()[:10]
+    # 檔名可能是中文，source_key 只能用英數，所以用檔名的雜湊；同一個檔名重新匯入會更新同一份題組。
+    # 要含副檔名：「期中考.txt」和「期中考.md」是兩份不同的題目，不能互相覆蓋。
+    # 改檔名就會變成另一份題組，所以文件建議在檔案裡寫「# 代碼」。
+    return "text-" + hashlib.sha1(path.name.encode("utf-8")).hexdigest()[:10]
 
 
 def _parse_answer(value: str) -> list[str]:
