@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -47,6 +47,15 @@ class ExamItem(Base):
     is_correct: Mapped[bool | None] = mapped_column(Boolean)
     revealed: Mapped[bool] = mapped_column(Boolean, default=False)
     time_spent_seconds: Mapped[int | None] = mapped_column(Integer)
+    essay_text: Mapped[str | None] = mapped_column(Text)
+    """申論題的作答內容"""
+    graded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    """申論題是否已評分"""
+    score: Mapped[float | None] = mapped_column(Float)
+    """申論題得分"""
+    rubric_hits: Mapped[list[int] | None] = mapped_column(JSON)
+    ai_hits: Mapped[list[int] | None] = mapped_column(JSON)
+    ai_feedback: Mapped[str | None] = mapped_column(Text)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     session: Mapped[ExamSession] = relationship(back_populates="items")

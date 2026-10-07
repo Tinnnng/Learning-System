@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.exam import service
-from app.modules.exam.schemas import AnswerIn, ItemOut, SessionCreate, SessionOut, SessionSummary
+from app.modules.exam.schemas import AnswerIn, GradeIn, ItemOut, SessionCreate, SessionOut, SessionSummary
 
 router = APIRouter(tags=["exam"])
 
@@ -41,6 +41,33 @@ def get_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut:
 def answer_item(session_id: int, position: int, data: AnswerIn, db: Session = Depends(get_db)) -> ItemOut:
     try:
         return service.answer_item(db, session_id, position, data)
+    except service.ExamError as error:
+        raise _handle(error) from error
+
+
+@router.post("/sessions/{session_id}/items/{position}/reveal", response_model=ItemOut)
+def reveal_item(session_id: int, position: int, db: Session = Depends(get_db)) -> ItemOut:
+    """申論題（練習模式）：看參考答案與得分要點。"""
+    try:
+        return service.reveal_item(db, session_id, position)
+    except service.ExamError as error:
+        raise _handle(error) from error
+
+
+@router.post("/sessions/{session_id}/items/{position}/grade", response_model=ItemOut)
+def grade_item(session_id: int, position: int, data: GradeIn, db: Session = Depends(get_db)) -> ItemOut:
+    """申論題自評：勾選寫到的得分要點。"""
+    try:
+        return service.grade_item(db, session_id, position, data)
+    except service.ExamError as error:
+        raise _handle(error) from error
+
+
+@router.post("/sessions/{session_id}/items/{position}/ai-grade", response_model=ItemOut)
+def ai_grade_item(session_id: int, position: int, db: Session = Depends(get_db)) -> ItemOut:
+    """請 AI 建議得分要點與評語（會花 Claude 用量，使用者確認後才算分）。"""
+    try:
+        return service.ai_grade_item(db, session_id, position)
     except service.ExamError as error:
         raise _handle(error) from error
 

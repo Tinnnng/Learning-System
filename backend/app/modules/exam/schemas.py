@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.modules.bank.schemas import Asset, PaperRef, QuestionFilter, QuestionType, SourceRef
+from app.modules.bank.schemas import Asset, PaperRef, QuestionFilter, QuestionType, RubricPoint, SourceRef
 
 ExamMode = Literal["practice", "mock"]
 SourceKind = Literal["filter", "wrong_book", "review_due", "starred", "questions"]
@@ -30,20 +30,27 @@ class SessionCreate(BaseModel):
     count: int | None = Field(default=None, ge=1, description="題數，不填就是全部")
     shuffle_questions: bool = True
     shuffle_options: bool = False
+    include_essay: bool = Field(default=False, description="是否包含申論題（要打字作答、自己評分）")
     duration_minutes: int | None = Field(default=None, ge=1, description="模擬考時間；不填時單一試卷會用原試卷的考試時間")
     title: str | None = None
     seed: int | None = Field(default=None, description="測試用：固定亂數")
 
 
 class AnswerIn(BaseModel):
-    response: list[str] = Field(description="畫面上看到的選項字母（打亂後的順序）")
+    response: list[str] = Field(default_factory=list, description="選擇題：畫面上看到的選項字母（打亂後的順序）")
+    text: str | None = Field(default=None, max_length=20000, description="申論題的作答內容")
     time_spent_seconds: int | None = Field(default=None, ge=0)
+
+
+class GradeIn(BaseModel):
+    hits: list[int] = Field(default_factory=list, description="寫到的得分要點（rubric 的索引，從 0 開始）")
 
 
 class ItemOut(BaseModel):
     position: int
     question_id: int
     type: QuestionType
+    label: str | None
     passage: str | None
     stem: str
     options: list[str]
@@ -65,6 +72,18 @@ class ItemOut(BaseModel):
     original_response: list[str] | None = None
     """揭曉後才有：使用者的作答換回原始選項字母（給 AI 助教用，選項可能被打亂過）。"""
     time_spent_seconds: int | None = None
+    # 申論題
+    text: str | None = None
+    """申論題的作答內容"""
+    rubric: list[RubricPoint] | None = None
+    """得分要點，揭曉後才有"""
+    graded: bool = False
+    rubric_hits: list[int] | None = None
+    score: float | None = None
+    """申論題自評後的得分"""
+    ai_hits: list[int] | None = None
+    """AI 建議的得分要點（使用者確認後才算分）"""
+    ai_feedback: str | None = None
 
 
 class SessionResult(BaseModel):
@@ -73,6 +92,8 @@ class SessionResult(BaseModel):
     correct_count: int
     answered_count: int
     total: int
+    essay_pending: int = 0
+    """還沒自評的申論題數；自評完分數才會算進去"""
 
 
 class SessionOut(BaseModel):

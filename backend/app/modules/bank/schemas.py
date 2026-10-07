@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 QuestionType = Literal["single_choice", "multi_choice", "essay"]
 Origin = Literal["official", "generated", "manual"]
 """official＝官方考古題、generated＝由教材出題、manual＝手動新增。"""
-AnswerSource = Literal["ANS", "MOD", "generated", "manual"]
+AnswerSource = Literal["ANS", "MOD", "generated", "manual", "reference"]
+"""reference＝申論題的參考答案（官方沒有公布，由 Claude Code 匯入時撰寫）。"""
 OPTION_LETTERS = "ABCDEFGHIJ"
 
 
@@ -26,16 +27,25 @@ class Asset(BaseModel):
     caption: str | None = None
 
 
+class RubricPoint(BaseModel):
+    """申論題的得分要點：寫到這一點可以拿幾分。"""
+
+    text: str = Field(min_length=1)
+    points: float = Field(gt=0)
+
+
 class QuestionIn(BaseModel):
     number: int = Field(ge=1)
     type: QuestionType = "single_choice"
+    label: str | None = Field(default=None, max_length=20, description="顯示用題號，例如申論題的「一(1)」；空白就顯示 number")
     passage: str | None = Field(default=None, description="題組共用的文章（閱讀測驗、克漏字），Markdown")
     stem: str = Field(min_length=1, description="題幹，Markdown + LaTeX；空格寫成 {{blank}} 或 {{blank:題號}}")
     options: list[str] = Field(default_factory=list, description="選項文字，不含 (A)(B) 標號")
     answer: list[str] = Field(default_factory=list, description="正確選項字母，例如 ['B'] 或 ['B','C']")
     answer_source: AnswerSource
     points: float | None = None
-    explanation: str | None = None
+    explanation: str | None = Field(default=None, description="詳解；申論題放參考答案")
+    rubric: list[RubricPoint] = Field(default_factory=list, description="申論題的得分要點，分數加總等於 points")
     assets: list[Asset] = Field(default_factory=list)
     page_snapshot: str | None = Field(default=None, description="原始頁面截圖，相對於 data/assets/")
     source_ref: SourceRef | None = None

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.modules.bank.schemas import QuestionWithPaper
 
@@ -16,6 +16,9 @@ class AttemptIn(BaseModel):
     session_id: int | None = None
     time_spent_seconds: int | None = None
     answered_at: datetime | None = None
+    score_ratio: float | None = Field(default=None, ge=0, le=1)
+    """申論題的得分比例（得分／配分）。有值時改用申論題規則：低於 essay_wrong_ratio 進錯題本，
+    達到 essay_pass_ratio 才算答好，連續 essay_mastery_streak 次移出。is_correct 會被忽略。"""
 
 
 class ProgressOut(BaseModel):

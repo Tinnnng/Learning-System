@@ -56,6 +56,8 @@ class Question(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     paper_id: Mapped[int] = mapped_column(ForeignKey("exam_paper.id", ondelete="CASCADE"), index=True)
     number: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str | None] = mapped_column(String(20))
+    """顯示用題號（申論題的「一(1)」）"""
     type: Mapped[str] = mapped_column(String(20))
     passage: Mapped[str | None] = mapped_column(Text)
     """題組共用的文章，同一題組的每一題都存一份，打亂出題時才能各自顯示。"""
@@ -66,6 +68,8 @@ class Question(Base):
     answer_source: Mapped[str] = mapped_column(String(20))
     points: Mapped[float | None] = mapped_column(Float)
     explanation: Mapped[str | None] = mapped_column(Text)
+    rubric: Mapped[list[dict]] = mapped_column(JSON, default=list, server_default="[]")
+    """申論題得分要點 [{text, points}]"""
     assets: Mapped[list[dict]] = mapped_column(JSON, default=list)
     page_snapshot: Mapped[str | None] = mapped_column(String(300))
     source_ref: Mapped[dict | None] = mapped_column(JSON)

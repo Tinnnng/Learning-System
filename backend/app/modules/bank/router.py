@@ -51,7 +51,15 @@ def search(
     db: Session = Depends(get_db),
 ) -> SearchResult:
     """關鍵字搜尋題目（空白分隔多個關鍵字，全部都要出現）。"""
-    criteria = QuestionFilter(keyword=q, exam_type=exam_type, year=year, category=category, subject=subject, origin=origin)
+    criteria = QuestionFilter(
+        keyword=q,
+        exam_type=exam_type,
+        year=year,
+        category=category,
+        subject=subject,
+        origin=origin,
+        types=["single_choice", "multi_choice", "essay"],
+    )
     return service.search_questions(db, criteria, limit)
 
 

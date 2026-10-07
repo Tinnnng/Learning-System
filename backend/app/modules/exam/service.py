@@ -3,8 +3,11 @@
 - 練習模式（practice）：每題作答後立即揭曉對錯並記錄到錯題本，答過不能改。
 - 模擬考（mock）：可以改答案，交卷時才評分並記錄。
 - 沒作答的題目交卷時計 0 分，但不記入錯題本（沒看過的題目不算答錯）。
+- 申論題：打字作答；練習模式按「看參考答案」揭曉、模擬考交卷後揭曉，
+  使用者勾選寫到的得分要點自評（可先請 AI 建議），評分後才記入錯題本與總分。
 """
 
+import json
 import random
 import re
 from datetime import UTC, datetime
@@ -12,11 +15,14 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
+from app.modules.ai import service as ai_service
 from app.modules.bank import service as bank_service
-from app.modules.bank.schemas import OPTION_LETTERS, QuestionWithPaper
+from app.modules.bank.schemas import OPTION_LETTERS, QuestionFilter, QuestionWithPaper
 from app.modules.exam.models import ExamItem, ExamSession
 from app.modules.exam.schemas import (
     AnswerIn,
+    GradeIn,
     ItemOut,
     SessionCreate,
     SessionOut,
@@ -62,16 +68,24 @@ def is_response_correct(question_type: str, answer: list[str], response: list[st
     return len(response) == 1 and response[0] in answer
 
 
+def _criteria(data: SessionCreate) -> QuestionFilter:
+    criteria = data.source.filter
+    if data.include_essay and "essay" not in criteria.types:
+        criteria = criteria.model_copy(update={"types": [*criteria.types, "essay"]})
+    return criteria
+
+
 def _resolve_question_ids(db: Session, data: SessionCreate) -> list[int]:
     source = data.source
+    criteria = _criteria(data)
     if source.kind == "filter":
-        return bank_service.query_question_ids(db, source.filter)
+        return bank_service.query_question_ids(db, criteria)
     if source.kind == "wrong_book":
-        return review_service.wrong_question_ids(db, source.filter)
+        return review_service.wrong_question_ids(db, criteria)
     if source.kind == "review_due":
-        return review_service.wrong_question_ids(db, source.filter, due_only=True)
+        return review_service.wrong_question_ids(db, criteria, due_only=True)
     if source.kind == "starred":
-        allowed = set(bank_service.query_question_ids(db, source.filter))
+        allowed = set(bank_service.query_question_ids(db, criteria))
         return [qid for qid in notes_service.starred_question_ids(db) if qid in allowed]
     found = {q.id for q in bank_service.get_questions(db, source.question_ids or [])}
     return [qid for qid in source.question_ids or [] if qid in found]
@@ -103,7 +117,7 @@ def create_session(db: Session, data: SessionCreate) -> SessionOut:
     duration = data.duration_minutes
     if duration is None and data.mode == "mock":
         papers = {q.paper.id for q in questions}
-        if len(papers) == 1 and len(questions) == len(bank_service.query_question_ids(db, data.source.filter)):
+        if len(papers) == 1 and len(questions) == len(bank_service.query_question_ids(db, _criteria(data))):
             duration = bank_service.get_paper(db, papers.pop()).duration_minutes
 
     session = ExamSession(
@@ -152,12 +166,18 @@ def _to_original(item: ExamItem, letters: list[str]) -> list[str]:
     return sorted(set(original))
 
 
+def _answered(item: ExamItem) -> bool:
+    return item.response is not None or bool(item.essay_text)
+
+
 def _item_out(item: ExamItem, question: QuestionWithPaper, reveal: bool) -> ItemOut:
     revealed = reveal or item.revealed
+    essay = question.type == "essay"
     return ItemOut(
         position=item.position,
         question_id=question.id,
         type=question.type,
+        label=question.label,
         passage=question.passage,
         stem=question.stem,
         options=[question.options[index] for index in item.option_order],
@@ -168,13 +188,20 @@ def _item_out(item: ExamItem, question: QuestionWithPaper, reveal: bool) -> Item
         paper=question.paper,
         points=item.points,
         response=_to_display(item, item.response) if item.response else None,
-        answered=item.response is not None,
+        answered=_answered(item),
         revealed=revealed,
         is_correct=item.is_correct if revealed else None,
-        correct=_to_display(item, question.answer) if revealed else None,
+        correct=_to_display(item, question.answer) if revealed and not essay else None,
         explanation=question.explanation if revealed else None,
         original_response=item.response if revealed else None,
         time_spent_seconds=item.time_spent_seconds,
+        text=item.essay_text,
+        rubric=question.rubric if revealed and essay else None,
+        graded=item.graded,
+        rubric_hits=item.rubric_hits,
+        score=item.score,
+        ai_hits=item.ai_hits,
+        ai_feedback=item.ai_feedback,
     )
 
 
@@ -190,7 +217,7 @@ def get_session(db: Session, session_id: int) -> SessionOut:
     questions = {q.id: q for q in bank_service.get_questions_with_paper(db, [i.question_id for i in session.items])}
     submitted = session.submitted_at is not None
     items = [_item_out(item, questions[item.question_id], submitted) for item in session.items if item.question_id in questions]
-    answered = sum(1 for item in session.items if item.response is not None)
+    answered = sum(1 for item in session.items if _answered(item))
     result = None
     if submitted:
         result = SessionResult(
@@ -199,6 +226,11 @@ def get_session(db: Session, session_id: int) -> SessionOut:
             correct_count=session.correct_count or 0,
             answered_count=answered,
             total=len(session.items),
+            essay_pending=sum(
+                1
+                for item in session.items
+                if item.question_id in questions and questions[item.question_id].type == "essay" and not item.graded
+            ),
         )
     return SessionOut(
         id=session.id,
@@ -217,17 +249,32 @@ def get_session(db: Session, session_id: int) -> SessionOut:
     )
 
 
+def _find_item(session: ExamSession, position: int) -> ExamItem:
+    item = next((i for i in session.items if i.position == position), None)
+    if item is None:
+        raise ExamError("找不到這一題", status_code=404)
+    return item
+
+
 def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> ItemOut:
     session = _load(db, session_id)
     if session.submitted_at is not None:
         raise ExamError("這次測驗已經交卷", status_code=409)
-    item = next((i for i in session.items if i.position == position), None)
-    if item is None:
-        raise ExamError("找不到這一題", status_code=404)
+    item = _find_item(session, position)
     if item.revealed:
-        raise ExamError("練習模式揭曉答案後不能修改", status_code=409)
+        raise ExamError("揭曉答案後不能修改", status_code=409)
 
     question = bank_service.get_questions_with_paper(db, [item.question_id])[0]
+    if question.type == "essay":
+        # 申論題只存作答內容；練習模式要按「看參考答案」才揭曉
+        item.essay_text = (data.text or "").strip() or None
+        item.time_spent_seconds = data.time_spent_seconds
+        item.answered_at = _now()
+        db.commit()
+        return _item_out(item, question, reveal=False)
+    if data.text is not None:
+        raise ExamError("選擇題請選選項")
+
     response = _to_original(item, data.response)
     if question.type == "single_choice" and len(response) > 1:
         raise ExamError("單選題只能選一個答案")
@@ -243,7 +290,7 @@ def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> 
     return _item_out(item, question, reveal=False)
 
 
-def _attempt(session: ExamSession, item: ExamItem) -> AttemptIn:
+def _attempt(session: ExamSession, item: ExamItem, score_ratio: float | None = None) -> AttemptIn:
     return AttemptIn(
         question_id=item.question_id,
         is_correct=bool(item.is_correct),
@@ -251,7 +298,111 @@ def _attempt(session: ExamSession, item: ExamItem) -> AttemptIn:
         session_id=session.id,
         time_spent_seconds=item.time_spent_seconds,
         answered_at=item.answered_at.replace(tzinfo=UTC) if item.answered_at else None,
+        score_ratio=score_ratio,
     )
+
+
+def _essay_item(db: Session, session_id: int, position: int) -> tuple[ExamSession, ExamItem, QuestionWithPaper]:
+    session = _load(db, session_id)
+    item = _find_item(session, position)
+    question = bank_service.get_questions_with_paper(db, [item.question_id])[0]
+    if question.type != "essay":
+        raise ExamError("這一題不是申論題")
+    return session, item, question
+
+
+def reveal_item(db: Session, session_id: int, position: int) -> ItemOut:
+    """練習模式：寫完申論題後看參考答案與得分要點（之後不能再改答案）。"""
+    session, item, question = _essay_item(db, session_id, position)
+    if session.mode != "practice" and session.submitted_at is None:
+        raise ExamError("模擬考要交卷後才能看參考答案", status_code=409)
+    item.revealed = True
+    db.commit()
+    return _item_out(item, question, reveal=False)
+
+
+def _session_score(session: ExamSession) -> None:
+    session.correct_count = sum(1 for item in session.items if item.is_correct)
+    session.score = sum(
+        (item.score or 0.0) if item.graded else item.points if item.is_correct else 0.0 for item in session.items
+    )
+
+
+def grade_item(db: Session, session_id: int, position: int, data: GradeIn) -> ItemOut:
+    """申論題自評：勾選寫到的得分要點，加總成分數。第一次評分時記入錯題本，之後修改只更新分數。"""
+    session, item, question = _essay_item(db, session_id, position)
+    if not (item.revealed or session.submitted_at is not None):
+        raise ExamError("先看參考答案再評分", status_code=409)
+    hits = sorted(set(data.hits))
+    if any(index < 0 or index >= len(question.rubric) for index in hits):
+        raise ExamError("得分要點不存在")
+    score = round(sum(question.rubric[index].points for index in hits), 2)
+    ratio = min(score / item.points, 1.0) if item.points else 0.0
+    first_time = not item.graded
+    item.rubric_hits = hits
+    item.score = score
+    item.graded = True
+    item.is_correct = ratio >= get_settings().essay_pass_ratio
+    if item.answered_at is None:
+        item.answered_at = _now()
+    if first_time:
+        review_service.record_attempts(db, [_attempt(session, item, score_ratio=ratio)])
+    if session.submitted_at is not None:
+        _session_score(session)
+    db.commit()
+    return _item_out(item, question, reveal=session.submitted_at is not None)
+
+
+AI_GRADE_SYSTEM = """你是台灣國家考試申論題的閱卷老師。依「得分要點」判斷考生的答案寫到哪些要點。
+只輸出 JSON 物件，不要其他文字或程式碼框：{"hits": [要點編號, ...], "feedback": "..."}
+規則：
+- 要點的意思有寫到、而且正確才算（不必字句相同）；只寫關鍵字沒有說明、或說明錯誤的不算。
+- feedback 用繁體中文 2 到 4 句：先說寫得好的地方，再指出漏掉或寫錯的要點、怎麼補強。不要整段抄參考答案。"""
+
+
+def _parse_json(text: str) -> dict:
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    try:
+        payload = json.loads(match.group()) if match else None
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict):
+        raise ExamError("AI 回傳的格式看不懂，請再試一次", status_code=502)
+    return payload
+
+
+def ai_grade_item(db: Session, session_id: int, position: int) -> ItemOut:
+    """請 AI 依得分要點建議要勾哪些、給一段評語。不直接算分，使用者確認後才評分。"""
+    session, item, question = _essay_item(db, session_id, position)
+    if not (item.revealed or session.submitted_at is not None):
+        raise ExamError("先看參考答案再評分", status_code=409)
+    if not item.essay_text:
+        raise ExamError("這題沒有作答，不需要 AI 評分")
+    lines = []
+    if question.passage:
+        lines.append(f"題目背景：{question.passage[:1500]}")
+    lines.append(f"題目（{item.points:g} 分）：{question.stem[:1500]}")
+    lines.append("得分要點：")
+    lines += [f"{index + 1}. （{point.points:g} 分）{point.text}" for index, point in enumerate(question.rubric)]
+    lines.append(f"參考答案：{(question.explanation or '')[:2000]}")
+    lines.append(f"考生答案：{item.essay_text[:4000]}")
+    try:
+        text = ai_service.complete(db, "essay_grade", AI_GRADE_SYSTEM, "\n".join(lines)).text
+    except ai_service.AiUnavailable as error:
+        raise ExamError(str(error), status_code=503) from error
+    payload = _parse_json(text)
+    hits: list[int] = []
+    for value in payload.get("hits") or []:
+        found = re.search(r"\d+", str(value))
+        index = int(found.group()) - 1 if found else -1
+        if 0 <= index < len(question.rubric) and index not in hits:
+            hits.append(index)
+    item.ai_hits = sorted(hits)
+    feedback = payload.get("feedback")
+    item.ai_feedback = feedback.strip() if isinstance(feedback, str) and feedback.strip() else None
+    db.commit()
+    return _item_out(item, question, reveal=session.submitted_at is not None)
 
 
 def submit_session(db: Session, session_id: int) -> SessionOut:
@@ -259,8 +410,14 @@ def submit_session(db: Session, session_id: int) -> SessionOut:
     if session.submitted_at is not None:
         raise ExamError("這次測驗已經交卷", status_code=409)
 
+    questions = bank_service.get_questions_with_paper(db, [i.question_id for i in session.items])
+    essay_ids = {question.id for question in questions if question.type == "essay"}
     attempts = []
     for item in session.items:
+        if item.question_id in essay_ids:
+            if not item.essay_text and not item.graded:  # 沒寫的申論題直接 0 分，不進錯題本
+                item.graded, item.score, item.is_correct = True, 0.0, False
+            continue  # 有寫的等使用者自評
         answered = bool(item.response)
         if not answered:
             item.is_correct = False
@@ -269,8 +426,7 @@ def submit_session(db: Session, session_id: int) -> SessionOut:
     if attempts:
         review_service.record_attempts(db, attempts)
 
-    session.correct_count = sum(1 for item in session.items if item.is_correct)
-    session.score = sum(item.points for item in session.items if item.is_correct)
+    _session_score(session)
     session.submitted_at = _now()
     db.commit()
     return get_session(db, session_id)
@@ -279,7 +435,7 @@ def submit_session(db: Session, session_id: int) -> SessionOut:
 def list_sessions(db: Session, status: str | None = None, limit: int = 50) -> list[SessionSummary]:
     answered = (
         select(func.count(ExamItem.id))
-        .where(ExamItem.session_id == ExamSession.id, ExamItem.response.is_not(None))
+        .where(ExamItem.session_id == ExamSession.id, ExamItem.response.is_not(None) | ExamItem.essay_text.is_not(None))
         .correlate(ExamSession)
         .scalar_subquery()
     )

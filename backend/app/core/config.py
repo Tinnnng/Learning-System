@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     """每日單字複習的題數。"""
     word_mastery_streak: int = 5
     """單字連續答對幾次才移出錯題單字。"""
+    essay_wrong_ratio: float = 0.6
+    """申論題得分低於配分的這個比例就收進錯題本。"""
+    essay_pass_ratio: float = 0.8
+    """申論題得分達到配分的這個比例才算「答好」，連續 essay_mastery_streak 次就移出錯題本。"""
+    essay_mastery_streak: int = 2
     timezone: str = "Asia/Taipei"
     """判斷「今天」用的時區（每日單字、每日統計）。"""
 

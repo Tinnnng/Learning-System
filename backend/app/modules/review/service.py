@@ -45,12 +45,17 @@ def _progress_out(progress: QuestionProgress) -> ProgressOut:
         correct_count=progress.correct_count,
         wrong_count=progress.wrong_count,
         correct_streak=progress.correct_streak,
-        mastery_target=get_settings().mastery_streak,
+        mastery_target=_mastery_target(progress),
         in_wrong_book=progress.in_wrong_book,
         last_answered_at=progress.last_answered_at,
         last_wrong_at=progress.last_wrong_at,
         mastered_at=progress.mastered_at,
     )
+
+
+def _mastery_target(progress: QuestionProgress) -> int:
+    settings = get_settings()
+    return settings.essay_mastery_streak if progress.essay else settings.mastery_streak
 
 
 def _get_or_create_progress(db: Session, question_id: int) -> QuestionProgress:
@@ -70,17 +75,23 @@ def _get_or_create_progress(db: Session, question_id: int) -> QuestionProgress:
 
 def record_attempts(db: Session, attempts: list[AttemptIn]) -> list[ProgressOut]:
     """記錄作答並更新錯題本。只 flush 不 commit，由呼叫端（例如交卷）決定交易範圍。"""
-    mastery_streak = get_settings().mastery_streak
+    settings = get_settings()
     results = []
     for attempt in attempts:
         answered_at = _utc_naive(attempt.answered_at)
         review_time = answered_at.replace(tzinfo=UTC)
+        ratio = attempt.score_ratio
+        if ratio is None:
+            passed, wrong = attempt.is_correct, not attempt.is_correct
+        else:  # 申論題：低於 60% 算錯，80% 以上才算答好，中間的不進錯題本但會打斷連續
+            passed, wrong = ratio >= settings.essay_pass_ratio, ratio < settings.essay_wrong_ratio
         db.add(
             AttemptLog(
                 question_id=attempt.question_id,
                 session_id=attempt.session_id,
-                is_correct=attempt.is_correct,
+                is_correct=passed,
                 response=attempt.response,
+                score_ratio=ratio,
                 time_spent_seconds=attempt.time_spent_seconds,
                 answered_at=answered_at,
             )
@@ -88,18 +99,24 @@ def record_attempts(db: Session, attempts: list[AttemptIn]) -> list[ProgressOut]
         progress = _get_or_create_progress(db, attempt.question_id)
         progress.attempts += 1
         progress.last_answered_at = answered_at
-        progress.last_correct = attempt.is_correct
+        progress.last_correct = passed
+        if ratio is not None:
+            progress.essay = True
 
-        if attempt.is_correct:
+        if passed:
             progress.correct_count += 1
             progress.correct_streak += 1
             if progress.in_wrong_book:
-                if progress.correct_streak >= mastery_streak:
+                if progress.correct_streak >= _mastery_target(progress):
                     progress.in_wrong_book = False
                     progress.mastered_at = answered_at
                     srs_service.remove(db, "question", attempt.question_id)
                 else:
                     srs_service.review(db, "question", attempt.question_id, "good", now=review_time)
+        elif not wrong:
+            progress.correct_streak = 0
+            if progress.in_wrong_book:
+                srs_service.review(db, "question", attempt.question_id, "hard", now=review_time)
         else:
             progress.wrong_count += 1
             progress.correct_streak = 0

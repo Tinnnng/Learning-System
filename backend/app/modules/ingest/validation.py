@@ -51,7 +51,17 @@ def check_bundle(bundle: ImportBundle) -> CheckReport:
             if question.type == "single_choice" and len(question.answer) > 1 and not bundle.paper.answer_note:
                 add("warning", "單選題有多個正確答案，但試卷沒有更正備註")
         elif question.type == "essay":
-            add("warning", "申論題目前不支援作答，匯入後只會顯示題目")
+            if question.options or question.answer:
+                add("error", "申論題不能有選項或選擇題答案")
+            if not question.points:
+                add("error", "申論題必須有配分（points）")
+            if not (question.explanation or "").strip():
+                add("error", "申論題必須附上參考答案（explanation）")
+            if not question.rubric:
+                add("error", "申論題必須附上得分要點（rubric）")
+            elif question.points and abs(sum(point.points for point in question.rubric) - question.points) > 0.01:
+                total = sum(point.points for point in question.rubric)
+                add("error", f"得分要點加總 {total:g} 分，與配分 {question.points:g} 分不符")
 
         if bundle.paper.origin == "generated":
             if not question.explanation:
