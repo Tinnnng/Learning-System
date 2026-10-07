@@ -1,24 +1,28 @@
 /**
- * 題目的收藏（星號）與個人筆記。筆記像貼在題目旁的便條紙，離開輸入框時自動儲存。
+ * 題目的收藏（星號）與個人筆記。每題底下都有一塊筆記區，直接寫就好：
+ * 停止輸入約 1 秒或離開輸入框就自動儲存。
  * 列表頁可以先用 lib/notes 的 prefetchNotes 一次取多題，避免每題各發一次請求。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Icon } from '@/components/Icon'
 import { api } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { type Note, noteKey } from '@/lib/notes'
 
+const SAVE_DELAY_MS = 1000
+
 export function NoteControls({ questionId, className }: { questionId: number; className?: string }) {
   const queryClient = useQueryClient()
+  const fieldId = useId()
   const note = useQuery({
     queryKey: noteKey(questionId),
     queryFn: () => api.get<Note>(`/notes/questions/${questionId}`),
     staleTime: Infinity,
   })
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
+  // 使用者開始輸入前顯示資料庫的內容；輸入後以草稿為準，避免儲存回來時蓋掉正在打的字
+  const [draft, setDraft] = useState<string | null>(null)
   const save = useMutation({
     mutationFn: (data: { starred: boolean; note: string | null }) => api.put<Note>(`/notes/questions/${questionId}`, data),
     onSuccess: (saved) => {
@@ -27,23 +31,30 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
     },
   })
 
-  const current = note.data
-  const starred = current?.starred ?? false
-  const text = current?.note ?? null
+  const starred = note.data?.starred ?? false
+  const text = note.data?.note ?? null
+  const value = draft ?? text ?? ''
+  const dirty = draft !== null && (draft.trim() || null) !== text
 
   const commit = () => {
-    setEditing(false)
-    const next = draft.trim() || null
-    if (next !== text) save.mutate({ starred, note: next })
+    if (dirty && !save.isPending) save.mutate({ starred, note: draft?.trim() || null })
   }
 
+  useEffect(() => {
+    if (!dirty) return
+    const timer = window.setTimeout(commit, SAVE_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  })
+
+  const status = save.isPending ? '儲存中…' : dirty ? '' : save.isSuccess && draft !== null ? '已儲存' : ''
+
   return (
-    <div className={cx('flex flex-col gap-2', className)}>
+    <div className={cx('flex flex-col gap-1.5', className)}>
       <div className="flex items-center gap-1">
         <button
           type="button"
           aria-pressed={starred}
-          onClick={() => save.mutate({ starred: !starred, note: text })}
+          onClick={() => save.mutate({ starred: !starred, note: draft !== null ? draft.trim() || null : text })}
           className={cx(
             'inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs transition-colors',
             starred ? 'text-ink' : 'text-muted hover:bg-sheet-tint hover:text-ink',
@@ -57,48 +68,30 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
           />
           {starred ? '已收藏' : '收藏'}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setDraft(text ?? '')
-            setEditing(true)
-          }}
-          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted transition-colors hover:bg-sheet-tint hover:text-ink"
-        >
+        <label htmlFor={fieldId} className="inline-flex h-8 items-center gap-1 px-2 text-xs text-muted">
           <Icon name="note" size={16} />
-          {text ? '編輯筆記' : '寫筆記'}
-        </button>
+          筆記
+        </label>
+        <span className="ml-auto text-[11px] text-muted" role="status" aria-live="polite">
+          {status}
+        </span>
       </div>
-
-      {editing ? (
-        <textarea
-          autoFocus
-          rows={3}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setEditing(false)
-          }}
-          maxLength={5000}
-          placeholder="寫下自己的理解、容易錯的地方…（離開輸入框自動儲存）"
-          aria-label="題目筆記"
-          className="w-full rounded-md border border-line bg-hl-soft px-3 py-2 font-hand text-[15px] leading-relaxed text-ink outline-none focus:border-accent"
-        />
-      ) : (
-        text && (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(text)
-              setEditing(true)
-            }}
-            className="w-full -rotate-[0.4deg] rounded-md bg-hl-soft px-3 py-2 text-left font-hand text-[15px] leading-relaxed whitespace-pre-wrap text-ink shadow-[0_1px_0_rgb(0_0_0/0.06)] transition-transform hover:rotate-0"
-          >
-            {text}
-          </button>
-        )
-      )}
+      <textarea
+        id={fieldId}
+        rows={1}
+        value={value}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        maxLength={5000}
+        disabled={note.isPending}
+        placeholder="在這裡寫筆記：自己的理解、容易錯的地方…"
+        className={cx(
+          'ml-2 min-h-11 w-[calc(100%-0.5rem)] resize-none rounded-md border border-dashed px-3 py-2 font-hand text-[15px] leading-relaxed text-ink',
+          'outline-none transition-colors duration-[var(--dur)] [field-sizing:content] placeholder:text-muted/70',
+          value ? 'border-transparent bg-hl-soft' : 'border-line bg-transparent hover:border-rule',
+          'focus:border-accent focus:bg-hl-soft',
+        )}
+      />
     </div>
   )
 }

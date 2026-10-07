@@ -1,6 +1,6 @@
 /**
- * AI 助教：題目揭曉答案後才出現。第一次點會請 AI 依官方答案解釋（約 10 秒），
- * 之後同一題直接讀資料庫，不再花用量。可以追問、回報解釋有誤、重新產生。
+ * AI 助教：題目揭曉答案後才出現。打開後由使用者決定要不要請 AI 詳解（約 10 秒），
+ * 也可以不看詳解直接發問。詳解存在資料庫，同一題再看不花用量。可以追問、回報解釋有誤、重新產生。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -64,15 +64,6 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const busy = explain.isPending || ask.isPending
   const error = explain.error ?? ask.error
 
-  const start = () => {
-    setOpen(true)
-    if (!thread.data) {
-      fetchThread(questionId).then((data) => {
-        queryClient.setQueryData(key, data)
-        if (!data.messages.some((message) => message.kind === 'explanation')) explain.mutate(false)
-      })
-    }
-  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -82,9 +73,9 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   if (!open) {
     return (
       <div className={className}>
-        <Button variant="secondary" size="sm" onClick={start}>
+        <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
           <Icon name="spark" size={17} />
-          問 AI 助教
+          AI 助教
         </Button>
       </div>
     )
@@ -106,7 +97,20 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         </button>
       </header>
 
-      {messages.length === 0 && busy && (
+      {thread.isPending && <p className="m-0 text-sm text-muted">載入中…</p>}
+      {thread.isError && <p className="m-0 text-sm text-bad">{errorText(thread.error)}</p>}
+
+      {thread.data && !hasExplanation && !explain.isPending && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Button size="sm" onClick={() => explain.mutate(false)} disabled={busy}>
+            <Icon name="spark" size={16} />
+            請 AI 詳解這題
+          </Button>
+          <span className="text-xs text-muted">約 10 秒；只想問某個地方，也可以直接在下面發問。</span>
+        </div>
+      )}
+
+      {explain.isPending && !hasExplanation && (
         <p className="m-0 flex items-center gap-2 text-sm text-muted" role="status">
           <span className="h-3 w-2 animate-pulse rounded-full border border-accent" />
           AI 正在看這一題，大約 10 秒…
@@ -141,7 +145,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         )}
       </ol>
 
-      {busy && messages.length > 0 && (
+      {(ask.isPending || (explain.isPending && hasExplanation)) && (
         <p className="m-0 text-sm text-muted" role="status">
           AI 回覆中…
         </p>
@@ -149,7 +153,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
       {error && (
         <p className="m-0 text-sm text-bad" role="alert">
           {errorText(error)}
-          {!hasExplanation && (
+          {explain.isError && !hasExplanation && (
             <button type="button" className="ml-2 underline" onClick={() => explain.mutate(false)}>
               再試一次
             </button>
@@ -157,7 +161,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         </p>
       )}
 
-      {hasExplanation && (thread.data?.remaining_questions ?? 0) > 0 && (
+      {thread.data && thread.data.remaining_questions > 0 && (
         <form onSubmit={submit} className="flex gap-2">
           <label htmlFor={`ask-${questionId}`} className="sr-only">
             追問 AI 助教
@@ -167,7 +171,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             maxLength={500}
-            placeholder="還有哪裡不懂？例如：為什麼 (B) 不對？"
+            placeholder={hasExplanation ? '還有哪裡不懂？例如：為什麼 (B) 不對？' : '直接問，例如：為什麼 (B) 不對？'}
             className="h-10 min-w-0 flex-1 rounded-md border border-line bg-sheet px-3 text-sm text-ink outline-none focus:border-ink"
           />
           <Button type="submit" size="sm" disabled={!draft.trim() || busy} aria-label="送出">
@@ -178,7 +182,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
 
       {status.data && (
         <p className="m-0 text-[11px] text-muted">
-          {hasExplanation && `還可以追問 ${thread.data?.remaining_questions ?? 0} 次・`}
+          {thread.data && `還可以發問 ${thread.data.remaining_questions} 次・`}
           本月 AI 用量 ${status.data.month_cost_usd.toFixed(2)}／${status.data.month_budget_usd.toFixed(0)}（{status.data.model}）
         </p>
       )}
