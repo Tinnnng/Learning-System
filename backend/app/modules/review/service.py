@@ -22,6 +22,7 @@ from app.modules.review.schemas import (
     Overview,
     ProgressOut,
     QuestionHistory,
+    QuestionStat,
     WrongQuestionOut,
     WrongStatus,
 )
@@ -180,6 +181,17 @@ def question_history(db: Session, question_id: int) -> QuestionHistory:
             for log in logs
         ],
     )
+
+
+def question_stats(db: Session, question_ids: list[int]) -> dict[int, QuestionStat]:
+    """各題的累計作答；沒作答過的題目不在結果裡。"""
+    if not question_ids:
+        return {}
+    rows = db.scalars(select(QuestionProgress).where(QuestionProgress.question_id.in_(question_ids)))
+    return {
+        row.question_id: QuestionStat(attempts=row.attempts, correct=row.correct_count, in_wrong_book=row.in_wrong_book)
+        for row in rows
+    }
 
 
 def _group_stats(groups: dict[str, list[QuestionProgress]]) -> list[GroupStat]:

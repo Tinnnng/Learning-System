@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     ai_monthly_budget_usd: float = 3.0
     """每月 AI 用量上限（以 Claude Code 回報的等值美元計），超過就停用到下個月。"""
 
+    # 知識點弱點分析
+    topic_batch_size: int = 20
+    """AI 標知識點時每次送幾題。"""
+    topic_weak_accuracy: float = 0.6
+    """知識點正確率低於這個值就算弱點。"""
+    topic_weak_min_attempts: int = 3
+    """知識點至少作答幾次才判斷是不是弱點。"""
+
     # 備份
     backup_keep: int = 10
     """自動備份保留幾份（手動備份與還原前的備份不會被自動刪除）。"""

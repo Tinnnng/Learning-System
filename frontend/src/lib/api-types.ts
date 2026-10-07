@@ -1019,6 +1019,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description 各科目的知識點與正確率，以及所有科目的弱點。
+         */
+        get: operations["overview_api_topics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tag Subject
+         * @description 請 AI 幫一個科目的題目標知識點（會花 Claude 用量）。
+         */
+        post: operations["tag_subject_api_topics_tag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2132,6 +2172,19 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** SubjectTopics */
+        SubjectTopics: {
+            /** Subject */
+            subject: string;
+            /** Questions */
+            questions: number;
+            /** Tagged */
+            tagged: number;
+            /** Estimated Calls */
+            estimated_calls: number;
+            /** Topics */
+            topics: components["schemas"]["TopicStat"][];
+        };
         /** SubscriptionIn */
         SubscriptionIn: {
             /**
@@ -2176,6 +2229,59 @@ export interface components {
             updated: number;
             /** Removed */
             removed: number;
+        };
+        /** TagRequest */
+        TagRequest: {
+            /** Subject */
+            subject: string;
+            /**
+             * Retag
+             * @default false
+             */
+            retag: boolean;
+        };
+        /** TagResult */
+        TagResult: {
+            /** Subject */
+            subject: string;
+            /** Tagged */
+            tagged: number;
+            /** Topics */
+            topics: string[];
+            /** Calls */
+            calls: number;
+        };
+        /** TopicStat */
+        TopicStat: {
+            /** Topic */
+            topic: string;
+            /** Questions */
+            questions: number;
+            /** Answered */
+            answered: number;
+            /** Attempts */
+            attempts: number;
+            /** Correct */
+            correct: number;
+            /** Accuracy */
+            accuracy: number | null;
+            /** Wrong Book */
+            wrong_book: number;
+            /** Weak */
+            weak: boolean;
+            /** Question Ids */
+            question_ids: number[];
+        };
+        /** TopicsOverview */
+        TopicsOverview: {
+            /** Subjects */
+            subjects: components["schemas"]["SubjectTopics"][];
+            /** Weak */
+            weak: components["schemas"]["WeakTopic"][];
+            /** Weak Accuracy */
+            weak_accuracy: number;
+            /** Weak Min Attempts */
+            weak_min_attempts: number;
         };
         /** TutorThread */
         TutorThread: {
@@ -2231,6 +2337,29 @@ export interface components {
             daily_done: number;
             /** Daily Total */
             daily_total: number;
+        };
+        /** WeakTopic */
+        WeakTopic: {
+            /** Topic */
+            topic: string;
+            /** Questions */
+            questions: number;
+            /** Answered */
+            answered: number;
+            /** Attempts */
+            attempts: number;
+            /** Correct */
+            correct: number;
+            /** Accuracy */
+            accuracy: number | null;
+            /** Wrong Book */
+            wrong_book: number;
+            /** Weak */
+            weak: boolean;
+            /** Question Ids */
+            question_ids: number[];
+            /** Subject */
+            subject: string;
         };
         /** WordBatchIn */
         WordBatchIn: {
@@ -4273,6 +4402,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestoreResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_topics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicsOverview"];
+                };
+            };
+        };
+    };
+    tag_subject_api_topics_tag_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagResult"];
                 };
             };
             /** @description Validation Error */

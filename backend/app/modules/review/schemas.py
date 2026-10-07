@@ -59,6 +59,14 @@ class GroupStat(BaseModel):
     wrong_book: int
 
 
+class QuestionStat(BaseModel):
+    """某一題的累計作答（給其他模組做統計，例如知識點弱點分析）。"""
+
+    attempts: int
+    correct: int
+    in_wrong_book: bool
+
+
 class DailyStat(BaseModel):
     day: date
     attempts: int

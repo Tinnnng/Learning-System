@@ -58,6 +58,7 @@ backend/
       calendar/        行事曆：考試日期、倒數、拍照辨識、匯出 .ics
       notes/           題目收藏與個人筆記
       backup/          備份與還原（zip 快照存 data/backups/，啟動時自動備份）
+      topics/          知識點：AI 依科目標記、弱點分析
     每個模組內：router.py / service.py / models.py / schemas.py
   tests/
 frontend/
