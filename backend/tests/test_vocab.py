@@ -104,6 +104,15 @@ def test_merge_meanings():
     assert service.merge_meanings("發票", "發票；帳單") == "發票；帳單"
 
 
+def test_quiz_types_never_cloze(db, words):
+    from app.modules.vocab.models import Word
+
+    pool = list(db.query(Word))
+    rng = random.Random(0)
+    types = {quiz.choose_quiz_type(word, 3, rng, len(pool)) for word in pool for _ in range(30)}
+    assert types == {"en_to_zh", "zh_to_en", "spelling"}  # 使用者決定不出克漏字
+
+
 def test_quiz_items(words):
     from app.modules.vocab.models import Word
 

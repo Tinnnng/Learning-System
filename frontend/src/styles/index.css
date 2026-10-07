@@ -112,18 +112,20 @@
      ::before 在跨行的 inline 元素上只會從第一行開頭延伸到最後一行結尾，選項換行時色塊比字短、形狀也不對。
      box-decoration-break: slice 讓各行背景接成一條長帶，background-size 從 0 長到 100% 時
      會先刷完第一行、再接著刷第二行，像真的螢光筆一路劃過去；長度一定和文字一樣長。 */
+  /* 兩層：上層是選下去的螢光筆（--marker-scale），下層是滑過時的淡色預覽（--marker-hover），
+     兩層都和文字一樣長，各自從左刷到右 */
   .marker-text {
     --marker-band: var(--marker-color, var(--hl));
+    --marker-preview: var(--hl-soft);
     padding-inline: 3px;
     margin-inline: -3px;
-    background-image: linear-gradient(
-      transparent 24%,
-      var(--marker-band) 24%,
-      var(--marker-band) 88%,
-      transparent 88%
-    );
+    background-image:
+      linear-gradient(transparent 24%, var(--marker-band) 24%, var(--marker-band) 88%, transparent 88%),
+      linear-gradient(transparent 24%, var(--marker-preview) 24%, var(--marker-preview) 88%, transparent 88%);
     background-repeat: no-repeat;
-    background-size: calc(var(--marker-scale, 1) * 100%) 100%;
+    background-size:
+      calc(var(--marker-scale, 1) * 100%) 100%,
+      calc(var(--marker-hover, 0) * 100%) 100%;
     -webkit-box-decoration-break: slice;
     box-decoration-break: slice;
     transition: background-size var(--dur-marker-text, var(--dur-marker)) var(--ease-marker);

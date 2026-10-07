@@ -299,6 +299,8 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     for word_id, quiz_type in zip(daily.word_ids, daily.quiz_types, strict=True):
         if word_id not in words:
             continue  # 單字被刪除
+        if quiz_type == "cloze":
+            quiz_type = "en_to_zh"  # 不再出克漏字；改題型之前就抽好的每日單字也換掉
         item = quiz.build_item(words[word_id], quiz_type, pool, random.Random(f"{day}-{word_id}"))
         if word_id in answered:
             item = item.model_copy(update={"answered": True, "is_correct": answered[word_id]})

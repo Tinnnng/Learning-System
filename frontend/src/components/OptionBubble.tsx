@@ -2,7 +2,7 @@
  * 選項：選下去時，一道螢光筆從左刷到右（方向 B「螢光筆與原子筆」）。
  *
  * 狀態：
- * - idle：未選（滑過時整列變亮，提示可以點）
+ * - idle：未選（滑過時淡色螢光筆整段刷過去，提示可以點）
  * - chosen：已選（尚未揭曉，例如模擬考）→ 黃色螢光筆
  * - right：選了而且對 → 綠色螢光筆
  * - wrong：選了但錯 → 粉紅螢光筆＋刪除線
@@ -65,8 +65,9 @@ export function OptionBubble({ letter, text, state, disabled, multiple, onSelect
         <span
           className={cx(
             // 長選項換行時，螢光筆會一路刷過每一行（見 index.css 的 .marker-text）。
-            // 滑過時只讓整列變亮，不先露出一小截螢光筆：只有選下去才刷，避免看起來像殘留的色塊
+            // 滑過未選的選項：淡色螢光筆整段刷過去預覽（和文字一樣長）；選下去再用正式顏色刷一次
             'marker-text [--marker-scale:0]',
+            !disabled && !color && 'group-hover:[--marker-hover:1] group-focus-visible:[--marker-hover:1]',
             state === 'answer' && 'delay-[220ms]',
             state === 'wrong' && 'line-through decoration-bad decoration-2',
           )}
