@@ -33,7 +33,7 @@ if (!chosen) {
   process.exit(1)
 }
 
-console.log(`\n手機請連：http://${chosen.address}:5173/   （網卡：${chosen.name}）`)
+console.log(`\n手機和這台電腦都請連：http://${chosen.address}:5173/   （網卡：${chosen.name}；這個模式下 localhost 連不到）`)
 console.log('⚠ 沒有登入機制，同一個網路的人都能使用；只在信任的家用 Wi-Fi 開，用完就關掉。\n')
 
 const vite = spawn('npx', ['vite', '--host', chosen.address, '--strictPort', ...process.argv.slice(2)], { stdio: 'inherit', shell: true })
