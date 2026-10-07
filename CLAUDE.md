@@ -56,6 +56,8 @@ backend/
       ai/              系統內 AI：呼叫本機 Claude Code CLI（providers/）、用量紀錄、每月上限
       tutor/           AI 助教：依官方答案解釋題目、追問、詳解快取
       calendar/        行事曆：考試日期、倒數、拍照辨識、匯出 .ics
+      notes/           題目收藏與個人筆記
+      backup/          備份與還原（zip 快照存 data/backups/，啟動時自動備份）
     每個模組內：router.py / service.py / models.py / schemas.py
   tests/
 frontend/
@@ -70,6 +72,7 @@ data/
   drafts/              轉檔中間產物：題目草稿、教材抽出的文字（不能直接匯入）
   converted/           解析完成、可以匯入的檔案（匯入頁只看這裡）
   assets/              題目圖片、頁面截圖
+  backups/             備份快照 zip（learning.db＋assets＋manifest）
   learning.db
 docs/                  轉檔流程說明（給 Claude Code 照著做）
 ```
@@ -158,7 +161,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 
 ### 新增一個功能模組
 
-1. 後端：建立 `backend/app/modules/<名稱>/`（`__init__.py` 匯出 `router`，加上 `service.py`、`schemas.py`，需要資料表再加 `models.py`），把名稱加到 `modules/registry.py` 的 `ENABLED_MODULES`。API 會自動掛在 `/api/<名稱>`。
+1. 後端：建立 `backend/app/modules/<名稱>/`（`__init__.py` 匯出 `router`，需要在伺服器啟動時做事可再匯出無參數的 `startup()`，加上 `service.py`、`schemas.py`，需要資料表再加 `models.py`），把名稱加到 `modules/registry.py` 的 `ENABLED_MODULES`。API 會自動掛在 `/api/<名稱>`。
 2. 有新資料表時產生並套用 migration。
 3. 前端：建立 `frontend/src/features/<名稱>/index.tsx` 匯出 `feature: FeatureDefinition`，會被自動收集，不用改其他檔案。
 4. `npm test` 會檢查有沒有違反模組邊界。

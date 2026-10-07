@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     ai_monthly_budget_usd: float = 3.0
     """每月 AI 用量上限（以 Claude Code 回報的等值美元計），超過就停用到下個月。"""
 
+    # 備份
+    backup_keep: int = 10
+    """自動備份保留幾份（手動備份與還原前的備份不會被自動刪除）。"""
+    backup_auto_hours: int = 20
+    """距離上次備份超過幾小時，啟動伺服器時就自動備份一次；0＝關閉自動備份。"""
+
     @property
     def resolved_database_url(self) -> str:
         return self.database_url or f"sqlite:///{(self.data_dir / 'learning.db').as_posix()}"

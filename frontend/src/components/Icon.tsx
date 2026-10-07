@@ -28,6 +28,8 @@ const PATHS = {
   note: 'M5 4.5h14v10.5l-4.5 4.5H5ZM14.5 19.5V15H19M8.5 9h7M8.5 12.5h4',
   plus: 'M12 5v14M5 12h14',
   edit: 'M4.5 19.5h4l10-10-4-4-10 10ZM13 7l4 4',
+  more: 'M5.5 12h.01M12 12h.01M18.5 12h.01',
+  archive: 'M3.5 4.5h17v4h-17ZM5 8.5v11h14v-11M10 12.5h4',
   trash: 'M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',

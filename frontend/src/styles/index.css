@@ -218,6 +218,12 @@
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @keyframes rise-in {
   from {
     opacity: 0.001;

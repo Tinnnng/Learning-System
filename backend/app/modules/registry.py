@@ -6,10 +6,12 @@
 3. 把模組名稱加到下方 ENABLED_MODULES。
 
 main.py 會依清單自動掛載 router 到 /api/<模組名稱>；
+模組的 __init__.py 也可以匯出 `startup()`（無參數），伺服器啟動時會呼叫一次；
 Alembic 會自動載入有 models.py 的模組，產生 migration。
 """
 
 import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from types import ModuleType
 
@@ -27,6 +29,7 @@ ENABLED_MODULES: list[str] = [
     "tutor",
     "calendar",
     "notes",
+    "backup",
 ]
 
 
@@ -34,6 +37,7 @@ ENABLED_MODULES: list[str] = [
 class LoadedModule:
     name: str
     router: APIRouter
+    startup: Callable[[], None] | None = None
 
     @property
     def prefix(self) -> str:
@@ -47,7 +51,7 @@ def load_modules() -> list[LoadedModule]:
         router = getattr(package, "router", None)
         if not isinstance(router, APIRouter):
             raise TypeError(f"模組 {name} 的 __init__.py 必須匯出 router（fastapi.APIRouter）")
-        loaded.append(LoadedModule(name=name, router=router))
+        loaded.append(LoadedModule(name=name, router=router, startup=getattr(package, "startup", None)))
     return loaded
 
 

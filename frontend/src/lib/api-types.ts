@@ -920,6 +920,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/backup/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Snapshots */
+        get: operations["list_snapshots_api_backup_snapshots_get"];
+        put?: never;
+        /**
+         * Create Snapshot
+         * @description 立刻備份一份（資料庫＋題目圖片）。
+         */
+        post: operations["create_snapshot_api_backup_snapshots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/backup/snapshots/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Snapshot */
+        get: operations["download_snapshot_api_backup_snapshots__name__get"];
+        put?: never;
+        post?: never;
+        /** Delete Snapshot */
+        delete: operations["delete_snapshot_api_backup_snapshots__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/backup/snapshots/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Snapshot
+         * @description 用這份備份覆蓋目前的資料（會先自動備份目前的資料）。
+         */
+        post: operations["restore_snapshot_api_backup_snapshots__name__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/backup/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Upload
+         * @description 上傳之前下載的備份 zip 來還原（會先自動備份目前的資料）。
+         */
+        post: operations["restore_upload_api_backup_restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -986,6 +1065,17 @@ export interface components {
              */
             answered_at: string;
         };
+        /** BackupStatus */
+        BackupStatus: {
+            /** Snapshots */
+            snapshots: components["schemas"]["SnapshotOut"][];
+            /** Folder */
+            folder: string;
+            /** Keep */
+            keep: number;
+            /** Auto Hours */
+            auto_hours: number;
+        };
         /** Body_extract_api_calendar_extract_post */
         Body_extract_api_calendar_extract_post: {
             /** Image */
@@ -1002,6 +1092,11 @@ export interface components {
             file: string;
             /** Source */
             source?: string | null;
+        };
+        /** Body_restore_upload_api_backup_restore_post */
+        Body_restore_upload_api_backup_restore_post: {
+            /** File */
+            file: string;
         };
         /** BuiltinList */
         BuiltinList: {
@@ -1840,6 +1935,15 @@ export interface components {
             /** Is Correct */
             is_correct?: boolean | null;
         };
+        /** RestoreResult */
+        RestoreResult: {
+            /** Restored From */
+            restored_from: string | null;
+            /** Before Restore */
+            before_restore: string;
+            /** Assets */
+            assets: number;
+        };
         /** SessionCreate */
         SessionCreate: {
             /**
@@ -1954,6 +2058,23 @@ export interface components {
             score: number | null;
             /** Max Score */
             max_score: number;
+        };
+        /** SnapshotOut */
+        SnapshotOut: {
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "auto" | "manual" | "before-restore";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /**
          * SourceRef
@@ -3911,6 +4032,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotedQuestion"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_snapshots_api_backup_snapshots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatus"];
+                };
+            };
+        };
+    };
+    create_snapshot_api_backup_snapshots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotOut"];
+                };
+            };
+        };
+    };
+    download_snapshot_api_backup_snapshots__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_snapshot_api_backup_snapshots__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_snapshot_api_backup_snapshots__name__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_upload_api_backup_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_restore_upload_api_backup_restore_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreResult"];
                 };
             };
             /** @description Validation Error */
