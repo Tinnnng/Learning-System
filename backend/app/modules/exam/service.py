@@ -353,10 +353,14 @@ def grade_item(db: Session, session_id: int, position: int, data: GradeIn) -> It
     return _item_out(item, question, reveal=session.submitted_at is not None)
 
 
-AI_GRADE_SYSTEM = """你是台灣國家考試申論題的閱卷老師。依「得分要點」判斷考生的答案寫到哪些要點。
-只輸出 JSON 物件，不要其他文字或程式碼框：{"hits": [要點編號, ...], "feedback": "..."}
+AI_GRADE_SYSTEM = """你是台灣國家考試申論題的閱卷老師。依「得分要點」逐一判斷考生的答案有沒有寫到。
+只輸出 JSON 物件，不要其他文字或程式碼框：
+{"judgements": [{"point": 要點編號, "reason": "一句話說明考生寫了什麼或缺什麼", "hit": true 或 false}, ...], "feedback": "..."}
 規則：
+- 每個要點都要判斷，先寫 reason 再決定 hit。
 - 要點的意思有寫到、而且正確才算（不必字句相同）；只寫關鍵字沒有說明、或說明錯誤的不算。
+- 一個要點包含好幾件事時（例如「說明原則，並算出數值」），每一件都寫到才算；寧可嚴格，不要灌水。
+- feedback 裡說考生漏掉或需要補充的內容，對應的要點就不能算有寫到。
 - feedback 用繁體中文 2 到 4 句：先說寫得好的地方，再指出漏掉或寫錯的要點、怎麼補強。不要整段抄參考答案。"""
 
 
@@ -393,7 +397,10 @@ def ai_grade_item(db: Session, session_id: int, position: int) -> ItemOut:
         raise ExamError(str(error), status_code=503) from error
     payload = _parse_json(text)
     hits: list[int] = []
-    for value in payload.get("hits") or []:
+    judgements = payload.get("judgements") if isinstance(payload.get("judgements"), list) else []
+    # 舊格式 {"hits": [...]} 也接受
+    values = [j.get("point") for j in judgements if isinstance(j, dict) and j.get("hit") is True] or payload.get("hits") or []
+    for value in values:
         found = re.search(r"\d+", str(value))
         index = int(found.group()) - 1 if found else -1
         if 0 <= index < len(question.rubric) and index not in hits:

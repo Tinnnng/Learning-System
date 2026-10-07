@@ -10,7 +10,10 @@ import type { QuestionFilter } from '@/lib/types'
 
 interface StartPanelProps {
   filter: Partial<QuestionFilter>
+  /** 選擇題題數 */
   questionCount: number
+  /** 申論題題數；有的話可以選擇要不要一起寫 */
+  essayCount?: number
   /** 整份試卷的考試時間（分鐘），模擬考預設用這個 */
   durationMinutes?: number | null
   title?: string
@@ -18,11 +21,15 @@ interface StartPanelProps {
 
 type CountChoice = 'all' | '10' | '20' | '30'
 
-export function StartPanel({ filter, questionCount, durationMinutes, title }: StartPanelProps) {
+export function StartPanel({ filter, questionCount: choiceCount, essayCount = 0, durationMinutes, title }: StartPanelProps) {
   const [mode, setMode] = useState<'practice' | 'mock'>('practice')
   const [countChoice, setCountChoice] = useState<CountChoice>('all')
   const [shuffleQuestions, setShuffleQuestions] = useState(false)
   const [shuffleOptions, setShuffleOptions] = useState(false)
+  // 只有申論題時一定要包含；有選擇題時預設不含（申論題要打字、自己評分，比較花時間）
+  const [wantEssay, setWantEssay] = useState(false)
+  const includeEssay = essayCount > 0 && (wantEssay || choiceCount === 0)
+  const questionCount = choiceCount + (includeEssay ? essayCount : 0)
   const start = useStartSession()
 
   const count = countChoice === 'all' ? null : Math.min(Number(countChoice), questionCount)
@@ -40,6 +47,7 @@ export function StartPanel({ filter, questionCount, durationMinutes, title }: St
           mode,
           title: title ? `${title}（${mode === 'mock' ? '模擬考' : '練習'}）` : undefined,
           source: { kind: 'filter', filter: { ...filter, types: ['single_choice', 'multi_choice'] } },
+          include_essay: includeEssay,
           count,
           shuffle_questions: shuffleQuestions || count !== null,
           shuffle_options: shuffleOptions,
@@ -64,18 +72,31 @@ export function StartPanel({ filter, questionCount, durationMinutes, title }: St
         <Segmented label="題數" value={countChoice} onChange={setCountChoice} options={countOptions} />
       )}
       <div className="flex flex-col gap-1">
+        {essayCount > 0 && (
+          <Switch
+            label={`包含申論題（${essayCount} 題）`}
+            description={
+              choiceCount === 0 ? '這裡只有申論題：打字作答，再對照參考答案自評' : '要打字作答，再對照參考答案勾選得分要點自評'
+            }
+            checked={includeEssay}
+            onChange={setWantEssay}
+            disabled={choiceCount === 0}
+          />
+        )}
         <Switch
           label="打亂題目順序"
           description={count !== null ? '抽部分題目時一律隨機抽' : undefined}
           checked={shuffleQuestions || count !== null}
           onChange={setShuffleQuestions}
         />
-        <Switch
-          label="打亂選項順序"
-          description="選項有「以上皆是」這類寫法的題目不會打亂"
-          checked={shuffleOptions}
-          onChange={setShuffleOptions}
-        />
+        {choiceCount > 0 && (
+          <Switch
+            label="打亂選項順序"
+            description="選項有「以上皆是」這類寫法的題目不會打亂"
+            checked={shuffleOptions}
+            onChange={setShuffleOptions}
+          />
+        )}
       </div>
       {start.isError && <ErrorState error={start.error} />}
       <Button type="submit" size="lg" disabled={start.isPending || questionCount === 0}>

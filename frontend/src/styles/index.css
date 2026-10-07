@@ -135,6 +135,12 @@
   .prose-question p:last-child {
     margin-bottom: 0;
   }
+  /* 程式碼不要連字：考題要看到真正的 <=、->、!=，不能變成 ≤ → ≠ */
+  .prose-question code,
+  .prose-question pre {
+    font-variant-ligatures: none;
+    font-feature-settings: 'calt' 0, 'liga' 0;
+  }
   .prose-question code {
     font-family: var(--font-mono);
     font-size: 0.88em;

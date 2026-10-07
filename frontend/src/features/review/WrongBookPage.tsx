@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { AiTutor } from '@/components/AiTutor'
 import { Button, ButtonLink } from '@/components/Button'
-import { ChipGroup, Segmented } from '@/components/Controls'
+import { ChipGroup, Segmented, Switch } from '@/components/Controls'
+import { EssayReference } from '@/components/EssayReference'
 import { Icon } from '@/components/Icon'
 import { NoteControls } from '@/components/NoteControls'
 import { OptionBubble } from '@/components/OptionBubble'
@@ -58,7 +59,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs text-muted">
             {question.paper.year && `${question.paper.year} 年`}
-            {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.number} 題
+            {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.label ?? question.number} 題
           </span>
           <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>
             {plainText(question.stem)}
@@ -107,7 +108,9 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
               )
             })}
           </div>
-          {question.explanation ? (
+          {question.type === 'essay' ? (
+            <EssayReference explanation={question.explanation} rubric={question.rubric} />
+          ) : question.explanation ? (
             <RichText className="text-[15px]">{question.explanation}</RichText>
           ) : (
             <AiTutor questionId={question.id} />
@@ -131,6 +134,8 @@ export function WrongBookPage() {
   const allActive = useQuery({ queryKey: ['review', 'wrong', 'active', null], queryFn: () => fetchWrongQuestions('active', null) })
   const start = useStartSession()
   const [now] = useState(() => Date.now())
+  // 申論題要打字、自己評分，比較花時間，重寫錯題時預設不含
+  const [includeEssay, setIncludeEssay] = useState(false)
 
   const set = (key: string, value: string | null) => {
     const next = new URLSearchParams(params)
@@ -141,20 +146,26 @@ export function WrongBookPage() {
 
   const entries = wrong.data ?? []
   const subjects = [...new Set((allActive.data ?? []).map((entry) => entry.question.paper.subject))].sort()
-  const dueCount = (allActive.data ?? []).filter((entry) => entry.review_due && parseUtc(entry.review_due).getTime() <= now).length
-  const activeIds = entries.filter((entry) => entry.progress.in_wrong_book).map((entry) => entry.question.id)
+  const wanted = (entry: WrongQuestionOut) => includeEssay || entry.question.type !== 'essay'
+  const dueCount = (allActive.data ?? []).filter(
+    (entry) => wanted(entry) && entry.review_due && parseUtc(entry.review_due).getTime() <= now,
+  ).length
+  const activeIds = entries.filter((entry) => entry.progress.in_wrong_book && wanted(entry)).map((entry) => entry.question.id)
+  const essayCount = entries.filter((entry) => entry.progress.in_wrong_book && entry.question.type === 'essay').length
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         eyebrow="錯題本"
         title="答錯過的題目"
-        description="答錯的題目會自動收進來，連續答對 5 次（寫滿一個「正」字）才會移出。系統依記憶曲線排好每題的複習日。"
+        description="答錯的題目會自動收進來，連續答對 5 次（寫滿一個「正」字）才會移出；申論題是連續 2 次拿到八成以上。系統依記憶曲線排好每題的複習日。"
         actions={
           <>
             {dueCount > 0 && (
               <Button
-                onClick={() => start.mutate({ mode: 'practice', source: { kind: 'review_due' }, shuffle_questions: false })}
+                onClick={() =>
+                  start.mutate({ mode: 'practice', source: { kind: 'review_due' }, shuffle_questions: false, include_essay: includeEssay })
+                }
                 disabled={start.isPending}
               >
                 複習今天到期的 {dueCount} 題
@@ -188,6 +199,15 @@ export function WrongBookPage() {
           </>
         }
       />
+
+      {essayCount > 0 && (
+        <Switch
+          label={`重寫時包含申論題（${essayCount} 題）`}
+          description="申論題要打字作答，再對照參考答案自評"
+          checked={includeEssay}
+          onChange={setIncludeEssay}
+        />
+      )}
 
       <div className="flex flex-col gap-4">
         <Segmented

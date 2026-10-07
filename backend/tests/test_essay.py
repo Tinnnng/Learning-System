@@ -108,7 +108,15 @@ def test_mock_essays_are_graded_after_submit(db, paper_id):
 
 
 def test_ai_grade_suggests_hits(db, paper_id):
-    fake = FakeProvider([json.dumps({"hits": ["1", "[3]", 9], "feedback": "有寫到 VLAN，但漏了路由器。"}, ensure_ascii=False)])
+    reply = {
+        "judgements": [
+            {"point": 1, "reason": "有說明廣播網域隔離", "hit": True},
+            {"point": "2", "reason": "沒提到路由器", "hit": False},
+            {"point": 9, "reason": "不存在的要點", "hit": True},
+        ],
+        "feedback": "有寫到 VLAN，但漏了路由器。",
+    }
+    fake = FakeProvider([json.dumps(reply, ensure_ascii=False)])
     ai_service.set_provider(fake)
     try:
         session = _session(db, paper_id)

@@ -151,6 +151,8 @@ class PaperSummary(BaseModel):
     categories: list[str]
     duration_minutes: int | None
     question_count: int
+    essay_count: int = 0
+    """其中申論題的題數（出題時預設不含申論題）"""
 
 
 class PaperDetail(PaperSummary):

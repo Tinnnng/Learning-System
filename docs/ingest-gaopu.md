@@ -13,7 +13,7 @@ uv run python -m app.modules.ingest.cli import ../data/converted/<source_key>.js
 ```
 
 - 答案、配分、考試時間、試題代號都由程式從 PDF 解析，**校對時不要動答案**。
-- 申論題（scan 顯示 `[申論]`）第一版不轉。`[混合]` 的試卷只轉選擇題部分（草稿已自動只取選擇題）。
+- 申論題（scan 顯示 `[申論]`）沒有官方答案，不走 draft／build，照文末「申論題」一節手動寫成匯入檔。`[混合]` 的試卷選擇題部分照上面流程轉，申論題部分另外處理。
 - 草稿位置：`data/drafts/<source_key>.draft.json`。已存在的草稿不會被 `draft` 覆蓋（除非加 `--force`），避免校對成果被蓋掉。
 
 ## 草稿格式
@@ -68,3 +68,19 @@ uv run python -m app.modules.ingest.cli import ../data/converted/<source_key>.js
 - [ ] 上下標、公式改成 LaTeX
 - [ ] 圖片範圍正確
 - [ ] `review_notes` 全部清空、`reviewed: true`
+
+## 申論題
+
+官方不公布申論題答案，由 Claude Code 匯入時撰寫**參考答案與得分要點**，使用者作答後對照要點自評（也可以請系統內 AI 建議）。
+
+1. 原始 PDF 複製到 `data/inbox/gaopu/<source_key>/`，頁面截圖用 `app.modules.ingest.pdf.render_page` 存成 `data/assets/<source_key>/page-N.png`，程式碼截圖、網頁畫面等圖片用 `crop_region` 裁成 `q00N-1.png`（座標用 `cli layout` 查）。
+2. 直接寫匯入檔 `data/converted/<source_key>.json`（ImportBundle），每個**子題**一題：
+   - `type: "essay"`、`answer_source: "reference"`、`options`／`answer` 留空。
+   - `label`：顯示題號，例如 `一(一)`；沒有子題的大題寫 `三`。`number` 從 1 連號。
+   - 大題的共同題幹（「某校計畫…請回答以下問題：」）放 `passage`，子題本身放 `stem`。
+   - 試題裡的程式碼**轉成 Markdown 程式碼區塊**（標註語言），不要只放圖片；輸出畫面、網頁畫面這類非文字內容才放 `assets`。
+   - `points`：子題配分。`explanation`：參考答案（Markdown，可用表格、程式碼）。
+   - `rubric`：得分要點 `[{"text": "...", "points": 4}]`，**分數加總必須等於 points**（check 會擋）。要點寫成可以勾選判斷的具體內容（例如「教學實驗室：192.168.10.0/25」），不要寫「說明完整」這種模糊的。
+3. 程式追蹤題的輸出一定要實際執行或逐行模擬驗證，不要只靠推理。
+4. `cli check` → `cli import`，匯入前先用 `backup` 模組備份。
+5. paper 的 `answer_note` 註明「申論題沒有官方答案；參考答案與得分要點由 Claude Code 匯入時撰寫，僅供參考。」

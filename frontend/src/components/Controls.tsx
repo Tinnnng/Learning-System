@@ -45,18 +45,20 @@ interface SwitchProps {
   description?: ReactNode
   checked: boolean
   onChange: (checked: boolean) => void
+  disabled?: boolean
 }
 
 /** 開關：開啟時是藍黑原子筆色，關閉時是灰色。 */
-export function Switch({ label, description, checked, onChange }: SwitchProps) {
+export function Switch({ label, description, checked, onChange, disabled }: SwitchProps) {
   const id = useId()
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-start gap-3 py-1">
+    <label htmlFor={id} className={cx('flex items-start gap-3 py-1', disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer')}>
       <button
         id={id}
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cx(
           'relative mt-0.5 h-6 w-10 flex-none rounded-full border-[1.5px] transition-colors duration-[var(--dur)]',

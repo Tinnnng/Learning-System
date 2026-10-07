@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button } from '@/components/Button'
+import { EssayReference } from '@/components/EssayReference'
 import { Icon } from '@/components/Icon'
 import { NoteControls } from '@/components/NoteControls'
 import { OptionBubble } from '@/components/OptionBubble'
@@ -90,7 +91,7 @@ function SearchRow({ hit, words }: { hit: SearchHit; words: string[] }) {
       >
         <span className="text-xs text-muted">
           {question.paper.year && `${question.paper.year} 年`}
-          {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.number} 題
+          {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.label ?? question.number} 題
           {field && <span className="ml-2 rounded-sm bg-sheet-tint px-1.5 py-0.5">命中{field}</span>}
         </span>
         <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>
@@ -123,7 +124,11 @@ function SearchRow({ hit, words }: { hit: SearchHit; words: string[] }) {
               />
             ))}
           </div>
-          {question.explanation && <RichText className="text-[15px]">{question.explanation}</RichText>}
+          {question.type === 'essay' ? (
+            <EssayReference explanation={question.explanation} rubric={question.rubric} />
+          ) : (
+            question.explanation && <RichText className="text-[15px]">{question.explanation}</RichText>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <NoteControls questionId={question.id} className="-ml-2" />
             <Link to={`/bank/papers/${question.paper.id}`} className="inline-flex h-11 items-center gap-1 text-sm text-accent hover:underline">

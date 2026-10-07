@@ -20,7 +20,14 @@ def wrong_questions(
     db: Session = Depends(get_db),
 ) -> list[WrongQuestionOut]:
     """錯題本。status=all 時列出曾經答錯過的全部題目（含已掌握）。"""
-    criteria = QuestionFilter(exam_type=exam_type, year=year, category=category, subject=subject, origin=origin)
+    criteria = QuestionFilter(
+        exam_type=exam_type,
+        year=year,
+        category=category,
+        subject=subject,
+        origin=origin,
+        types=["single_choice", "multi_choice", "essay"],  # 錯題本列出申論題，出題時再由使用者決定要不要包含
+    )
     return service.list_wrong_questions(db, criteria, status)
 
 

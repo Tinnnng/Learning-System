@@ -11,6 +11,7 @@ import { QuestionFigure, RichText } from '@/components/RichText'
 import { cx } from '@/lib/cx'
 import { shortName } from '@/lib/format'
 import type { ItemOut } from '@/lib/types'
+import { EssayAnswer } from './EssayAnswer'
 
 export const LETTERS = 'ABCDEFGHIJ'
 
@@ -33,12 +34,15 @@ interface QuestionBlockProps {
   onConfirmMulti?: () => void
   busy?: boolean
   headingLevel?: 'h2' | 'h3'
+  /** 申論題作答需要的資訊 */
+  essay?: { sessionId: number; practice: boolean; submitted: boolean; onUpdate: (item: ItemOut) => void }
 }
 
-export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy, headingLevel = 'h2' }: QuestionBlockProps) {
+export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy, headingLevel = 'h2', essay }: QuestionBlockProps) {
   const [showPage, setShowPage] = useState(false)
   const Heading = headingLevel
   const multiple = item.type === 'multi_choice'
+  const isEssay = item.type === 'essay'
   const locked = item.revealed || busy
 
   return (
@@ -50,6 +54,11 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
             {item.paper.year && `${item.paper.year} 年`}
             {item.paper.exam_type}｜{shortName(item.paper.subject)}
             {multiple && <span className="ml-2 rounded-sm bg-accent-faint px-1.5 py-0.5 text-accent">複選</span>}
+            {isEssay && (
+              <span className="ml-2 rounded-sm bg-hl-soft px-1.5 py-0.5 text-ink">
+                申論{item.label && ` ${item.label}`}・{item.points} 分
+              </span>
+            )}
           </span>
         </Heading>
         {item.page_snapshot && (
@@ -67,7 +76,7 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
       {item.passage && (
         <details className="group rounded-md border border-rule bg-sheet-tint" open>
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm text-accent">
-            題組文章
+            {isEssay ? '題目說明' : '題組文章'}
             <span className="text-xs text-muted group-open:hidden">展開</span>
           </summary>
           <RichText className="max-h-[40vh] overflow-y-auto px-4 pb-4 text-[15px]">{item.passage}</RichText>
@@ -79,60 +88,67 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
         <QuestionFigure key={asset.path} path={asset.path} caption={asset.caption} />
       ))}
 
-      <div role={multiple ? 'group' : 'radiogroup'} aria-label={`第 ${item.position} 題選項`} className="-mx-3 flex flex-col gap-0.5">
-        {item.options.map((option, index) => {
-          const letter = LETTERS[index]
-          return (
-            <OptionBubble
-              key={letter}
-              letter={letter}
-              text={option}
-              multiple={multiple}
-              state={bubbleState(item, letter, selection)}
-              disabled={locked}
-              onSelect={() => onToggle(letter)}
-            />
-          )
-        })}
-      </div>
+      {isEssay ? (
+        essay && <EssayAnswer item={item} {...essay} />
+      ) : (
+        <>
+          <div role={multiple ? 'group' : 'radiogroup'} aria-label={`第 ${item.position} 題選項`} className="-mx-3 flex flex-col gap-0.5">
+            {item.options.map((option, index) => {
+              const letter = LETTERS[index]
+              return (
+                <OptionBubble
+                  key={letter}
+                  letter={letter}
+                  text={option}
+                  multiple={multiple}
+                  state={bubbleState(item, letter, selection)}
+                  disabled={locked}
+                  onSelect={() => onToggle(letter)}
+                />
+              )
+            })}
+          </div>
 
-      {multiple && onConfirmMulti && !item.revealed && (
-        <div>
-          <Button variant="secondary" onClick={onConfirmMulti} disabled={selection.length === 0 || busy}>
-            確定答案
-          </Button>
-        </div>
+          {multiple && onConfirmMulti && !item.revealed && (
+            <div>
+              <Button variant="secondary" onClick={onConfirmMulti} disabled={selection.length === 0 || busy}>
+                確定答案
+              </Button>
+            </div>
+          )}
+
+          {item.revealed && (
+            <div
+              className={cx(
+                'flex flex-col gap-2 rounded-md border-l-[3px] px-4 py-3 animate-[rise-in_var(--dur)_var(--ease-out)]',
+                item.is_correct ? 'border-ok bg-ok-soft/50' : 'border-bad bg-bad-soft/50',
+              )}
+              aria-live="polite"
+            >
+              <p className="m-0 font-medium">
+                {item.is_correct
+                  ? '答對了。'
+                  : item.answered
+                    ? `答錯了，正確答案是 ${(item.correct ?? []).join('、')}。`
+                    : `沒有作答，正確答案是 ${(item.correct ?? []).join('、')}。`}
+                {!item.is_correct && item.answered && <span className="ml-1 font-normal text-muted">已收進錯題本。</span>}
+              </p>
+              {item.explanation && <RichText className="text-[15px]">{item.explanation}</RichText>}
+              {item.source_ref && item.paper.origin === 'generated' && (
+                <p className="m-0 text-xs text-muted">
+                  出處：{item.source_ref.file}
+                  {item.source_ref.slide && ` 第 ${item.source_ref.slide} 張投影片`}
+                  {item.source_ref.page && ` 第 ${item.source_ref.page} 頁`}
+                  {item.source_ref.note && ` ${item.source_ref.note}`}
+                </p>
+              )}
+            </div>
+          )}
+
+        </>
       )}
 
-      {item.revealed && (
-        <div
-          className={cx(
-            'flex flex-col gap-2 rounded-md border-l-[3px] px-4 py-3 animate-[rise-in_var(--dur)_var(--ease-out)]',
-            item.is_correct ? 'border-ok bg-ok-soft/50' : 'border-bad bg-bad-soft/50',
-          )}
-          aria-live="polite"
-        >
-          <p className="m-0 font-medium">
-            {item.is_correct
-              ? '答對了。'
-              : item.answered
-                ? `答錯了，正確答案是 ${(item.correct ?? []).join('、')}。`
-                : `沒有作答，正確答案是 ${(item.correct ?? []).join('、')}。`}
-            {!item.is_correct && item.answered && <span className="ml-1 font-normal text-muted">已收進錯題本。</span>}
-          </p>
-          {item.explanation && <RichText className="text-[15px]">{item.explanation}</RichText>}
-          {item.source_ref && item.paper.origin === 'generated' && (
-            <p className="m-0 text-xs text-muted">
-              出處：{item.source_ref.file}
-              {item.source_ref.slide && ` 第 ${item.source_ref.slide} 張投影片`}
-              {item.source_ref.page && ` 第 ${item.source_ref.page} 頁`}
-              {item.source_ref.note && ` ${item.source_ref.note}`}
-            </p>
-          )}
-        </div>
-      )}
-
-      {item.revealed && !item.explanation && <AiTutor questionId={item.question_id} myAnswer={item.original_response} />}
+      {item.revealed && !item.explanation && !isEssay && <AiTutor questionId={item.question_id} myAnswer={item.original_response} />}
 
       <NoteControls questionId={item.question_id} className="-ml-2" />
 

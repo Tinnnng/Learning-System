@@ -1,6 +1,7 @@
 /** 交卷後：得分、題號對錯一覽、每題詳解、錯題重寫。 */
 
-import { type CSSProperties, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { type CSSProperties, useCallback, useMemo, useState } from 'react'
 import { AnswerGrid } from '@/components/AnswerGrid'
 import { Button, ButtonLink } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
@@ -8,18 +9,33 @@ import { Icon } from '@/components/Icon'
 import { ErrorState } from '@/components/States'
 import { clock, formatDateTime, parseUtc, score, shortName } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
-import type { SessionCreate, SessionOut } from '@/lib/types'
+import type { ItemOut, SessionCreate, SessionOut } from '@/lib/types'
 import { QuestionBlock } from './QuestionBlock'
 
-type Filter = 'all' | 'wrong' | 'right'
+type Filter = 'all' | 'wrong' | 'right' | 'pending'
+
+/** 申論題有寫、但還沒自評 */
+const isPending = (item: ItemOut) => item.type === 'essay' && !item.graded
 
 export function ResultView({ session }: { session: SessionOut }) {
   const result = session.result!
-  // 有答錯就先只看答錯的題目，檢討比較快
-  const [filter, setFilter] = useState<Filter>(() => (session.items.some((item) => !item.is_correct) ? 'wrong' : 'all'))
+  // 有申論題待自評就先看那些；否則有答錯就先只看答錯的題目，檢討比較快
+  const [filter, setFilter] = useState<Filter>(() =>
+    session.items.some(isPending) ? 'pending' : session.items.some((item) => !item.is_correct) ? 'wrong' : 'all',
+  )
   const start = useStartSession()
+  const queryClient = useQueryClient()
+  const updateItem = useCallback(
+    (updated: ItemOut) =>
+      queryClient.setQueryData<SessionOut>(['exam', 'session', session.id], (old) =>
+        old ? { ...old, items: old.items.map((entry) => (entry.position === updated.position ? updated : entry)) } : old,
+      ),
+    [queryClient, session.id],
+  )
+  const essayProps = { sessionId: session.id, practice: session.mode === 'practice', submitted: true, onUpdate: updateItem }
 
-  const wrongItems = session.items.filter((item) => !item.is_correct)
+  const pendingItems = session.items.filter(isPending)
+  const wrongItems = session.items.filter((item) => !item.is_correct && !isPending(item))
   const answeredWrong = wrongItems.filter((item) => item.answered)
   const unanswered = session.items.length - result.answered_count
   const elapsed = session.submitted_at
@@ -28,7 +44,13 @@ export function ResultView({ session }: { session: SessionOut }) {
   const visible = useMemo(
     () =>
       session.items.filter((item) =>
-        filter === 'all' ? true : filter === 'wrong' ? !item.is_correct : item.is_correct,
+        filter === 'all'
+          ? true
+          : filter === 'pending'
+            ? isPending(item)
+            : filter === 'wrong'
+              ? !item.is_correct && !isPending(item)
+              : item.is_correct,
       ),
     [filter, session.items],
   )
@@ -105,6 +127,12 @@ export function ResultView({ session }: { session: SessionOut }) {
         </ButtonLink>
       </div>
       {start.isError && <ErrorState error={start.error} />}
+      {result.essay_pending > 0 && (
+        <p className="m-0 flex items-start gap-2 rounded-md bg-hl-soft px-4 py-3 text-[15px] text-ink" role="status">
+          <Icon name="edit" size={18} className="mt-0.5 flex-none text-accent" />
+          還有 {result.essay_pending} 題申論題等你自評：在下面對照參考答案勾選寫到的得分要點，分數才會算進總分、記入錯題本。
+        </p>
+      )}
 
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_290px]">
         <section aria-label="逐題檢討" className="min-w-0 rounded-lg bg-sheet px-4 py-6 shadow-sheet sm:px-8">
@@ -116,6 +144,7 @@ export function ResultView({ session }: { session: SessionOut }) {
               onChange={setFilter}
               className="w-full sm:w-auto sm:min-w-[300px]"
               options={[
+                ...(pendingItems.length > 0 ? [{ value: 'pending' as const, label: `待評 ${pendingItems.length}` }] : []),
                 { value: 'all', label: `全部 ${session.items.length}` },
                 { value: 'wrong', label: `答錯 ${wrongItems.length}` },
                 { value: 'right', label: `答對 ${result.correct_count}` },
@@ -123,12 +152,14 @@ export function ResultView({ session }: { session: SessionOut }) {
             />
           </div>
           {visible.length === 0 ? (
-            <p className="m-0 py-6 text-muted">{filter === 'wrong' ? '沒有答錯的題目，全對！' : '沒有答對的題目。'}</p>
+            <p className="m-0 py-6 text-muted">
+              {filter === 'pending' ? '申論題都自評完了。' : filter === 'wrong' ? '沒有答錯的題目，全對！' : '沒有答對的題目。'}
+            </p>
           ) : (
             <ol className="m-0 flex list-none flex-col p-0">
               {visible.map((item) => (
                 <li key={item.position} id={`item-${item.position}`} className="scroll-mt-24 border-b border-rule py-8 first:pt-0 last:border-b-0">
-                  <QuestionBlock item={item} selection={item.response ?? []} onToggle={() => {}} />
+                  <QuestionBlock item={item} selection={item.response ?? []} onToggle={() => {}} essay={essayProps} />
                 </li>
               ))}
             </ol>

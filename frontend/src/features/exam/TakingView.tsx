@@ -179,6 +179,7 @@ export function TakingView({ session }: { session: SessionOut }) {
         isPractice ? () => answer.mutate({ position: entry.position, response: selectionFor(entry) }) : undefined
       }
       busy={answer.isPending && answer.variables?.position === entry.position}
+      essay={{ sessionId: session.id, practice: isPractice, submitted: false, onUpdate: updateItem }}
     />
   )
 

@@ -35,7 +35,9 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
           </span>
         </span>
         <span className="flex items-center gap-3 text-sm text-muted">
-          <span className="tabular">{paper.question_count} 題</span>
+          <span className="tabular">
+            {paper.essay_count === paper.question_count ? `申論 ${paper.essay_count} 題` : `${paper.question_count - paper.essay_count} 題`}
+          </span>
           <Icon name="arrow" size={18} className="text-accent transition-transform duration-[var(--dur)] group-hover:translate-x-1" />
         </span>
       </Link>
@@ -65,7 +67,8 @@ export function BankPage() {
   }
 
   const list = papers.data ?? []
-  const questionCount = list.reduce((sum, paper) => sum + paper.question_count, 0)
+  const essayCount = list.reduce((sum, paper) => sum + paper.essay_count, 0)
+  const questionCount = list.reduce((sum, paper) => sum + paper.question_count, 0) - essayCount
   const subjects = [...new Set(list.map((paper) => paper.subject))].sort()
   const hasFilter = Object.values(filters).some((value) => value !== null && value !== undefined)
 
@@ -160,6 +163,11 @@ export function BankPage() {
           <h2 className="m-0 mb-1 font-hand text-lg font-bold">{hasFilter ? '用這些條件出題' : '從整個題庫出題'}</h2>
           <p className="m-0 mb-5 text-sm text-muted">
             {list.length} 份試卷，共 <span className="tabular text-ink">{questionCount}</span> 題選擇題
+            {essayCount > 0 && (
+              <>
+                、<span className="tabular text-ink">{essayCount}</span> 題申論題
+              </>
+            )}
           </p>
           <StartPanel
             filter={{
@@ -170,6 +178,7 @@ export function BankPage() {
               origin: (filters.origin as PaperSummary['origin'] | null) ?? null,
             }}
             questionCount={questionCount}
+            essayCount={essayCount}
           />
         </aside>
       </div>

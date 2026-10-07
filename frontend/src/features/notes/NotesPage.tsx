@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
+import { EssayReference } from '@/components/EssayReference'
 import { Icon } from '@/components/Icon'
 import { NoteControls } from '@/components/NoteControls'
 import { OptionBubble } from '@/components/OptionBubble'
@@ -36,7 +37,7 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs text-muted">
             {question.paper.year && `${question.paper.year} 年`}
-            {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.number} 題
+            {question.paper.exam_type}｜{shortName(question.paper.subject)}　第 {question.label ?? question.number} 題
           </span>
           <span className={cx('text-[16px] leading-relaxed text-ink', !open && 'line-clamp-2')}>{plainText(question.stem)}</span>
           {note.note && !open && (
@@ -67,7 +68,11 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
               />
             ))}
           </div>
-          {question.explanation && <RichText className="text-[15px]">{question.explanation}</RichText>}
+          {question.type === 'essay' ? (
+            <EssayReference explanation={question.explanation} rubric={question.rubric} />
+          ) : (
+            question.explanation && <RichText className="text-[15px]">{question.explanation}</RichText>
+          )}
           <NoteControls questionId={question.id} className="-ml-2" />
         </div>
       )}

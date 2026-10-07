@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { AiTutor } from '@/components/AiTutor'
+import { EssayReference } from '@/components/EssayReference'
 import { Button } from '@/components/Button'
 import { QuestionEditorDialog } from '@/components/QuestionEditorDialog'
 import { Icon } from '@/components/Icon'
@@ -37,7 +38,7 @@ function toDraft(question: QuestionOut): QuestionDraft {
 function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionOut; showAnswer: boolean; onEdit: () => void }) {
   return (
     <li className="group/question grid grid-cols-[2.25rem_1fr] gap-x-3 border-b border-rule py-6 last:border-b-0">
-      <span className="tabular pt-1 text-right text-sm text-accent">{question.number}</span>
+      <span className="tabular pt-1 text-right text-sm text-accent [word-break:keep-all]">{question.label ?? question.number}</span>
       <div className="relative flex min-w-0 flex-col gap-3">
         {question.type !== 'essay' && (
           <button
@@ -51,7 +52,7 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
         )}
         {question.passage && (
           <details className="rounded-md bg-sheet-tint px-4 py-2 text-sm">
-            <summary className="cursor-pointer text-accent">題組文章</summary>
+            <summary className="cursor-pointer text-accent">{question.type === 'essay' ? '題目說明' : '題組文章'}</summary>
             <RichText className="mt-2 text-[15px]">{question.passage}</RichText>
           </details>
         )}
@@ -77,11 +78,16 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
         {showAnswer && question.answer_source === 'MOD' && (
           <p className="m-0 text-xs text-muted">此題答案經考選部更正。</p>
         )}
+        {question.type === 'essay' && (
+          <p className="m-0 text-xs text-muted">申論題・{question.points} 分</p>
+        )}
+        {showAnswer && question.type === 'essay' && <EssayReference explanation={question.explanation} rubric={question.rubric} />}
         {showAnswer &&
+          question.type !== 'essay' &&
           (question.explanation ? (
             <RichText className="text-[15px]">{question.explanation}</RichText>
           ) : (
-            question.type !== 'essay' && <AiTutor questionId={question.id} />
+            <AiTutor questionId={question.id} />
           ))}
         <NoteControls questionId={question.id} className="-ml-2" />
       </div>
@@ -121,7 +127,8 @@ export function PaperPage() {
         eyebrow={[data.year && `${data.year} 年`, data.exam_type, data.categories.join('、')].filter(Boolean).join('　')}
         title={shortName(data.subject)}
         description={[
-          `${choiceCount} 題選擇題`,
+          choiceCount > 0 && `${choiceCount} 題選擇題`,
+          data.essay_count > 0 && `${data.essay_count} 題申論題`,
           data.duration_minutes && `考試時間 ${data.duration_minutes} 分鐘`,
           data.paper_code && `試題代號 ${data.paper_code}`,
         ]
@@ -161,6 +168,7 @@ export function PaperPage() {
           <StartPanel
             filter={{ paper_ids: [data.id] }}
             questionCount={choiceCount}
+            essayCount={data.essay_count}
             durationMinutes={data.duration_minutes}
             title={data.title ?? data.subject}
           />

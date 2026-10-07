@@ -386,6 +386,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/exam/sessions/{session_id}/items/{position}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal Item
+         * @description 申論題（練習模式）：看參考答案與得分要點。
+         */
+        post: operations["reveal_item_api_exam_sessions__session_id__items__position__reveal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exam/sessions/{session_id}/items/{position}/grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grade Item
+         * @description 申論題自評：勾選寫到的得分要點。
+         */
+        post: operations["grade_item_api_exam_sessions__session_id__items__position__grade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exam/sessions/{session_id}/items/{position}/ai-grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ai Grade Item
+         * @description 請 AI 建議得分要點與評語（會花 Claude 用量，使用者確認後才算分）。
+         */
+        post: operations["ai_grade_item_api_exam_sessions__session_id__items__position__ai_grade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/exam/sessions/{session_id}/submit": {
         parameters: {
             query?: never;
@@ -1379,6 +1439,14 @@ export interface components {
             /** Origins */
             origins: ("official" | "generated" | "manual")[];
         };
+        /** GradeIn */
+        GradeIn: {
+            /**
+             * Hits
+             * @description 寫到的得分要點（rubric 的索引，從 0 開始）
+             */
+            hits?: number[];
+        };
         /** GroupStat */
         GroupStat: {
             /** Name */
@@ -1461,6 +1529,8 @@ export interface components {
              * @enum {string}
              */
             type: "single_choice" | "multi_choice" | "essay";
+            /** Label */
+            label: string | null;
             /** Passage */
             passage: string | null;
             /** Stem */
@@ -1493,6 +1563,23 @@ export interface components {
             original_response?: string[] | null;
             /** Time Spent Seconds */
             time_spent_seconds?: number | null;
+            /** Text */
+            text?: string | null;
+            /** Rubric */
+            rubric?: components["schemas"]["RubricPoint"][] | null;
+            /**
+             * Graded
+             * @default false
+             */
+            graded: boolean;
+            /** Rubric Hits */
+            rubric_hits?: number[] | null;
+            /** Score */
+            score?: number | null;
+            /** Ai Hits */
+            ai_hits?: number[] | null;
+            /** Ai Feedback */
+            ai_feedback?: string | null;
         };
         /** LearningSettingsOut */
         LearningSettingsOut: {
@@ -1620,6 +1707,11 @@ export interface components {
             duration_minutes: number | null;
             /** Question Count */
             question_count: number;
+            /**
+             * Essay Count
+             * @default 0
+             */
+            essay_count: number;
             /** Exam Code */
             exam_code: string | null;
             /** Paper Code */
@@ -1717,6 +1809,11 @@ export interface components {
             duration_minutes: number | null;
             /** Question Count */
             question_count: number;
+            /**
+             * Essay Count
+             * @default 0
+             */
+            essay_count: number;
         };
         /** PresetCalendar */
         PresetCalendar: {
@@ -1824,6 +1921,11 @@ export interface components {
              */
             type: "single_choice" | "multi_choice" | "essay";
             /**
+             * Label
+             * @description 顯示用題號，例如申論題的「一(1)」；空白就顯示 number
+             */
+            label?: string | null;
+            /**
              * Passage
              * @description 題組共用的文章（閱讀測驗、克漏字），Markdown
              */
@@ -1847,11 +1949,19 @@ export interface components {
              * Answer Source
              * @enum {string}
              */
-            answer_source: "ANS" | "MOD" | "generated" | "manual";
+            answer_source: "ANS" | "MOD" | "generated" | "manual" | "reference";
             /** Points */
             points?: number | null;
-            /** Explanation */
+            /**
+             * Explanation
+             * @description 詳解；申論題放參考答案
+             */
             explanation?: string | null;
+            /**
+             * Rubric
+             * @description 申論題的得分要點，分數加總等於 points
+             */
+            rubric?: components["schemas"]["RubricPoint"][];
             /** Assets */
             assets?: components["schemas"]["Asset"][];
             /**
@@ -1873,6 +1983,11 @@ export interface components {
              * @enum {string}
              */
             type: "single_choice" | "multi_choice" | "essay";
+            /**
+             * Label
+             * @description 顯示用題號，例如申論題的「一(1)」；空白就顯示 number
+             */
+            label: string | null;
             /**
              * Passage
              * @description 題組共用的文章（閱讀測驗、克漏字），Markdown
@@ -1897,11 +2012,19 @@ export interface components {
              * Answer Source
              * @enum {string}
              */
-            answer_source: "ANS" | "MOD" | "generated" | "manual";
+            answer_source: "ANS" | "MOD" | "generated" | "manual" | "reference";
             /** Points */
             points: number | null;
-            /** Explanation */
+            /**
+             * Explanation
+             * @description 詳解；申論題放參考答案
+             */
             explanation: string | null;
+            /**
+             * Rubric
+             * @description 申論題的得分要點，分數加總等於 points
+             */
+            rubric: components["schemas"]["RubricPoint"][];
             /** Assets */
             assets: components["schemas"]["Asset"][];
             /**
@@ -1928,6 +2051,11 @@ export interface components {
              */
             type: "single_choice" | "multi_choice" | "essay";
             /**
+             * Label
+             * @description 顯示用題號，例如申論題的「一(1)」；空白就顯示 number
+             */
+            label: string | null;
+            /**
              * Passage
              * @description 題組共用的文章（閱讀測驗、克漏字），Markdown
              */
@@ -1951,11 +2079,19 @@ export interface components {
              * Answer Source
              * @enum {string}
              */
-            answer_source: "ANS" | "MOD" | "generated" | "manual";
+            answer_source: "ANS" | "MOD" | "generated" | "manual" | "reference";
             /** Points */
             points: number | null;
-            /** Explanation */
+            /**
+             * Explanation
+             * @description 詳解；申論題放參考答案
+             */
             explanation: string | null;
+            /**
+             * Rubric
+             * @description 申論題的得分要點，分數加總等於 points
+             */
+            rubric: components["schemas"]["RubricPoint"][];
             /** Assets */
             assets: components["schemas"]["Asset"][];
             /**
@@ -2006,6 +2142,16 @@ export interface components {
             /** Assets */
             assets: number;
         };
+        /**
+         * RubricPoint
+         * @description 申論題的得分要點：寫到這一點可以拿幾分。
+         */
+        RubricPoint: {
+            /** Text */
+            text: string;
+            /** Points */
+            points: number;
+        };
         /** SearchHit */
         SearchHit: {
             question: components["schemas"]["QuestionWithPaper"];
@@ -2050,6 +2196,12 @@ export interface components {
              * @default false
              */
             shuffle_options: boolean;
+            /**
+             * Include Essay
+             * @description 是否包含申論題（要打字作答、自己評分）
+             * @default false
+             */
+            include_essay: boolean;
             /**
              * Duration Minutes
              * @description 模擬考時間；不填時單一試卷會用原試卷的考試時間
@@ -2111,6 +2263,11 @@ export interface components {
             answered_count: number;
             /** Total */
             total: number;
+            /**
+             * Essay Pending
+             * @default 0
+             */
+            essay_pending: number;
         };
         /** SessionSummary */
         SessionSummary: {
@@ -2450,9 +2607,14 @@ export interface components {
         app__modules__exam__schemas__AnswerIn: {
             /**
              * Response
-             * @description 畫面上看到的選項字母（打亂後的順序）
+             * @description 選擇題：畫面上看到的選項字母（打亂後的順序）
              */
-            response: string[];
+            response?: string[];
+            /**
+             * Text
+             * @description 申論題的作答內容
+             */
+            text?: string | null;
             /** Time Spent Seconds */
             time_spent_seconds?: number | null;
         };
@@ -3221,6 +3383,106 @@ export interface operations {
                 "application/json": components["schemas"]["app__modules__exam__schemas__AnswerIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reveal_item_api_exam_sessions__session_id__items__position__reveal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grade_item_api_exam_sessions__session_id__items__position__grade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GradeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_grade_item_api_exam_sessions__session_id__items__position__ai_grade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

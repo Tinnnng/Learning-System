@@ -82,7 +82,7 @@ def upsert_paper(db: Session, data: PaperUpsert) -> UpsertResult:
     )
 
 
-def _summary(paper: ExamPaper, question_count: int) -> PaperSummary:
+def _summary(paper: ExamPaper, question_count: int, essay_count: int = 0) -> PaperSummary:
     return PaperSummary(
         id=paper.id,
         source_key=paper.source_key,
@@ -94,6 +94,7 @@ def _summary(paper: ExamPaper, question_count: int) -> PaperSummary:
         categories=[category.name for category in paper.categories],
         duration_minutes=paper.duration_minutes,
         question_count=question_count,
+        essay_count=essay_count,
     )
 
 
@@ -109,7 +110,13 @@ def list_papers(
     question_count = (
         select(func.count(Question.id)).where(Question.paper_id == ExamPaper.id).correlate(ExamPaper).scalar_subquery()
     )
-    query = select(ExamPaper, question_count).options(selectinload(ExamPaper.categories))
+    essay_count = (
+        select(func.count(Question.id))
+        .where(Question.paper_id == ExamPaper.id, Question.type == "essay")
+        .correlate(ExamPaper)
+        .scalar_subquery()
+    )
+    query = select(ExamPaper, question_count, essay_count).options(selectinload(ExamPaper.categories))
     if exam_type:
         query = query.where(ExamPaper.exam_type == exam_type)
     if year is not None:
@@ -121,7 +128,7 @@ def list_papers(
     if category:
         query = query.where(ExamPaper.categories.any(PaperCategory.name == category))
     query = query.order_by(ExamPaper.year.desc(), ExamPaper.exam_type, ExamPaper.subject_code, ExamPaper.subject)
-    return [_summary(paper, count) for paper, count in db.execute(query).all()]
+    return [_summary(paper, count, essays) for paper, count, essays in db.execute(query).all()]
 
 
 def get_paper(db: Session, paper_id: int) -> PaperDetail | None:
@@ -132,7 +139,7 @@ def get_paper(db: Session, paper_id: int) -> PaperDetail | None:
     )
     if paper is None:
         return None
-    summary = _summary(paper, len(paper.questions))
+    summary = _summary(paper, len(paper.questions), sum(1 for question in paper.questions if question.type == "essay"))
     return PaperDetail(
         **summary.model_dump(),
         exam_code=paper.exam_code,
@@ -155,7 +162,7 @@ def get_questions(db: Session, question_ids: list[int]) -> list[QuestionOut]:
 
 
 def query_question_ids(db: Session, criteria: QuestionFilter) -> list[int]:
-    """依條件挑出題目 id，依試卷、題號排序。預設只挑選擇題（申論題目前不能作答）。"""
+    """依條件挑出題目 id，依試卷、題號排序。預設只挑選擇題；要申論題就在 types 加上 essay。"""
     columns = [Question.id, Question.tags]
     if criteria.keyword:
         columns += [Question.stem, Question.options, Question.passage, Question.explanation]
