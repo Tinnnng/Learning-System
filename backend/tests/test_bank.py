@@ -108,3 +108,43 @@ def test_edit_add_question_and_manual_paper(client, db):
     multi = client.put(f"/api/bank/questions/{question_id}", json={"type": "multi_choice", "stem": "x", "options": ["a", "b"], "answer": ["A"]})
     assert multi.status_code == 422
     assert client.put("/api/bank/questions/999", json={"stem": "x", "options": ["a", "b"], "answer": ["A"]}).status_code == 404
+
+
+def test_keyword_search(db, client):
+    from app.modules.bank.schemas import QuestionFilter
+
+    bundle = make_bundle("search-1", questions=4, subject="憲法")
+    bundle.questions[0].stem = "依憲法規定，總統的任期為幾年？"
+    bundle.questions[1].stem = "下列何者正確？"
+    bundle.questions[1].options = ["總統由人民直選", "立法院", "司法院", "監察院"]
+    bundle.questions[2].stem = "Choose the best answer."
+    bundle.questions[2].explanation = "The PRESIDENT represents the nation."
+    bundle.questions[3].passage = "總統府位於台北。"
+    service.upsert_paper(db, bundle)
+    service.upsert_paper(db, make_bundle("search-2", questions=1, subject="行政法", exam_type="高考"))
+
+    result = service.search_questions(db, QuestionFilter(keyword="總統"))
+    assert result.total == 3
+    assert [hit.field for hit in result.items] == ["stem", "options", "passage"]  # 題幹命中排前面
+    assert result.items[1].snippet == "總統由人民直選 ／ 立法院 ／ 司法院 ／ 監察院"
+
+    # 多個關鍵字都要出現、不分大小寫
+    assert service.search_questions(db, QuestionFilter(keyword="總統  任期")).total == 1
+    hit = service.search_questions(db, QuestionFilter(keyword="president")).items[0]
+    assert hit.field == "explanation" and "PRESIDENT" in hit.snippet
+    # 可以和其他條件一起用，也能直接拿來出題
+    assert service.query_question_ids(db, QuestionFilter(keyword="總統", exam_type="高考")) == []
+    assert service.search_questions(db, QuestionFilter(keyword="   ")).total == 0
+
+    response = client.get("/api/bank/search", params={"q": "總統", "subject": "憲法", "limit": 2})
+    body = response.json()
+    assert body["total"] == 3 and len(body["items"]) == 2 and len(body["question_ids"]) == 3
+    assert body["items"][0]["question"]["paper"]["subject"] == "憲法"
+    assert client.get("/api/bank/search", params={"q": ""}).status_code == 422
+
+
+def test_snippet_trims_long_text():
+    text = "甲" * 100 + "關鍵字" + "乙" * 100
+    snippet = service._snippet(text, "關鍵字")
+    assert snippet.startswith("…") and snippet.endswith("…") and "關鍵字" in snippet
+    assert len(snippet) < 120

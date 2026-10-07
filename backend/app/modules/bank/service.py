@@ -1,5 +1,6 @@
 """題庫的公開介面。其他模組只能透過這裡的函式讀寫試卷與題目。"""
 
+import re
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from app.modules.bank.schemas import (
     QuestionFilter,
     QuestionOut,
     QuestionWithPaper,
+    SearchField,
+    SearchHit,
+    SearchResult,
     UpsertResult,
 )
 
@@ -152,7 +156,10 @@ def get_questions(db: Session, question_ids: list[int]) -> list[QuestionOut]:
 
 def query_question_ids(db: Session, criteria: QuestionFilter) -> list[int]:
     """依條件挑出題目 id，依試卷、題號排序。預設只挑選擇題（申論題目前不能作答）。"""
-    query = select(Question.id, Question.tags).join(ExamPaper).where(Question.type.in_(criteria.types))
+    columns = [Question.id, Question.tags]
+    if criteria.keyword:
+        columns += [Question.stem, Question.options, Question.passage, Question.explanation]
+    query = select(*columns).join(ExamPaper).where(Question.type.in_(criteria.types))
     if criteria.paper_ids:
         query = query.where(ExamPaper.id.in_(criteria.paper_ids))
     if criteria.exam_type:
@@ -170,7 +177,61 @@ def query_question_ids(db: Session, criteria: QuestionFilter) -> list[int]:
     if criteria.tags:
         wanted = set(criteria.tags)
         rows = [row for row in rows if wanted & set(row.tags or [])]
+    if criteria.keyword:
+        # 選項存成 JSON（中文會被跳脫），所以在 Python 端比對；個人題庫的規模這樣就夠快
+        words = _keywords(criteria.keyword)
+        matched = []
+        for row in rows:
+            haystack = "\n".join(_search_fields(row).values()).lower()
+            if all(word in haystack for word in words):
+                matched.append(row)
+        rows = matched
     return [row.id for row in rows]
+
+
+def _keywords(text: str) -> list[str]:
+    return [word.lower() for word in text.split()]
+
+
+def _search_fields(row) -> dict[SearchField, str]:
+    return {
+        "stem": row.stem or "",
+        "options": " ／ ".join(row.options or []),
+        "passage": row.passage or "",
+        "explanation": row.explanation or "",
+    }
+
+
+def _snippet(text: str, word: str, before: int = 40, after: int = 60) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    index = text.lower().find(word)
+    if index < 0:
+        return text[: before + after]
+    start = max(0, index - before)
+    end = min(len(text), index + len(word) + after)
+    return ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
+
+
+def search_questions(db: Session, criteria: QuestionFilter, limit: int = 50) -> SearchResult:
+    """關鍵字搜尋題目。題幹命中的排前面，其餘依試卷、題號排序。"""
+    words = _keywords(criteria.keyword or "")
+    if not words:
+        return SearchResult(total=0, question_ids=[], items=[])
+    ids = query_question_ids(db, criteria)
+    rows = {row.id: row for row in db.execute(select(Question).where(Question.id.in_(ids))).scalars()}
+
+    order = list(SearchField.__args__)
+    located: dict[int, tuple[SearchField, str]] = {}
+    for qid in ids:
+        fields = _search_fields(rows[qid])
+        field = next((name for name in order if any(word in fields[name].lower() for word in words)), "stem")
+        word = next((word for word in words if word in fields[field].lower()), words[0])
+        located[qid] = (field, _snippet(fields[field], word))
+    ids.sort(key=lambda qid: order.index(located[qid][0]))
+
+    questions = get_questions_with_paper(db, ids[:limit])
+    items = [SearchHit(question=question, field=located[question.id][0], snippet=located[question.id][1]) for question in questions]
+    return SearchResult(total=len(ids), question_ids=ids, items=items)
 
 
 def get_questions_with_paper(db: Session, question_ids: list[int]) -> list[QuestionWithPaper]:

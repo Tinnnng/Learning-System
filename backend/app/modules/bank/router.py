@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,9 @@ from app.modules.bank.schemas import (
     PaperDetail,
     PaperSummary,
     QuestionEdit,
+    QuestionFilter,
     QuestionOut,
+    SearchResult,
 )
 
 router = APIRouter(tags=["bank"])
@@ -35,6 +37,22 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
     if paper is None:
         raise HTTPException(status_code=404, detail="找不到這份試卷")
     return paper
+
+
+@router.get("/search", response_model=SearchResult)
+def search(
+    q: str = Query(min_length=1, max_length=200),
+    exam_type: str | None = None,
+    year: int | None = None,
+    category: str | None = None,
+    subject: str | None = None,
+    origin: Origin | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> SearchResult:
+    """關鍵字搜尋題目（空白分隔多個關鍵字，全部都要出現）。"""
+    criteria = QuestionFilter(keyword=q, exam_type=exam_type, year=year, category=category, subject=subject, origin=origin)
+    return service.search_questions(db, criteria, limit)
 
 
 @router.get("/filters", response_model=FilterOptions)

@@ -76,6 +76,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bank/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description 關鍵字搜尋題目（空白分隔多個關鍵字，全部都要出現）。
+         */
+        get: operations["search_api_bank_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bank/filters": {
         parameters: {
             query?: never;
@@ -1744,6 +1764,8 @@ export interface components {
             tags?: string[] | null;
             /** Types */
             types?: ("single_choice" | "multi_choice" | "essay")[];
+            /** Keyword */
+            keyword?: string | null;
         };
         /** QuestionHistory */
         QuestionHistory: {
@@ -1943,6 +1965,26 @@ export interface components {
             before_restore: string;
             /** Assets */
             assets: number;
+        };
+        /** SearchHit */
+        SearchHit: {
+            question: components["schemas"]["QuestionWithPaper"];
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "stem" | "options" | "passage" | "explanation";
+            /** Snippet */
+            snippet: string;
+        };
+        /** SearchResult */
+        SearchResult: {
+            /** Total */
+            total: number;
+            /** Question Ids */
+            question_ids: number[];
+            /** Items */
+            items: components["schemas"]["SearchHit"][];
         };
         /** SessionCreate */
         SessionCreate: {
@@ -2438,6 +2480,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaperDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_bank_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                exam_type?: string | null;
+                year?: number | null;
+                category?: string | null;
+                subject?: string | null;
+                origin?: ("official" | "generated" | "manual") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
                 };
             };
             /** @description Validation Error */

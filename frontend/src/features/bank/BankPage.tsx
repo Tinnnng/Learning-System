@@ -10,6 +10,7 @@ import { shortName } from '@/lib/format'
 import type { PaperSummary } from '@/lib/types'
 import { fetchFilters, fetchPapers, type PaperFilters } from './api'
 import { NewPaperDialog } from './NewPaperDialog'
+import { QuestionSearchForm } from './SearchPage'
 import { StartPanel } from './StartPanel'
 
 const ORIGIN_LABELS: Record<string, string> = { official: '考古題', generated: '教材出題', manual: '自建題目' }
@@ -87,6 +88,8 @@ export function BankPage() {
           </>
         }
       />
+
+      <QuestionSearchForm className="max-w-[640px]" />
 
       {options.data && (
         <div className="flex flex-col gap-3">

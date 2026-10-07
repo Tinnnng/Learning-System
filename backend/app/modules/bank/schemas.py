@@ -105,6 +105,27 @@ class QuestionFilter(BaseModel):
     origin: Origin | None = None
     tags: list[str] | None = None
     types: list[QuestionType] = Field(default_factory=lambda: ["single_choice", "multi_choice"])
+    keyword: str | None = None
+    """關鍵字，空白分隔的每個詞都要出現（不分大小寫）；比對題幹、選項、題組文章、詳解。"""
+
+
+SearchField = Literal["stem", "options", "passage", "explanation"]
+
+
+class SearchHit(BaseModel):
+    question: "QuestionWithPaper"
+    field: SearchField
+    """關鍵字最先出現在哪個欄位（題幹優先）"""
+    snippet: str
+    """命中位置前後的一小段文字"""
+
+
+class SearchResult(BaseModel):
+    total: int
+    question_ids: list[int]
+    """全部符合的題目 id（可直接拿來出題練習）"""
+    items: list[SearchHit]
+    """前 limit 筆的詳細資料"""
 
 
 class PaperSummary(BaseModel):
