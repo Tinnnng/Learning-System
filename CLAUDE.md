@@ -146,6 +146,7 @@ docs/                  轉檔流程說明（給 Claude Code 照著做）
 | `npm run setup` | 第一次安裝：後端套件、建立資料庫、前端套件 |
 | `npm run dev` | 同時啟動後端（:8000）與前端（:5173），開 http://localhost:5173 |
 | `npm run dev:lan` | 同上，但前端只綁定家用 Wi-Fi 的 IP，讓同網路的手機連（拍照辨識行事曆）。不綁 0.0.0.0，避免 VPN（Radmin、Tailscale）上的人連進來；後端仍只聽 127.0.0.1。系統沒有登入，只在信任的網路使用；IP 判斷錯時用 `LS_LAN_HOST` 指定 |
+| `npm run serve` | 正式使用（含 iPhone）：打包前端＋migration＋單一伺服器 127.0.0.1:8765（`start-server.cmd` 同內容），手機經 `tailscale serve --bg 8765` 的 HTTPS 連線，見 `docs/iphone.md` |
 | `npm test` | 執行後端 pytest 與前端 Vitest（含模組邊界檢查） |
 | `npm run migrate` | 套用資料庫 migration |
 | `cd backend && uv run alembic revision --autogenerate -m "說明"` | 改了 models 後產生 migration |

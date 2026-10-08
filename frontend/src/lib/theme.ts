@@ -21,9 +21,15 @@ export function resolveTheme(preference: ThemePreference, systemDark: boolean): 
   return preference
 }
 
+// 手機加到主畫面後，狀態列顏色跟著 theme-color；手動切換日夜時也要一起換（對應 tokens.css 的 --paper）
+const THEME_COLORS = { light: '#f7f8fb', dark: '#0d1124' }
+
 function apply(preference: ThemePreference) {
   const dark = resolveTheme(preference, media().matches) === 'dark'
   document.documentElement.classList.toggle('dark', dark)
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    meta.content = THEME_COLORS[dark ? 'dark' : 'light']
+  }
 }
 
 export function useTheme() {

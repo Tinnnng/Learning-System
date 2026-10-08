@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     data_dir: Path = PROJECT_ROOT / "data"
     database_url: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    frontend_dist: Path = PROJECT_ROOT / "frontend" / "dist"
+    """打包好的前端（npm run serve 會先 build）。存在時由後端一起提供，手機版（PWA）只要連這一個伺服器。"""
 
     # 學習相關的可調參數
     mastery_streak: int = 5

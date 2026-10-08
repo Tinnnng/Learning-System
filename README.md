@@ -81,9 +81,11 @@ uv run python -m app.modules.ingest.cli import ../data/converted/<檔名>   # �
 - 每月用量上限預設 3 美元，可在 `backend/.env` 用 `LS_AI_MONTHLY_BUDGET_USD` 調整。
 - 沒裝或沒登入 Claude Code 時，AI 按鈕會顯示錯誤，其他功能照常使用。
 
-## 用手機作答
+## 在 iPhone／手機上使用
 
-手機和電腦連同一個家用 Wi-Fi 時：
+建議做法：電腦執行 `npm run serve`（或雙擊 `start-server.cmd`），手機透過 Tailscale 用 HTTPS 連回電腦，再從 Safari「加入主畫面」，就像一個 App，在外面也能用。完整步驟見 [`docs/iphone.md`](docs/iphone.md)。
+
+只在家裡、同一個 Wi-Fi 臨時用的話：
 
 ```bash
 npm run dev:lan

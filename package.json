@@ -5,6 +5,7 @@
     "setup": "cd backend && uv sync && uv run alembic upgrade head && cd ../frontend && npm install",
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
     "dev:lan": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web:lan\"",
+    "serve": "node scripts/serve.mjs",
     "dev:api": "cd backend && uv run uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8000",
     "dev:web": "npm --prefix frontend run dev",
     "dev:web:lan": "cd frontend && node scripts/dev-lan.mjs",

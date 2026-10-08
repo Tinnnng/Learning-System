@@ -43,7 +43,7 @@
 
 ## 開發環境與注意事項
 
-- 啟動：`npm run dev`（http://localhost:5173）；手機同 Wi-Fi 用 `npm run dev:lan`（只綁 Wi-Fi IP，避開 Radmin VPN／Tailscale）。
+- 啟動：開發用 `npm run dev`（http://localhost:5173）；正式使用與手機用 `npm run serve`／`start-server.cmd`（單一伺服器 127.0.0.1:8765，手機經 Tailscale HTTPS 連，見 `docs/iphone.md`）。
 - 測試：`npm test`（後端 163、前端 16 個測試）；改 API 後 `npm run gen:api`；改 models 後產生 migration 並 `npm run migrate`。
 - 截圖自檢：先把 `data/` 複製到暫存區、用 `LS_DATA_DIR` 指向副本再啟動後端，**不要碰真正的資料庫**；`frontend/scripts/screenshots.mjs`。使用者常常自己開著 `npm run dev`（8000／5173，真正的資料庫），這時另開後端 `--port 8010` 與 `LS_API_PORT=8010 LS_WEB_PORT=5180 npx vite`，不要關掉使用者的伺服器。
 - 呼叫真的 AI（系統內 AI）會花使用者的 Claude 額度：每次 AI 評分約 0.004 美元、標一科知識點約 0.01～0.03 美元。測試一律用 `FakeProvider`。

@@ -17,7 +17,14 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(`/api${path}`, { ...init, headers })
+  let response: Response
+  try {
+    response = await fetch(`/api${path}`, { ...init, headers })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    // 連不到伺服器（手機在外面時最常見）：說明要檢查什麼，而不是顯示看不懂的錯誤
+    throw new ApiError(0, '連不到劃重點：請確認電腦開著、沒有睡眠，手機的 Tailscale 也已連線。')
+  }
   const body = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
     throw new ApiError(response.status, body?.detail ?? body)

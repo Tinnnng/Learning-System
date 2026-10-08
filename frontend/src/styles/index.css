@@ -165,9 +165,14 @@
     box-decoration-break: slice;
     transition: background-size var(--dur-slow) var(--ease-pen);
   }
-  .group:hover .pen-underline,
   .group:focus-visible .pen-underline {
     background-size: 100% 1.5px;
+  }
+  /* 只在有滑鼠的裝置畫：iPhone 點一下之後 :hover 會一直黏著 */
+  @media (hover: hover) {
+    .group:hover .pen-underline {
+      background-size: 100% 1.5px;
+    }
   }
 
   /* 原子筆劃掉：完成的事項被一筆劃過去（--strike 從 0 到 1） */
@@ -285,6 +290,27 @@
     line-height: 1.2;
     vertical-align: baseline;
   }
+}
+
+/* 觸控裝置（iPhone）：
+   - 輸入框字小於 16px 時，Safari 點進去會自動放大畫面，放大後還不會縮回來 → 觸控時一律至少 16px
+   - 點按鈕、連結時不要出現灰色底塊；取消「點兩下放大」的等待，按下去立刻有反應 */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+a,
+button,
+label,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 @media (prefers-reduced-motion: reduce) {

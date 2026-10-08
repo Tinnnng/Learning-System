@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.frontend import mount_frontend
 from app.modules.registry import load_modules
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     )
     for module in modules:
         app.include_router(module.router, prefix=module.prefix)
+    mount_frontend(app, get_settings().frontend_dist)  # 放在最後：API 路由優先
     return app
 
 
