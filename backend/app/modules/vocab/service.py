@@ -49,6 +49,8 @@ BUILTIN_DIR = Path(__file__).parent / "data"
 BUILTIN_LISTS = {"toeic_core": "多益核心單字"}
 QuizSource = Literal["wrong", "due", "new", "all", "next"]
 """next＝「再測一組」：每日單字寫完後再開一組，選字方式和每日一樣，但避開今天已經出現過的字。"""
+RETIRED_QUIZ_TYPES = {"cloze", "spelling"}
+"""使用者決定不再出的題型（只在單字太少、湊不出選項時才退回拼字）。"""
 
 
 class VocabError(Exception):
@@ -299,8 +301,8 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     for word_id, quiz_type in zip(daily.word_ids, daily.quiz_types, strict=True):
         if word_id not in words:
             continue  # 單字被刪除
-        if quiz_type == "cloze":
-            quiz_type = "en_to_zh"  # 不再出克漏字；改題型之前就抽好的每日單字也換掉
+        if quiz_type in RETIRED_QUIZ_TYPES and len(pool) >= quiz.CHOICE_COUNT:
+            quiz_type = "zh_to_en"  # 不再出克漏字與拼字；改題型之前就抽好的每日單字也換掉
         item = quiz.build_item(words[word_id], quiz_type, pool, random.Random(f"{day}-{word_id}"))
         if word_id in answered:
             item = item.model_copy(update={"answered": True, "is_correct": answered[word_id]})

@@ -19,13 +19,14 @@ def can_cloze(word: Word) -> bool:
 
 
 def choose_quiz_type(word: Word, attempts: int, rng: random.Random, pool_size: int) -> QuizType:
-    """新單字先考認得（英選中）；學過的在英選中、中選英、拼字之間隨機換。單字太少湊不出選項時考拼字。
-    不出克漏字（2026-10-07 使用者決定：非主流的背單字方式）；cloze 只留著讓舊的作答紀錄能顯示。"""
+    """新單字先考認得（英選中）；學過的在英選中、中選英之間隨機換。
+    使用者決定（2026-10-07、10-08）不出克漏字與拼字題；只有單字太少湊不出選項時才退回拼字。
+    cloze、spelling 留在型別裡，讓舊的作答紀錄能顯示。"""
     if pool_size < CHOICE_COUNT:
         return "spelling"
     if attempts == 0:
         return "en_to_zh"
-    types: list[QuizType] = ["en_to_zh", "zh_to_en", "spelling"]
+    types: list[QuizType] = ["en_to_zh", "zh_to_en"]
     return rng.choice(types)
 
 
