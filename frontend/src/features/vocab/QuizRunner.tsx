@@ -30,6 +30,10 @@ function Prompt({ item }: { item: QuizItem }) {
   return <p className="m-0 font-hand text-2xl font-bold leading-snug text-ink sm:text-3xl">{item.prompt}</p>
 }
 
+function resultText(result: VocabAnswerResult) {
+  return result.is_correct ? '答對了。' : `答錯了，答案是「${result.expected}」。`
+}
+
 function WordReveal({ result }: { result: VocabAnswerResult }) {
   const word = result.word
   const progress = word.progress
@@ -39,9 +43,10 @@ function WordReveal({ result }: { result: VocabAnswerResult }) {
         'flex flex-col gap-3 rounded-md border-l-[3px] px-5 py-4 animate-[rise-in_var(--dur)_var(--ease-out)]',
         result.is_correct ? 'border-ok bg-ok-soft/50' : 'border-bad bg-bad-soft/50',
       )}
-      aria-live="polite"
     >
-      <p className="m-0 font-medium">{result.is_correct ? '答對了。' : `答錯了，答案是「${result.expected}」。`}</p>
+      <p id="quiz-result" className="m-0 font-medium">
+        {resultText(result)}
+      </p>
       <div className="flex flex-wrap items-baseline gap-x-3">
         <span className="font-mono text-2xl font-medium">{word.term}</span>
         {word.part_of_speech && <span className="text-sm text-accent">{word.part_of_speech}</span>}
@@ -93,6 +98,17 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
     if (item?.quiz_type === 'spelling') window.setTimeout(() => inputRef.current?.focus(), 50)
   }, [index, item?.quiz_type])
 
+  // 換到下一題時焦點移到新題目（第一題不移），鍵盤使用者接著按 Tab 就到選項
+  const promptRef = useRef<HTMLDivElement>(null)
+  const firstPrompt = useRef(true)
+  useEffect(() => {
+    if (firstPrompt.current) {
+      firstPrompt.current = false
+      return
+    }
+    if (item?.quiz_type !== 'spelling') promptRef.current?.focus({ preventScroll: true })
+  }, [index, item?.quiz_type])
+
   const next = () => {
     const nextIndex = index + 1
     setPicked(null)
@@ -142,13 +158,23 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
         </span>
       </div>
 
-      <div key={index} className="flex min-h-[120px] flex-col justify-center gap-2 animate-[rise-in_var(--dur)_var(--ease-out)]">
+      {/* 朗讀區一直存在、作答後才填內容，螢幕閱讀器才會念出對錯 */}
+      <p className="sr-only" aria-live="polite">
+        {result ? resultText(result) : ''}
+      </p>
+      <div
+        key={index}
+        id="quiz-prompt"
+        ref={promptRef}
+        tabIndex={-1}
+        className="flex min-h-[120px] flex-col justify-center gap-2 animate-[rise-in_var(--dur)_var(--ease-out)]"
+      >
         <Prompt item={item} />
         {item.part_of_speech && item.quiz_type !== 'cloze' && <span className="text-sm text-accent">{item.part_of_speech}</span>}
       </div>
 
       {item.options ? (
-        <div role="radiogroup" aria-label="選項" className="-mx-3 flex flex-col gap-0.5">
+        <div role="radiogroup" aria-labelledby="quiz-prompt" className="-mx-3 flex flex-col gap-0.5">
           {item.options.map((option, position) => {
             const letter = LETTERS[position]
             const isPicked = picked === option
@@ -210,7 +236,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
       {result && <WordReveal result={result} />}
       {result && (
         <div className="flex justify-end">
-          <Button ref={nextRef} onClick={next}>
+          <Button ref={nextRef} aria-describedby="quiz-result" onClick={next}>
             {index + 1 < items.length ? '下一個' : '完成'}
             <Icon name="arrow" size={18} />
           </Button>

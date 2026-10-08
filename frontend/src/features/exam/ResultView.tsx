@@ -1,7 +1,7 @@
 /** 交卷後：得分、題號對錯一覽、每題詳解、錯題重寫。 */
 
 import { useQueryClient } from '@tanstack/react-query'
-import { type CSSProperties, useCallback, useMemo, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnswerGrid } from '@/components/AnswerGrid'
 import { Button, ButtonLink } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
@@ -55,6 +55,9 @@ export function ResultView({ session }: { session: SessionOut }) {
     [filter, session.items],
   )
   const ratio = result.max_score ? result.score / result.max_score : 0
+  // 交卷後畫面整個換掉：焦點移到標題，螢幕閱讀器從「這次的成績」開始念
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => titleRef.current?.focus({ preventScroll: true }), [])
 
   return (
     <div className="flex flex-col gap-8">
@@ -63,7 +66,7 @@ export function ResultView({ session }: { session: SessionOut }) {
           <span className="eyebrow-hand">
             {session.mode === 'mock' ? '模擬考' : '練習'}・{formatDateTime(session.started_at)}
           </span>
-          <h1 className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
+          <h1 ref={titleRef} tabIndex={-1} className="m-0 font-hand text-xl font-bold [word-break:keep-all] sm:text-2xl">{shortName(session.title)}</h1>
           <dl className="m-0 mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
             <div className="flex gap-1.5">
               <dt>答對</dt>
@@ -159,7 +162,7 @@ export function ResultView({ session }: { session: SessionOut }) {
             <ol className="m-0 flex list-none flex-col p-0">
               {visible.map((item) => (
                 <li key={item.position} id={`item-${item.position}`} className="scroll-mt-24 border-b border-rule py-8 first:pt-0 last:border-b-0">
-                  <QuestionBlock item={item} selection={item.response ?? []} onToggle={() => {}} essay={essayProps} />
+                  <QuestionBlock item={item} selection={item.response ?? []} onToggle={() => {}} essay={essayProps} announce={false} />
                 </li>
               ))}
             </ol>

@@ -32,6 +32,8 @@ export function Timer({ remainingSeconds, onExpire }: TimerProps) {
 
   const warning = left <= 300
   const urgent = left <= 60
+  // 剩 5 分鐘、1 分鐘時念一次（role=timer 本身不朗讀，避免每秒打擾）；隱藏的那份計時器不會念
+  const notice = urgent ? '剩不到 1 分鐘' : warning ? '剩不到 5 分鐘' : ''
   return (
     <span
       role="timer"
@@ -44,6 +46,9 @@ export function Timer({ remainingSeconds, onExpire }: TimerProps) {
     >
       <Icon name="clock" size={18} />
       {clock(left)}
+      <span className="sr-only" aria-live="polite">
+        {notice}
+      </span>
     </span>
   )
 }

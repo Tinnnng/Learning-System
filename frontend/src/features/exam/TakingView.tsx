@@ -105,6 +105,8 @@ export function TakingView({ session }: { session: SessionOut }) {
       } else {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }
+      // 換題後焦點移到新題的題號：鍵盤使用者接著按 Tab 就到選項，螢幕閱讀器也會念出換到第幾題
+      window.requestAnimationFrame(() => document.getElementById(`q-${target}`)?.focus({ preventScroll: true }))
     },
     [items.length, view],
   )
@@ -146,11 +148,15 @@ export function TakingView({ session }: { session: SessionOut }) {
       if (event.ctrlKey || event.metaKey || event.altKey) return
       const target = event.target as HTMLElement
       if (target.closest('input, textarea, select, dialog')) return
+      // 焦點在選項、連結、可展開的文章上時，方向鍵和 Enter 留給它們自己（不換題）
+      const onControl = Boolean(target.closest('a, summary, [role="radio"], [role="checkbox"], [role="radiogroup"], [role="group"]'))
       const key = event.key.toUpperCase()
       const index = /^[1-9]$/.test(key) ? Number(key) - 1 : LETTERS.indexOf(key)
       if (index >= 0 && index < item.options.length && key.length === 1) {
         event.preventDefault()
         toggle(item, LETTERS[index])
+      } else if (onControl && ['ArrowRight', 'ArrowLeft', 'Enter'].includes(event.key)) {
+        return
       } else if (event.key === 'ArrowRight' || (event.key === 'Enter' && target.tagName !== 'BUTTON')) {
         if (current < items.length) goTo(current + 1)
       } else if (event.key === 'ArrowLeft') {
@@ -168,7 +174,13 @@ export function TakingView({ session }: { session: SessionOut }) {
     answered: entry.answered,
     correct: entry.revealed ? entry.is_correct : undefined,
   }))
-  const onExpire = useCallback(() => submit.mutate(), [submit])
+  // 計時器在桌機側欄、手機頂列（和題號一覽）各有一份，時間到只能交卷一次
+  const expired = useRef(false)
+  const onExpire = useCallback(() => {
+    if (expired.current) return
+    expired.current = true
+    submit.mutate()
+  }, [submit])
 
   const block = (entry: ItemOut) => (
     <QuestionBlock

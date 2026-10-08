@@ -11,11 +11,20 @@ import { cx } from '@/lib/cx'
 
 const BLANK = /\{\{blank(?::(\d+))?\}\}/g
 
+/** 直接產生的 HTML 節點（hast），給 hChildren 用 */
+interface HastChild {
+  type: string
+  value?: string
+  tagName?: string
+  properties?: Record<string, unknown>
+  children?: HastChild[]
+}
+
 interface MdNode {
   type: string
   value?: string
   children?: MdNode[]
-  data?: { hName?: string; hProperties?: Record<string, string>; hChildren?: MdNode[] }
+  data?: { hName?: string; hProperties?: Record<string, string>; hChildren?: HastChild[] }
 }
 
 /** remark 外掛：把文字中的 {{blank}} 換成 <span class="blank"> */
@@ -39,8 +48,19 @@ function remarkBlank() {
           type: 'blank',
           data: {
             hName: 'span',
-            hProperties: { className: 'blank', 'aria-label': label ? `第 ${label} 題空格` : '空格' },
-            hChildren: label ? [{ type: 'text', value: label }] : [],
+            hProperties: { className: 'blank' },
+            // span 上的 aria-label 多數螢幕閱讀器會忽略：改成 sr-only 的文字，畫面上的題號不重複念
+            hChildren: [
+              {
+                type: 'element',
+                tagName: 'span',
+                properties: { className: ['sr-only'] },
+                children: [{ type: 'text', value: label ? `（第 ${label} 題空格）` : '（空格）' }],
+              },
+              ...(label
+                ? [{ type: 'element', tagName: 'span', properties: { ariaHidden: 'true' }, children: [{ type: 'text', value: label }] }]
+                : []),
+            ],
           },
         })
         last = index + match[0].length
@@ -71,7 +91,7 @@ export function RichText({ children, inline = false, className }: RichTextProps)
       components={{
         p: ({ children: nodes }) => (inline ? <>{nodes}</> : <p>{nodes}</p>),
         img: ({ src, alt }) => (
-          <img src={assetUrl(String(src ?? ''))} alt={alt ?? ''} className="my-2 max-w-full rounded-sm" />
+          <img src={assetUrl(String(src ?? ''))} alt={alt || '題目附圖'} loading="lazy" className="my-2 max-w-full rounded-sm" />
         ),
         a: ({ href, children: nodes }) => (
           <a href={href} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">

@@ -46,7 +46,15 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
     return () => window.clearTimeout(timer)
   })
 
-  const status = save.isPending ? '儲存中…' : dirty ? '' : save.isSuccess && draft !== null ? '已儲存' : ''
+  const status = save.isPending
+    ? '儲存中…'
+    : save.isError
+      ? '沒有存到，請稍後再試（離開輸入框會再存一次）'
+      : dirty
+        ? ''
+        : save.isSuccess && draft !== null
+          ? '已儲存'
+          : ''
 
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
@@ -87,7 +95,7 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
         placeholder="在這裡寫筆記：自己的理解、容易錯的地方…"
         className={cx(
           'ml-2 min-h-11 w-[calc(100%-0.5rem)] resize-none rounded-md border border-dashed px-3 py-2 font-display text-[15px] leading-relaxed text-ink',
-          'outline-none transition-colors duration-[var(--dur)] [field-sizing:content] placeholder:text-muted/70',
+          'outline-none transition-colors duration-[var(--dur)] [field-sizing:content] placeholder:text-muted',
           value ? 'border-transparent bg-sheet-tint' : 'border-line bg-transparent hover:border-rule',
           'focus:border-accent focus:bg-sheet-tint',
         )}

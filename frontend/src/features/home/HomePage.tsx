@@ -52,6 +52,7 @@ function TaskRow({ index, title, detail, status, action, done }: TaskRowProps) {
       <div className="flex min-w-0 flex-col gap-1.5">
         <h3 className="m-0 text-base font-medium">
           <span className={cx('pen-strike', done ? '[--strike:1] text-ink-soft' : '[--strike:0]')}>{title}</span>
+          {done && <span className="sr-only">（已完成）</span>}
         </h3>
         <div className="text-sm text-muted">{detail}</div>
         {status}
@@ -101,7 +102,7 @@ export function HomePage() {
   const nextExam = countdown.data?.next_exam
 
   if (vocab.isPending || overview.isPending) return <Loading />
-  if (vocab.isError || overview.isError) return <ErrorState error={vocab.error ?? overview.error} onRetry={() => vocab.refetch()} />
+  if (vocab.isError || overview.isError) return <ErrorState error={vocab.error ?? overview.error} onRetry={() => { void vocab.refetch(); void overview.refetch() }} />
 
   const words = vocab.data
   const stats = overview.data
@@ -179,7 +180,7 @@ export function HomePage() {
                     ? `錯題本有 ${stats.wrong_book} 題，今天到期 ${stats.review_due} 題。`
                     : `錯題本有 ${stats.wrong_book} 題，今天沒有到期的。`
               }
-              status={null}
+              status={startReview.isError ? <ErrorState error={startReview.error} /> : null}
               action={
                 stats.review_due > 0 ? (
                   <Button

@@ -1,6 +1,6 @@
 /** 對話框：使用原生 <dialog>（焦點鎖定、Esc 關閉都由瀏覽器處理）。 */
 
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useId, useRef } from 'react'
 import { cx } from '@/lib/cx'
 
 interface DialogProps {
@@ -14,6 +14,9 @@ interface DialogProps {
 
 export function Dialog({ open, onClose, title, children, actions, wide }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  // 按下和放開都在背景上才關閉：在輸入框裡拖曳選字、放開在外面時，不能把編輯中的內容關掉
+  const pressedOnBackdrop = useRef(false)
 
   useEffect(() => {
     const dialog = ref.current
@@ -25,9 +28,14 @@ export function Dialog({ open, onClose, title, children, actions, wide }: Dialog
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
+      onMouseDown={(event) => {
+        pressedOnBackdrop.current = event.target === ref.current
+      }}
       onClick={(event) => {
-        if (event.target === ref.current) onClose()
+        if (pressedOnBackdrop.current && event.target === ref.current) onClose()
+        pressedOnBackdrop.current = false
       }}
       className={cx(
         'm-auto w-[calc(100%-32px)] rounded-lg border border-line bg-sheet p-0 text-ink shadow-pop',
@@ -37,8 +45,10 @@ export function Dialog({ open, onClose, title, children, actions, wide }: Dialog
       )}
     >
       <div className="flex max-h-[85dvh] flex-col">
-        <h2 className="m-0 border-b border-rule px-6 py-4 font-display text-lg font-bold">{title}</h2>
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        <h2 id={titleId} className="m-0 border-b border-rule px-6 py-4 font-display text-lg font-bold">
+          {title}
+        </h2>
+        <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
         {actions && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-6 py-4">{actions}</div>}
       </div>
     </dialog>

@@ -120,7 +120,7 @@ function SearchRow({ hit, words }: { hit: SearchHit; words: string[] }) {
                 key={LETTERS[index]}
                 letter={LETTERS[index]}
                 text={option}
-                disabled
+                readOnly
                 state={question.answer.includes(LETTERS[index]) ? 'answer' : 'dimmed'}
               />
             ))}

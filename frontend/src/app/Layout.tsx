@@ -65,13 +65,40 @@ export function Layout() {
   const tabIndex = primaryIndex >= 0 ? primaryIndex : overflowActive || moreOpen ? primary.length : -1
   const tabCount = primary.length + (overflow.length > 0 ? 1 : 0)
 
+  // 換頁：捲到頂端、瀏覽器分頁標題換成這頁的標題（WCAG 2.4.2），
+  // 用鍵盤或螢幕閱讀器的人換頁後焦點移到新頁的 h1，才知道到了哪裡（第一次載入不移，避免打斷）
+  const firstRoute = useRef(true)
   useEffect(() => {
     window.scrollTo({ top: 0 })
+    const fallback = navItems.find((item) => (item.path === '/' ? pathname === '/' : pathname.startsWith(item.path)))?.label
+    const timer = window.setTimeout(() => {
+      const heading = document.querySelector<HTMLElement>('main h1')
+      const name = heading?.textContent?.trim() || fallback
+      document.title = name ? `${name}｜劃重點` : '劃重點'
+      if (!firstRoute.current && heading) {
+        heading.tabIndex = -1
+        heading.focus({ preventScroll: true })
+      }
+      firstRoute.current = false
+    }, 350)
+    return () => window.clearTimeout(timer)
   }, [pathname])
 
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const moreMenu = useRef<HTMLElement>(null)
+  const closeMore = (returnFocus: boolean) => {
+    setMoreOpen(false)
+    if (returnFocus) moreButton.current?.focus()
+  }
   useEffect(() => {
     if (!moreOpen) return
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setMoreOpen(false)
+    moreMenu.current?.querySelector<HTMLElement>('a')?.focus()  // 打開時焦點移進選單
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false)
+        moreButton.current?.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [moreOpen])
@@ -88,7 +115,7 @@ export function Layout() {
       <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 border-b border-line bg-paper/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[var(--content-width)] items-center gap-6 px-4 sm:px-6">
           <Wordmark />
-          <nav aria-label="主要導覽" className="hidden flex-1 md:block">
+          <nav aria-label="主要導覽" className="hidden flex-1 lg:block">
             <ul ref={navRef} className="relative m-0 flex list-none gap-1 p-0">
               {navItems.map((item) => (
                 <li key={item.path}>
@@ -97,7 +124,7 @@ export function Layout() {
                     end={item.path === '/'}
                     className={({ isActive }) =>
                       cx(
-                        'group flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-[var(--dur)]',
+                        'group flex h-10 items-center whitespace-nowrap rounded-md px-3 text-sm transition-colors duration-[var(--dur)]',
                         isActive ? 'font-medium text-ink' : 'text-muted hover:text-ink',
                       )
                     }
@@ -131,7 +158,7 @@ export function Layout() {
 
       <main
         id="main"
-        className={cx('mx-auto max-w-[var(--content-width)] px-4 pt-8 sm:px-6 md:pb-16 md:pt-10', focus ? 'pb-10' : 'pb-28')}
+        className={cx('mx-auto max-w-[var(--content-width)] px-4 pt-8 sm:px-6 lg:pb-16 lg:pt-10', focus ? 'pb-10' : 'pb-28')}
       >
         {/* 換頁時重新掛載，讓頁面區塊依序進場；作答頁有自己的翻頁動畫，不另外加 */}
         <div key={pathname} className={focus ? undefined : 'route-enter'}>
@@ -141,14 +168,15 @@ export function Layout() {
 
       {/* 手機版「更多」選單：從底部分頁列上方展開 */}
       {moreOpen && !focus && (
-        <div className="fixed inset-0 z-20 md:hidden">
+        <div className="fixed inset-0 z-20 lg:hidden">
           <button
             type="button"
             aria-label="關閉選單"
             className="absolute inset-0 bg-ink/25 animate-[fade-in_var(--dur)_var(--ease-out)]"
-            onClick={() => setMoreOpen(false)}
+            onClick={() => closeMore(true)}
           />
           <nav
+            ref={moreMenu}
             id="more-menu"
             aria-label="更多頁面"
             className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] rounded-t-lg border-t border-line bg-sheet px-4 pt-4 pb-3 shadow-sheet animate-[rise-in_var(--dur)_var(--ease-out)]"
@@ -158,7 +186,7 @@ export function Layout() {
                 <li key={item.path}>
                   <NavLink
                     to={item.path}
-                    onClick={() => setMoreOpen(false)}
+                    onClick={() => closeMore(false)}
                     className={({ isActive }) =>
                       cx(
                         'flex h-18 flex-col items-center justify-center gap-1.5 rounded-md text-xs transition-colors active:bg-accent-faint',
@@ -180,7 +208,7 @@ export function Layout() {
       <nav
         hidden={focus}
         aria-label="主要導覽"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/92 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/92 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md lg:hidden"
       >
         {/* 目前分頁上方的短線：換分頁時滑過去 */}
         <span
@@ -202,7 +230,7 @@ export function Layout() {
                 end={item.path === '/'}
                 className={({ isActive }) =>
                   cx(
-                    'flex h-16 flex-col items-center justify-center gap-1 text-[11px] transition-colors',
+                    'flex h-16 flex-col items-center justify-center gap-1 text-xs transition-colors active:bg-accent-faint',
                     isActive ? 'text-accent' : 'text-muted',
                   )
                 }
@@ -215,12 +243,13 @@ export function Layout() {
           {overflow.length > 0 && (
             <li>
               <button
+                ref={moreButton}
                 type="button"
                 aria-expanded={moreOpen}
                 aria-controls="more-menu"
                 onClick={() => setMoreOpen(!moreOpen)}
                 className={cx(
-                  'flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] transition-colors',
+                  'flex h-16 w-full flex-col items-center justify-center gap-1 text-xs transition-colors active:bg-accent-faint',
                   moreOpen || overflowActive ? 'text-accent' : 'text-muted',
                 )}
               >

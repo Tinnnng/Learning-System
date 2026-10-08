@@ -27,9 +27,16 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
   const byDay = new Map(daily.map((entry) => [entry.day, entry]))
   const days = lastDays(30)
   const max = Math.max(10, ...daily.map((entry) => entry.attempts))
+  const recent = days.map((day) => byDay.get(day)).filter((entry) => entry && entry.attempts > 0)
+  const total = recent.reduce((sum, entry) => sum + (entry?.attempts ?? 0), 0)
+  const correctTotal = recent.reduce((sum, entry) => sum + (entry?.correct ?? 0), 0)
+  // 給螢幕閱讀器的摘要；逐日數字放在下面的 sr-only 表格
+  const summary = total
+    ? `最近 30 天有 ${recent.length} 天作答，共 ${total} 題，答對 ${correctTotal} 題`
+    : '最近 30 天還沒有作答'
   return (
     <figure className="m-0 flex flex-col gap-3">
-      <div className="flex h-36 items-end gap-[3px]" role="img" aria-label="最近 30 天每日作答題數">
+      <div className="flex h-36 items-end gap-[3px]" role="img" aria-label={summary}>
         {days.map((day) => {
           const entry = byDay.get(day)
           const attempts = entry?.attempts ?? 0
@@ -37,24 +44,45 @@ function Activity({ daily }: { daily: Overview['daily'] }) {
           return (
             <div key={day} className="group relative flex h-full flex-1 flex-col justify-end" title={`${day.slice(5)}：${attempts} 題，答對 ${correct}`}>
               <div
-                className="flex w-full flex-col justify-end overflow-hidden rounded-t-[3px] bg-bad-hl transition-[height] duration-[var(--dur-slow)]"
+                className="flex w-full flex-col justify-end gap-px overflow-hidden rounded-t-[3px] bg-bad transition-[height] duration-[var(--dur-slow)]"
                 style={{ height: `${(attempts / max) * 100}%`, minHeight: attempts ? 3 : 0 }}
               >
-                <div className="w-full bg-ok-hl" style={{ height: attempts ? `${(correct / attempts) * 100}%` : 0 }} />
+                <div className="w-full bg-ok shadow-[0_-1px_0_var(--sheet)]" style={{ height: attempts ? `${(correct / attempts) * 100}%` : 0 }} />
               </div>
               {attempts === 0 && <div className="h-[3px] w-full rounded-full bg-line" />}
             </div>
           )
         })}
       </div>
+      {recent.length > 0 && (
+        <table className="sr-only">
+          <caption>最近 30 天每日作答</caption>
+          <thead>
+            <tr>
+              <th scope="col">日期</th>
+              <th scope="col">作答題數</th>
+              <th scope="col">答對</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recent.map((entry) => (
+              <tr key={entry!.day}>
+                <th scope="row">{entry!.day}</th>
+                <td>{entry!.attempts}</td>
+                <td>{entry!.correct}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <figcaption className="flex justify-between text-xs text-muted">
         <span>{days[0].slice(5).replace('-', '/')}</span>
         <span className="flex gap-4">
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-ok-hl" /> 答對
+            <span className="h-2.5 w-2.5 rounded-full bg-ok" /> 答對
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-bad-hl" /> 答錯
+            <span className="h-2.5 w-2.5 rounded-full bg-bad" /> 答錯
           </span>
         </span>
         <span>今天</span>

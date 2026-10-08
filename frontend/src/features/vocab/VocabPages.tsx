@@ -310,6 +310,8 @@ function ImportPanel() {
           type="file"
           accept=".csv,.xlsx"
           className="sr-only"
+          tabIndex={-1}
+          aria-label="選擇單字檔（CSV 或 Excel）"
           id="word-file"
           onChange={(event) => {
             const file = event.target.files?.[0]

@@ -42,7 +42,9 @@ function SnapshotRow({
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule py-4 last:border-b-0">
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className={cx('text-[17px] text-ink', latest && 'font-medium underline decoration-accent decoration-2 underline-offset-[6px]')}>{relativeDay(snapshot.created_at)}</span>
+          <span className={cx('text-[17px] text-ink', latest && 'font-medium underline decoration-accent decoration-2 underline-offset-[6px]')}>{relativeDay(snapshot.created_at)}
+            {latest && <span className="sr-only">（最新）</span>}
+          </span>
           <span className="font-mono text-sm text-muted">{formatDateTime(snapshot.created_at)}</span>
         </span>
         <span className="flex items-center gap-2 text-xs text-muted">
@@ -61,12 +63,13 @@ function SnapshotRow({
         <a
           href={`/api/backup/snapshots/${encodeURIComponent(snapshot.name)}`}
           download={snapshot.name}
+          aria-label={`下載 ${formatDateTime(snapshot.created_at)} 的備份`}
           className="inline-flex h-11 items-center gap-1.5 rounded-md px-3 text-sm text-ink-soft transition-colors hover:bg-accent-faint hover:text-ink"
         >
           <Icon name="import" size={17} />
           下載
         </a>
-        <Button variant="ghost" size="sm" className="h-11" onClick={onRestore}>
+        <Button variant="ghost" size="sm" className="h-11" onClick={onRestore} aria-label={`還原 ${formatDateTime(snapshot.created_at)} 的備份`}>
           <Icon name="refresh" size={17} />
           還原
         </Button>
@@ -173,6 +176,8 @@ export function BackupPage() {
               type="file"
               accept=".zip,application/zip"
               className="sr-only"
+              tabIndex={-1}
+              aria-label="選擇備份 zip 檔"
               onChange={(event) => {
                 const file = event.target.files?.[0]
                 if (file) setRestoreTarget({ kind: 'file', file })

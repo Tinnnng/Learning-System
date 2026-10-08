@@ -85,7 +85,10 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
                       : 'border-line bg-sheet text-ink hover:border-rule hover:bg-accent-faint',
                   )}
                 >
-                  <span className="truncate">{preset.name}</span>
+                  <span className="truncate">
+                    {preset.name}
+                    {preset.subscribed && <span className="sr-only">（已訂閱）</span>}
+                  </span>
                   {preset.subscribed ? <Icon name="check" size={16} /> : <Icon name="plus" size={16} className="text-accent" />}
                 </button>
               </li>
@@ -226,6 +229,7 @@ export function SubscriptionPanel() {
         }
       >
         <p className="m-0">「{removing?.name}」匯入的所有行程都會從行事曆移除。之後可以再訂閱。</p>
+        {remove.isError && <ErrorState error={remove.error} />}
       </Dialog>
     </section>
   )

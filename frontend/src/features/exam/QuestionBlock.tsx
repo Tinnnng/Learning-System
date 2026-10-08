@@ -25,6 +25,12 @@ function bubbleState(item: ItemOut, letter: string, selection: string[]): Bubble
   return selection.includes(letter) ? 'chosen' : 'idle'
 }
 
+function feedbackText(item: ItemOut) {
+  if (item.is_correct) return '答對了。'
+  const answer = (item.correct ?? []).join('、')
+  return item.answered ? `答錯了，正確答案是 ${answer}。` : `沒有作答，正確答案是 ${answer}。`
+}
+
 interface QuestionBlockProps {
   item: ItemOut
   /** 目前選取（複選題在練習模式確定前是本地狀態） */
@@ -36,9 +42,20 @@ interface QuestionBlockProps {
   headingLevel?: 'h2' | 'h3'
   /** 申論題作答需要的資訊 */
   essay?: { sessionId: number; practice: boolean; submitted: boolean; onUpdate: (item: ItemOut) => void }
+  /** 作答中要朗讀對錯（螢幕閱讀器）；交卷後的檢討頁一次顯示很多題，不朗讀 */
+  announce?: boolean
 }
 
-export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy, headingLevel = 'h2', essay }: QuestionBlockProps) {
+export function QuestionBlock({
+  item,
+  selection,
+  onToggle,
+  onConfirmMulti,
+  busy,
+  headingLevel = 'h2',
+  essay,
+  announce = true,
+}: QuestionBlockProps) {
   const [showPage, setShowPage] = useState(false)
   const Heading = headingLevel
   const multiple = item.type === 'multi_choice'
@@ -48,7 +65,7 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
   return (
     <article className="flex flex-col gap-4" aria-labelledby={`q-${item.position}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <Heading id={`q-${item.position}`} className="m-0 flex items-baseline gap-3">
+        <Heading id={`q-${item.position}`} tabIndex={-1} className="m-0 flex items-baseline gap-3 scroll-mt-24">
           <span className="tabular text-2xl font-medium text-accent">{item.position}</span>
           <span className="text-xs font-normal text-muted">
             {item.paper.year && `${item.paper.year} 年`}
@@ -117,20 +134,21 @@ export function QuestionBlock({ item, selection, onToggle, onConfirmMulti, busy,
             </div>
           )}
 
+          {/* 朗讀區要一直存在、之後才填內容，螢幕閱讀器才會念出對錯（和畫面上的回饋框分開） */}
+          {announce && (
+            <p className="sr-only" aria-live="polite">
+              {item.revealed ? feedbackText(item) : ''}
+            </p>
+          )}
           {item.revealed && (
             <div
               className={cx(
                 'flex flex-col gap-2 rounded-md border-l-[3px] px-4 py-3 animate-[rise-in_var(--dur)_var(--ease-out)]',
                 item.is_correct ? 'border-ok bg-ok-soft/50' : 'border-bad bg-bad-soft/50',
               )}
-              aria-live="polite"
             >
               <p className="m-0 font-medium">
-                {item.is_correct
-                  ? '答對了。'
-                  : item.answered
-                    ? `答錯了，正確答案是 ${(item.correct ?? []).join('、')}。`
-                    : `沒有作答，正確答案是 ${(item.correct ?? []).join('、')}。`}
+                {feedbackText(item)}
                 {!item.is_correct && item.answered && <span className="ml-1 font-normal text-muted">已收進錯題本。</span>}
               </p>
               {item.explanation && <RichText className="text-[15px]">{item.explanation}</RichText>}

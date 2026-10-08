@@ -102,7 +102,7 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
                   key={letter}
                   letter={letter}
                   text={option}
-                  disabled
+                  readOnly
                   state={question.answer.includes(letter) ? 'answer' : 'dimmed'}
                 />
               )

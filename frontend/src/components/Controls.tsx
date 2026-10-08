@@ -62,13 +62,13 @@ export function Switch({ label, description, checked, onChange, disabled }: Swit
         onClick={() => onChange(!checked)}
         className={cx(
           'relative mt-0.5 h-6 w-10 flex-none rounded-full border-[1.5px] transition-colors duration-[var(--dur)]',
-          checked ? 'border-ink bg-ink' : 'border-line bg-sheet',
+          checked ? 'border-ink bg-ink' : 'border-[var(--field)] bg-sheet',
         )}
       >
         <span
           className={cx(
             'absolute top-1/2 h-[14px] w-[14px] -translate-y-1/2 rounded-full transition-[left,background-color] duration-[var(--dur)] ease-[var(--ease-out)]',
-            checked ? 'left-[19px] bg-paper' : 'left-[4px] bg-muted/60',
+            checked ? 'left-[19px] bg-paper' : 'left-[4px] bg-muted',
           )}
         />
       </button>

@@ -65,8 +65,9 @@ function EssayEditor({ item, sessionId, practice, onUpdate }: Omit<EssayAnswerPr
         <label htmlFor={fieldId} className="text-sm text-muted">
           作答（{formatScore(item.points)} 分）
         </label>
-        <span className="text-xs text-muted" role="status" aria-live="polite">
-          {save.isPending ? '儲存中…' : dirty ? '' : item.text ? '已儲存' : ''}
+        <span className="text-xs text-muted">
+          {/* 只念「儲存中／已儲存」；字數放在朗讀區外，不然每打一個字就念一次 */}
+          <span role="status">{save.isPending ? '儲存中…' : dirty ? '' : item.text ? '已儲存' : ''}</span>
           <span className="tabular ml-3">{length} 字</span>
         </span>
       </div>

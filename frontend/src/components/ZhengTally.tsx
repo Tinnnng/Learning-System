@@ -41,7 +41,7 @@ export function ZhengTally({ count, target = 5, size = 32, showLabel = true, cla
             pathLength={1}
             strokeDasharray={1}
             strokeDashoffset={index < filled ? 0 : 1}
-            style={{ transition: 'stroke-dashoffset var(--dur-slow) var(--ease-draw), stroke var(--dur) ease' }}
+            style={{ transition: 'stroke-dashoffset var(--dur-slow) var(--ease-pen), stroke var(--dur) ease' }}
           />
         ))}
       </svg>

@@ -22,7 +22,7 @@
   --accent-faint: #edf1ff;
   --hl: #ffe34d; /* 黃色螢光筆 */
   --hl-soft: #fff4b0;
-  --ok: #12804c;
+  --ok: #0f7444; /* 疊在 --ok-soft 上 5.1:1（原本 #12804c 只有 4.37:1） */
   --ok-soft: #ddf6e8;
   --ok-hl: #9bf0bd; /* 綠色螢光筆：答對 */
   --bad: #c42a5c;
@@ -30,6 +30,7 @@
   --bad-hl: #ffc2d6; /* 粉紅螢光筆：答錯 */
   --star: #d99a00; /* 收藏的星號 */
   --line: #e3e6ee;
+  --field: #868ea6; /* 輸入框邊框：對白底 3.26:1（WCAG 1.4.11 元件邊界要 3:1，--line 只有 1.25:1） */
   --overlay: rgb(26 35 64 / 0.4);
 
   /* 字體 */
@@ -105,6 +106,7 @@
   --bad-hl: rgb(255 111 154 / 0.3);
   --star: #f2d24a;
   --line: #232a4b;
+  --field: #626b94; /* 對 --sheet 3.3:1 */
   --overlay: rgb(3 5 15 / 0.65);
   --shadow-sheet: 0 1px 0 rgb(0 0 0 / 0.25), 0 18px 40px -26px rgb(0 0 0 / 0.9);
   --shadow-pop: 0 18px 48px -18px rgb(0 0 0 / 0.85);

@@ -124,7 +124,8 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
               key={key}
               type="button"
               onClick={() => onPick(key)}
-              aria-label={`${cursor.month + 1} 月 ${day} 日${dayEvents.length ? `，${dayEvents.map((event) => event.title).join('、')}` : ''}`}
+              aria-current={key === today ? 'date' : undefined}
+              aria-label={`${cursor.year} 年 ${cursor.month + 1} 月 ${day} 日 星期${WEEKDAYS[new Date(cursor.year, cursor.month, day).getDay()]}${key === today ? '（今天）' : ''}${dayEvents.length ? `，${dayEvents.map((event) => event.title).join('、')}` : ''}，新增行程`}
               className={cx(
                 'flex aspect-square min-h-11 flex-col items-center justify-start gap-1 rounded-sm pt-1.5 text-sm transition-colors hover:bg-accent-faint',
                 key === today && 'ring-1 ring-accent',
@@ -244,8 +245,9 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
           ref={fileRef}
           type="file"
           accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
-          capture="environment"
           className="sr-only"
+          tabIndex={-1}
+          aria-label="選擇照片或 PDF"
           id="calendar-photo"
           onChange={(event) => {
             const file = event.target.files?.[0]
@@ -321,6 +323,7 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
                         type="button"
                         onClick={() => update(index, { editing: !draft.editing })}
                         aria-expanded={draft.editing}
+                        aria-label={`${draft.editing ? '收合' : '修改'}「${draft.title}」`}
                         className="min-h-11 shrink-0 px-1 text-sm text-muted hover:text-ink"
                       >
                         {draft.editing ? '收合' : '修改'}
@@ -464,7 +467,7 @@ export function CalendarPage() {
             {past.length > 0 && (
               <details className="mt-4">
                 <summary className="cursor-pointer text-sm text-muted">已經過去的行程</summary>
-                <ul className="m-0 mt-2 list-none p-0 opacity-70">{past.map(row)}</ul>
+                <ul className="m-0 mt-2 list-none p-0">{past.map(row)}</ul>
               </details>
             )}
           </section>
@@ -511,6 +514,7 @@ export function CalendarPage() {
         }
       >
         <p className="m-0">「{confirmDelete?.title}」會從行事曆移除。</p>
+        {remove.isError && <ErrorState error={remove.error} />}
       </Dialog>
 
       <PhotoImport open={photoOpen} onClose={() => setPhotoOpen(false)} />

@@ -46,6 +46,7 @@ function TopicRow({
         <span className="flex items-baseline gap-2">
           <span className={cx('truncate text-[15px] text-ink', stat.weak && 'underline decoration-bad decoration-wavy decoration-[1.5px] underline-offset-[5px]')}>
             {stat.topic}
+            {stat.weak && <span className="sr-only">（弱點）</span>}
           </span>
           <span
             className={cx(
@@ -115,7 +116,13 @@ function SubjectCard({
             {subject.tagged > 0 ? `標記新的 ${untagged} 題` : 'AI 標記知識點'}
           </Button>
         ) : (
-          <button type="button" onClick={onRetag} disabled={busy} className="h-9 text-xs text-muted hover:text-ink disabled:opacity-45">
+          <button
+            type="button"
+            onClick={onRetag}
+            disabled={busy}
+            aria-label={`重新標記${shortName(subject.subject)}的知識點`}
+            className="min-h-11 px-1 text-xs text-muted hover:text-ink disabled:opacity-45"
+          >
             重新標記
           </button>
         )}

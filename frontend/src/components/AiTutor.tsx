@@ -50,6 +50,12 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
+  // AI 回覆後念出來（「AI 回覆中…」消失後螢幕閱讀器原本不會知道有新內容）
+  const [announcement, setAnnouncement] = useState('')
+  const announceReply = (data: Thread) => {
+    const reply = [...data.messages].reverse().find((message) => message.role === 'assistant')
+    if (reply) setAnnouncement(`AI 已回覆：${reply.content.slice(0, 120)}`)
+  }
   const key = ['tutor', questionId]
   const running = useRef<Running | null>(null)
   const thread = useQuery({ queryKey: key, queryFn: () => fetchThread(questionId), enabled: open })
@@ -83,12 +89,16 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const explain = useMutation({
     mutationFn: (regenerate: boolean) =>
       send(`/tutor/questions/${questionId}/explain`, { regenerate, my_answer: myAnswer ?? null }),
-    onSuccess: onThread,
+    onSuccess: (data) => {
+      onThread(data)
+      announceReply(data)
+    },
   })
   const ask = useMutation({
     mutationFn: (content: string) => send(`/tutor/questions/${questionId}/messages`, { content }),
     onSuccess: (data) => {
       onThread(data)
+      announceReply(data)
       setDraft('')
     },
   })
@@ -135,6 +145,9 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         </button>
       </header>
 
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
       {thread.isPending && <p className="m-0 text-sm text-muted">載入中…</p>}
       {thread.isError && <p className="m-0 text-sm text-bad">{errorText(thread.error)}</p>}
 

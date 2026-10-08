@@ -73,7 +73,7 @@ export function ExtractWordsDialog({ open, onClose }: { open: boolean; onClose: 
             label="從哪些題目找"
             value={source}
             onChange={setSource}
-            className="min-w-[300px]"
+            className="w-full sm:w-auto sm:min-w-[300px]"
             options={[
               { value: 'wrong', label: '答錯過的英文題' },
               { value: 'all', label: '全部英文題' },
@@ -108,7 +108,8 @@ export function ExtractWordsDialog({ open, onClose }: { open: boolean; onClose: 
                     <label
                       className={cx(
                         'flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors',
-                        checked ? 'border-accent bg-accent-faint' : 'border-line bg-sheet opacity-60',
+                        // 沒勾的不降透明度（會讓文字對比不足），改用一般底色
+                        checked ? 'border-accent bg-accent-faint' : 'border-line bg-sheet',
                       )}
                     >
                       <input type="checkbox" checked={checked} onChange={() => toggle(word.term)} className="mt-1.5 h-4 w-4 accent-[var(--accent)]" />

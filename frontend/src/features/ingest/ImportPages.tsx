@@ -31,7 +31,12 @@ function useImport() {
 }
 
 function OutcomeNote({ outcome }: { outcome: ImportOutcome }) {
-  if (!outcome.result) return <p className="m-0 text-sm text-bad">有錯誤，沒有匯入。</p>
+  if (!outcome.result)
+    return (
+      <p className="m-0 text-sm text-bad" role="alert">
+        有錯誤，沒有匯入。按「對照預覽」看是哪幾題、怎麼修。
+      </p>
+    )
   const result = outcome.result
   return (
     <p className="m-0 text-sm text-ok" role="status">
@@ -64,6 +69,7 @@ function FileRow({ file }: { file: ConvertedFile }) {
         </span>
         {file.error && <span className="text-xs text-bad">格式錯誤：{file.error.split('\n')[0]}</span>}
         {run.data && <OutcomeNote outcome={run.data} />}
+        {run.isError && <ErrorState error={run.error} />}
       </div>
       <div className="flex gap-2">
         <Link
@@ -72,7 +78,13 @@ function FileRow({ file }: { file: ConvertedFile }) {
         >
           對照預覽
         </Link>
-        <Button size="sm" variant={file.imported_paper_id ? 'secondary' : 'primary'} disabled={!report?.ok || run.isPending} onClick={() => run.mutate(file.name)}>
+        <Button
+          size="sm"
+          variant={file.imported_paper_id ? 'secondary' : 'primary'}
+          disabled={!report?.ok || run.isPending}
+          onClick={() => run.mutate(file.name)}
+          aria-label={`${file.imported_paper_id ? '重新匯入' : '匯入'}「${file.name}」`}
+        >
           {file.imported_paper_id ? '重新匯入' : '匯入'}
         </Button>
       </div>
@@ -111,7 +123,7 @@ export function ImportListPage() {
 }
 
 export function ImportPreviewPage() {
-  const name = decodeURIComponent(useParams().name ?? '')
+  const name = useParams().name ?? ''  // React Router 已經解碼過，不能再 decodeURIComponent（檔名有 % 會壞）
   const bundle = useQuery({ queryKey: ['ingest', 'bundle', name], queryFn: () => fetchBundle(name) })
   const files = useQuery({ queryKey: ['ingest', 'files'], queryFn: fetchConverted })
   const [index, setIndex] = useState(0)
@@ -151,6 +163,7 @@ export function ImportPreviewPage() {
         }
       />
       {run.data && <OutcomeNote outcome={run.data} />}
+      {run.isError && <ErrorState error={run.error} />}
       {paperIssues.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1 rounded-md bg-accent-faint px-4 py-3 text-sm">
           {paperIssues.map((issue) => (
@@ -216,7 +229,7 @@ export function ImportPreviewPage() {
                     key={letter}
                     letter={letter}
                     text={option}
-                    disabled
+                    readOnly
                     state={question.answer?.includes(letter) ? 'answer' : 'dimmed'}
                   />
                 )

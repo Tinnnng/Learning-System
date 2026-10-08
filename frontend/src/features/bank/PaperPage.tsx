@@ -30,7 +30,8 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
         <button
           type="button"
           onClick={onEdit}
-          className="absolute -top-1 right-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted opacity-60 transition-opacity hover:bg-sheet-tint hover:text-accent focus-visible:opacity-100 group-hover/question:opacity-100"
+          aria-label={`修改第 ${question.label ?? question.number} 題`}
+          className="absolute -top-1 right-0 inline-flex min-h-9 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition-[opacity,color,background-color] hover:bg-sheet-tint hover:text-accent [@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover/question:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
         >
           <Icon name="edit" size={14} />
           修改
@@ -54,7 +55,7 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
                 key={letter}
                 letter={letter}
                 text={option}
-                disabled
+                readOnly
                 state={showAnswer ? (correct ? 'answer' : 'dimmed') : 'idle'}
               />
             )

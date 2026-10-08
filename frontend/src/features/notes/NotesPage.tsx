@@ -33,7 +33,13 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
         onClick={() => setOpen(!open)}
         className="grid w-full grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 px-1 py-5 text-left transition-colors hover:bg-sheet-tint sm:px-3"
       >
-        <Icon name="star" size={18} filled={note.starred} className={cx('mt-0.5', note.starred ? 'text-star' : 'text-line')} />
+        <Icon
+          name="star"
+          size={18}
+          filled={note.starred}
+          label={note.starred ? '已收藏' : undefined}
+          className={cx('mt-0.5', note.starred ? 'text-star' : 'text-line')}
+        />
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs text-muted">
             {question.paper.year && `${question.paper.year} 年`}
@@ -63,7 +69,7 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
                 key={LETTERS[index]}
                 letter={LETTERS[index]}
                 text={option}
-                disabled
+                readOnly
                 state={question.answer.includes(LETTERS[index]) ? 'answer' : 'dimmed'}
               />
             ))}
