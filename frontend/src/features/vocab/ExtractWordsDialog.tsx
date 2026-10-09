@@ -85,11 +85,20 @@ export function ExtractWordsDialog({ open, onClose }: { open: boolean; onClose: 
           </Button>
         </div>
 
+        <p className="sr-only" aria-live="polite">
+          {add.data
+            ? `已加入 ${add.data.created} 個新單字`
+            : extract.data
+              ? extract.data.drafts.length > 0
+                ? `找到 ${extract.data.drafts.length} 個生字，已全部勾選`
+                : (extract.data.message ?? '沒有找到生字')
+              : ''}
+        </p>
         {extract.isError && <ErrorState error={extract.error} />}
         {extract.data?.message && <p className="m-0 text-sm text-muted">{extract.data.message}</p>}
         {add.isError && <ErrorState error={add.error} />}
         {add.data && (
-          <p className="m-0 rounded-md bg-ok-soft/60 px-3 py-2 text-sm" role="status">
+          <p className="m-0 rounded-md bg-ok-soft/60 px-3 py-2 text-sm">
             已加入 {add.data.created} 個新單字{add.data.updated > 0 && `、更新 ${add.data.updated} 個`}，明天起會出現在每日複習。
           </p>
         )}

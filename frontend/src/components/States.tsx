@@ -30,7 +30,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
     <div role="alert" className="flex flex-col items-start gap-3 rounded-md border border-bad/40 bg-bad-soft/50 p-5">
       <p className="m-0 text-ink">{message}</p>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="text-sm font-medium text-accent underline underline-offset-4">
+        <button type="button" onClick={onRetry} className="hit text-sm font-medium text-accent underline underline-offset-4">
           重新載入
         </button>
       )}

@@ -34,8 +34,17 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
   const [search, setSearch] = useState('')
   const [url, setUrl] = useState('')
   const [includeDeadlines, setIncludeDeadlines] = useState(true)
+  // 下載中的網址：只停用正在訂閱的那一個按鈕，其他類別可以接著按
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
   const add = useMutation({
     mutationFn: subscribe,
+    onMutate: (body) => setPending((previous) => new Set(previous).add(body.url)),
+    onSettled: (_data, _error, body) =>
+      setPending((previous) => {
+        const next = new Set(previous)
+        next.delete(body.url)
+        return next
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['calendar'] }),
   })
   const close = () => {
@@ -64,9 +73,11 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
             <Icon name="search" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="search"
+              name="q"
+              autoComplete="off"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜尋考試，例如：普通、高等、銀行"
+              placeholder="搜尋考試，例如：普通、高等、銀行…"
               aria-label="搜尋考試類別"
               className="h-10 w-full rounded-md border border-line bg-sheet pl-9 pr-3 text-sm text-ink outline-none focus:border-ink"
             />
@@ -76,7 +87,8 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
               <li key={preset.url}>
                 <button
                   type="button"
-                  disabled={preset.subscribed || add.isPending}
+                  disabled={preset.subscribed || pending.has(preset.url)}
+                  aria-busy={pending.has(preset.url) || undefined}
                   onClick={() => add.mutate({ url: preset.url, name: preset.name, include_deadlines: includeDeadlines })}
                   className={cx(
                     'flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-left text-sm transition-colors',
@@ -89,11 +101,22 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
                     {preset.name}
                     {preset.subscribed && <span className="sr-only">（已訂閱）</span>}
                   </span>
-                  {preset.subscribed ? <Icon name="check" size={16} /> : <Icon name="plus" size={16} className="text-accent" />}
+                  {preset.subscribed ? (
+                    <Icon name="check" size={16} />
+                  ) : pending.has(preset.url) ? (
+                    <span className="h-3 w-2 flex-none animate-pulse rounded-full border border-accent" />
+                  ) : (
+                    <Icon name="plus" size={16} className="text-accent" />
+                  )}
                 </button>
               </li>
             ))}
           </ul>
+          {presets.data && list.length === 0 && (
+            <p className="m-0 rounded-md border border-dashed border-rule px-4 py-3 text-sm text-muted">
+              {search.trim() ? `找不到「${search.trim()}」。換個關鍵字，或在下面貼上 iCal 網址。` : '目前沒有可訂閱的考試類別。'}
+            </p>
+          )}
           {presets.data && <p className="m-0 text-[11px] leading-relaxed text-muted">{presets.data.source}</p>}
         </section>
 
@@ -110,18 +133,24 @@ function AddSubscription({ open, onClose }: { open: boolean; onClose: () => void
           <div className="flex gap-2">
             <input
               id="ical-url"
+              name="ical-url"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               placeholder="https://…/calendar.ics、webcal://…，或 Google 日曆 ID"
               className="h-10 min-w-0 flex-1 rounded-md border border-line bg-sheet px-3 text-sm text-ink outline-none focus:border-ink"
             />
-            <Button type="submit" size="sm" variant="secondary" disabled={!url.trim() || add.isPending}>
+            <Button type="submit" size="sm" variant="secondary" disabled={!url.trim() || pending.has(url.trim())}>
               訂閱
             </Button>
           </div>
         </form>
 
-        {add.isPending && (
+        {pending.size > 0 && (
           <p className="m-0 text-sm text-muted" role="status">
             下載行事曆中…
           </p>

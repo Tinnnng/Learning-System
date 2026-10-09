@@ -137,16 +137,15 @@ export function Layout() {
                   </NavLink>
                 </li>
               ))}
-              {/* 目前頁面的原子筆底線：換頁時滑到新的項目 */}
+              {/* 目前頁面的原子筆底線：換頁時滑到新的項目。寬度用 scaleX（基準 100px）而不是 width，只動 transform 才不會每格重新排版 */}
               <li
                 aria-hidden="true"
                 className={cx(
-                  'pointer-events-none absolute -bottom-[13px] left-0 h-[2px] rounded-full bg-accent',
-                  ink.animate && 'transition-[transform,width,opacity] duration-[var(--dur-slow)] ease-[var(--ease-pen)]',
+                  'pointer-events-none absolute -bottom-[13px] left-0 h-[2px] w-[100px] origin-left bg-accent',
+                  ink.animate && 'transition-[transform,opacity] duration-[var(--dur-slow)] ease-[var(--ease-pen)]',
                 )}
                 style={{
-                  width: ink.bar?.width ?? 0,
-                  transform: `translateX(${ink.bar?.left ?? 0}px)`,
+                  transform: `translateX(${ink.bar?.left ?? 0}px) scaleX(${(ink.bar?.width ?? 0) / 100})`,
                   opacity: ink.bar ? 1 : 0,
                 }}
               />

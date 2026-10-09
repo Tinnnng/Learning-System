@@ -28,6 +28,8 @@ interface OptionBubbleProps {
   disabled?: boolean
   multiple?: boolean
   readOnly?: boolean
+  /** 單選群組只有一個 Tab 停留點（見 lib/roving.ts），由群組決定 */
+  tabIndex?: number
   onSelect?: () => void
 }
 
@@ -38,7 +40,7 @@ const MARKER_COLOR: Partial<Record<BubbleState, string>> = {
   answer: 'var(--ok-hl)',
 }
 
-export function OptionBubble({ letter, text, state, disabled, multiple, readOnly, onSelect }: OptionBubbleProps) {
+export function OptionBubble({ letter, text, state, disabled, multiple, readOnly, tabIndex, onSelect }: OptionBubbleProps) {
   const color = MARKER_COLOR[state]
   const selected = state === 'chosen' || state === 'right' || state === 'wrong'
   const inactive = disabled || readOnly
@@ -102,6 +104,7 @@ export function OptionBubble({ letter, text, state, disabled, multiple, readOnly
       role={multiple ? 'checkbox' : 'radio'}
       aria-checked={selected}
       aria-disabled={disabled || undefined}
+      tabIndex={tabIndex}
       onClick={disabled ? undefined : onSelect}
       className={cx(
         'group relative flex w-full items-start gap-3.5 rounded-md px-3 py-2.5 text-left',

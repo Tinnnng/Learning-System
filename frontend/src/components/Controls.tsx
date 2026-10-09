@@ -2,6 +2,7 @@
 
 import { type ReactNode, useId } from 'react'
 import { cx } from '@/lib/cx'
+import { onRovingKeyDown, rovingTabIndex } from '@/lib/roving'
 
 interface SegmentedProps<T extends string> {
   label: string
@@ -14,8 +15,12 @@ interface SegmentedProps<T extends string> {
 /** 分段選擇（單選）。每個選項可以附一行說明。 */
 export function Segmented<T extends string>({ label, value, options, onChange, className }: SegmentedProps<T>) {
   return (
-    <div role="radiogroup" aria-label={label} className={cx('grid gap-2', className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
-      {options.map((option) => {
+    <div
+      role="radiogroup"
+      aria-label={label}
+      onKeyDown={(event) => onRovingKeyDown(event)}
+      className={cx('grid gap-2', className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((option, index) => {
         const active = option.value === value
         return (
           <button
@@ -23,6 +28,7 @@ export function Segmented<T extends string>({ label, value, options, onChange, c
             type="button"
             role="radio"
             aria-checked={active}
+            tabIndex={rovingTabIndex(active, index, options.some((item) => item.value === value))}
             onClick={() => onChange(option.value)}
             className={cx(
               'flex flex-col items-start gap-0.5 rounded-md border px-3.5 py-2.5 text-left transition-[border-color,background-color,box-shadow] duration-[var(--dur)]',
@@ -67,8 +73,8 @@ export function Switch({ label, description, checked, onChange, disabled }: Swit
       >
         <span
           className={cx(
-            'absolute top-1/2 h-[14px] w-[14px] -translate-y-1/2 rounded-full transition-[left,background-color] duration-[var(--dur)] ease-[var(--ease-out)]',
-            checked ? 'left-[19px] bg-paper' : 'left-[4px] bg-muted',
+            'absolute left-[4px] top-1/2 h-[14px] w-[14px] -translate-y-1/2 rounded-full transition-[translate,background-color] duration-[var(--dur)] ease-[var(--ease-out)]',
+            checked ? 'translate-x-[15px] bg-paper' : 'bg-muted',
           )}
         />
       </button>
@@ -102,7 +108,7 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
             aria-pressed={active}
             onClick={() => onChange(active ? null : option.value)}
             className={cx(
-              'h-8 rounded-full border px-3 text-sm transition-colors duration-[var(--dur-fast)]',
+              'hit h-8 rounded-full border px-3 text-sm transition-colors duration-[var(--dur-fast)]',
               active ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:border-rule',
             )}
           >

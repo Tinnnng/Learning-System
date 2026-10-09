@@ -1,5 +1,6 @@
 import { Icon, type IconName } from '@/components/Icon'
 import { cx } from '@/lib/cx'
+import { onRovingKeyDown } from '@/lib/roving'
 import { type ThemePreference, useTheme } from '@/lib/theme'
 
 const OPTIONS: Array<{ value: ThemePreference; label: string; icon: IconName }> = [
@@ -15,6 +16,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <div
       role="radiogroup"
       aria-label="外觀"
+      onKeyDown={(event) => onRovingKeyDown(event)}
       className={cx('inline-flex rounded-full border border-line bg-sheet p-0.5', className)}
     >
       {OPTIONS.map((option) => {
@@ -25,10 +27,11 @@ export function ThemeToggle({ className }: { className?: string }) {
             type="button"
             role="radio"
             aria-checked={active}
+            tabIndex={active ? 0 : -1}
             title={option.label}
             onClick={() => setPreference(option.value)}
             className={cx(
-              'grid h-8 w-8 place-items-center rounded-full transition-colors duration-[var(--dur)]',
+              'grid h-8 w-8 place-items-center rounded-full pointer-coarse:h-[44px] pointer-coarse:w-[44px] transition-colors duration-[var(--dur)]',
               active ? 'bg-ink text-paper' : 'text-muted hover:text-ink',
             )}
           >

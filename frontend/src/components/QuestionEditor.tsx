@@ -11,7 +11,8 @@ import { EssayReference } from '@/components/EssayReference'
 import { Icon } from '@/components/Icon'
 import { RichText } from '@/components/RichText'
 import { cx } from '@/lib/cx'
-import { changeType, type QuestionDraft, rubricTotal } from '@/lib/questionEdit'
+import { changeType, type QuestionDraft, type QuestionProblem, rubricTotal } from '@/lib/questionEdit'
+import { onRovingKeyDown, rovingTabIndex } from '@/lib/roving'
 
 const LETTERS = 'ABCDEFGHIJ'
 const control =
@@ -21,10 +22,18 @@ const field = `w-full ${control}`
 interface QuestionEditorProps {
   value: QuestionDraft
   onChange: (value: QuestionDraft) => void
+  /** 儲存時驗證失敗的欄位：標 aria-invalid，用 aria-describedby 連到錯誤訊息（訊息由呼叫端顯示，id 是 errorId） */
+  problem?: QuestionProblem | null
+  errorId?: string
 }
 
-export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
+export function QuestionEditor({ value, onChange, problem, errorId }: QuestionEditorProps) {
   const id = useId()
+  /** 欄位的錯誤標記；data-field 讓對話框把焦點移到出錯的欄位 */
+  const invalid = (field: QuestionProblem['field'], when = true) =>
+    problem?.field === field && when
+      ? { 'aria-invalid': true as const, 'aria-describedby': errorId, 'data-field': field }
+      : { 'data-field': field }
   const [preview, setPreview] = useState(false)
   const [showPassage, setShowPassage] = useState(Boolean(value.passage))
   const set = <K extends keyof QuestionDraft>(key: K, next: QuestionDraft[K]) => onChange({ ...value, [key]: next })
@@ -120,7 +129,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
           <textarea id={`${id}-passage`} rows={5} className={field} value={value.passage ?? ''} onChange={(event) => set('passage', event.target.value || null)} />
         </div>
       ) : (
-        <button type="button" onClick={() => setShowPassage(true)} className="w-fit text-sm text-accent underline underline-offset-4">
+        <button type="button" onClick={() => setShowPassage(true)} className="hit w-fit text-sm text-accent underline underline-offset-4">
           {essay ? '加上題目說明' : '加上題組文章'}
         </button>
       )}
@@ -129,7 +138,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
         <label htmlFor={`${id}-stem`} className="text-xs text-muted">
           題幹（支援 Markdown、公式 $x^2${essay ? '、程式碼用 ``` 包起來' : '、填空 {{blank}}'}）
         </label>
-        <textarea id={`${id}-stem`} rows={essay ? 5 : 3} required className={field} value={value.stem} onChange={(event) => set('stem', event.target.value)} />
+        <textarea id={`${id}-stem`} {...invalid('stem')} rows={essay ? 5 : 3} required className={field} value={value.stem} onChange={(event) => set('stem', event.target.value)} />
       </div>
 
       {essay ? (
@@ -138,7 +147,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
             <label htmlFor={`${id}-explanation`} className="text-xs text-muted">
               參考答案（作答後才會看到）
             </label>
-            <textarea id={`${id}-explanation`} rows={6} className={field} value={value.explanation ?? ''} onChange={(event) => set('explanation', event.target.value || null)} />
+            <textarea id={`${id}-explanation`} {...invalid('explanation')} rows={6} className={field} value={value.explanation ?? ''} onChange={(event) => set('explanation', event.target.value || null)} />
           </div>
 
           <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -147,7 +156,8 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
               <div key={index} className="flex flex-wrap items-center gap-2 border-b border-dashed border-rule pb-2 last:border-b-0 sm:flex-nowrap sm:border-b-0 sm:pb-0">
                 <input
                   aria-label={`得分要點 ${index + 1}`}
-                  placeholder="寫成可以判斷有沒有寫到的具體內容，例如：指出需要路由器"
+                  {...invalid('rubric', !point.text.trim() || !(point.points > 0) || index === 0)}
+                  placeholder="寫成可以判斷有沒有寫到的具體內容，例如：指出需要路由器…"
                   className={cx(control, 'h-10 min-w-0 basis-full py-0 sm:basis-auto sm:flex-1')}
                   value={point.text}
                   onChange={(event) => setRubric(index, { text: event.target.value })}
@@ -168,7 +178,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
               </div>
             ))}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <button type="button" onClick={() => set('rubric', [...rubric, { text: '', points: 0 }])} className="w-fit text-sm text-accent underline underline-offset-4">
+              <button type="button" onClick={() => set('rubric', [...rubric, { text: '', points: 0 }])} className="hit w-fit text-sm text-accent underline underline-offset-4">
                 新增得分要點
               </button>
               <span className={cx('tabular text-sm', totalMismatch ? 'text-bad' : 'text-muted')} role="status">
@@ -179,7 +189,10 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
         </>
       ) : (
         <>
-          <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <fieldset
+            className="m-0 flex flex-col gap-2 border-0 p-0"
+            onKeyDown={multiple ? undefined : (event) => onRovingKeyDown(event)}
+          >
             <legend className="mb-1.5 text-xs text-muted">選項（勾選正確答案{multiple ? '，可以多個' : ''}）</legend>
             {options.map((option, index) => {
               const letter = LETTERS[index]
@@ -191,6 +204,8 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
                     role={multiple ? 'checkbox' : 'radio'}
                     aria-checked={correct}
                     aria-label={`把 ${letter} 設為正確答案`}
+                    {...invalid('answer', index === 0)}
+                    tabIndex={multiple ? undefined : rovingTabIndex(correct, index, answer.length > 0)}
                     onClick={() => toggleAnswer(letter)}
                     className={cx(
                       'grid h-10 w-10 flex-none place-items-center rounded-md border font-display text-lg transition-colors',
@@ -201,6 +216,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
                   </button>
                   <input
                     aria-label={`選項 ${letter}`}
+                    {...invalid('options', !option.trim() || options.length < 2)}
                     className={cx(field, 'h-10 py-0')}
                     value={option}
                     onChange={(event) => set('options', options.map((item, position) => (position === index ? event.target.value : item)))}
@@ -212,7 +228,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
               )
             })}
             {options.length < LETTERS.length && (
-              <button type="button" onClick={() => set('options', [...options, ''])} className="w-fit text-sm text-accent underline underline-offset-4">
+              <button type="button" onClick={() => set('options', [...options, ''])} className="hit w-fit text-sm text-accent underline underline-offset-4">
                 新增選項
               </button>
             )}
@@ -260,6 +276,7 @@ export function QuestionEditor({ value, onChange }: QuestionEditorProps) {
           </label>
           <input
             id={`${id}-points`}
+            {...invalid('points')}
             type="number"
             min={0}
             step={0.5}

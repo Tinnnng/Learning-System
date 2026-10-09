@@ -1,8 +1,8 @@
 /** 英文單字：每日複習、錯題單字、單字庫（含匯入）。 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useRef, useState } from 'react'
-import { NavLink } from 'react-router'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { NavLink, useSearchParams } from 'react-router'
 import { Button, ButtonLink } from '@/components/Button'
 import { ChipGroup } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { ZhengTally } from '@/components/ZhengTally'
 import { cx } from '@/lib/cx'
 import { relativeDay, todayLabel } from '@/lib/format'
+import { useDebounced } from '@/lib/useDebounced'
 import type { ImportResult, QuizItem, VocabAnswerResult, WordOut } from '@/lib/types'
 import {
   fetchBuiltin,
@@ -365,12 +366,32 @@ function ImportPanel() {
 }
 
 export function WordsPage() {
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<WordStatus | null>(null)
+  // 搜尋字與狀態放在網址（?q=…&status=…）：重新整理、上一頁回來都還在，也能直接分享連結
+  const [params, setParams] = useSearchParams()
+  const statusParam = params.get('status')
+  const status = statusParam && statusParam in STATUS_LABELS ? (statusParam as WordStatus) : null
+  const [search, setSearch] = useState(() => params.get('q') ?? '')
+  const query = useDebounced(search.trim())
   const [limit, setLimit] = useState(40)
+  const setParam = useCallback(
+    (key: string, value: string | null) =>
+      setParams(
+        (previous) => {
+          if ((previous.get(key) ?? null) === value) return previous
+          const next = new URLSearchParams(previous)
+          if (value) next.set(key, value)
+          else next.delete(key)
+          return next
+        },
+        { replace: true },
+      ),
+    [setParams],
+  )
+  // 搜尋字停止輸入後才寫進網址
+  useEffect(() => setParam('q', query || null), [query, setParam])
   const words = useQuery({
-    queryKey: ['vocab', 'words', search, status, limit],
-    queryFn: () => fetchWords({ search, status, limit }),
+    queryKey: ['vocab', 'words', query, status, limit],
+    queryFn: () => fetchWords({ search: query, status, limit }),
     placeholderData: (previous) => previous,
   })
 
@@ -384,9 +405,11 @@ export function WordsPage() {
             <Icon name="search" size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="search"
+              name="q"
+              autoComplete="off"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜尋英文或中文"
+              placeholder="搜尋英文或中文…"
               aria-label="搜尋單字"
               className="h-11 w-full rounded-md border border-line bg-sheet pl-10 pr-4 text-ink outline-none transition-colors focus:border-ink"
             />
@@ -394,7 +417,7 @@ export function WordsPage() {
           <ChipGroup
             label="狀態"
             value={status}
-            onChange={setStatus}
+            onChange={(value) => setParam('status', value)}
             options={(Object.keys(STATUS_LABELS) as WordStatus[]).map((value) => ({ value, label: STATUS_LABELS[value] }))}
           />
           {words.isPending ? (

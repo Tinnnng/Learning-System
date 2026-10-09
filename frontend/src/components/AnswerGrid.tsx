@@ -1,6 +1,7 @@
 /**
  * 題號導覽：一格一個題號，作答過的題號用螢光筆劃起來（揭曉後變成綠／粉紅），
  * 目前的題目用原子筆圈起來。點擊跳到該題。
+ * 揭曉後右上角另外標 ✓／×，色弱或列印成黑白時也分得出對錯（不只靠顏色）。
  */
 
 import type { CSSProperties } from 'react'
@@ -28,7 +29,7 @@ function markerColor(cell: GridCell): string | null {
 
 export function AnswerGrid({ cells, current, onJump, className }: AnswerGridProps) {
   return (
-    <ol className={cx('grid grid-cols-[repeat(auto-fill,minmax(38px,1fr))] gap-1', className)} aria-label="題號導覽">
+    <ol className={cx('grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-1', className)} aria-label="題號導覽">
       {cells.map((cell) => {
         const isCurrent = cell.position === current
         const color = markerColor(cell)
@@ -42,7 +43,7 @@ export function AnswerGrid({ cells, current, onJump, className }: AnswerGridProp
               aria-current={isCurrent ? 'step' : undefined}
               aria-label={`第 ${cell.position} 題，${status}`}
               className={cx(
-                'relative grid h-10 w-full place-items-center rounded-md transition-colors duration-[var(--dur-fast)]',
+                'relative grid h-[44px] w-full place-items-center rounded-md transition-colors duration-[var(--dur-fast)]',
                 'hover:bg-sheet-tint',
               )}
             >
@@ -52,6 +53,17 @@ export function AnswerGrid({ cells, current, onJump, className }: AnswerGridProp
               >
                 {cell.position}
               </span>
+              {cell.correct != null && (
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    'absolute right-0.5 top-0 text-[11px] font-bold leading-none',
+                    cell.correct ? 'text-ok' : 'text-bad',
+                  )}
+                >
+                  {cell.correct ? '✓' : '×'}
+                </span>
+              )}
               {isCurrent && (
                 <svg
                   aria-hidden="true"

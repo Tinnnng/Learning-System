@@ -53,6 +53,10 @@ function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
       <button
         type="button"
         aria-expanded={open}
+        // 按鈕內容有整段題目摘要，直接當名稱太長；改用「出處＋題號＋狀態」
+        aria-label={`${shortName(question.paper.subject)} ${question.label ?? `第 ${question.number} 題`}，${
+          progress.in_wrong_book ? `連續答對 ${progress.correct_streak}／${progress.mastery_target} 次` : '已移出錯題本'
+        }，錯 ${progress.wrong_count} 次`}
         onClick={() => setOpen(!open)}
         className="grid w-full grid-cols-[1fr_auto] items-start gap-x-6 gap-y-2 px-1 py-5 text-left transition-colors hover:bg-sheet-tint sm:grid-cols-[1fr_auto_auto] sm:px-3"
       >

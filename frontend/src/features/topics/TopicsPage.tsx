@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { api } from '@/lib/api'
 import type { components } from '@/lib/api-types'
 import { cx } from '@/lib/cx'
-import { percent, shortName } from '@/lib/format'
+import { percent, shortName, usd } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 
 type TopicsOverview = components['schemas']['TopicsOverview']
@@ -155,6 +155,7 @@ export function TopicsPage() {
   const { start, practice } = usePractice()
   const [queue, setQueue] = useState<{ subjects: string[]; done: number } | null>(null)
   const [retagTarget, setRetagTarget] = useState<string | null>(null)
+  const [confirmAll, setConfirmAll] = useState(false)
   const [lastResult, setLastResult] = useState<TagResult | null>(null)
 
   const tag = useMutation({
@@ -195,7 +196,7 @@ export function TopicsPage() {
         description="AI 依科目把題目歸到知識點，再用你的作答紀錄算出每個知識點的正確率；弱的那幾個，直接拿來練。"
         actions={
           untaggedSubjects.length > 1 ? (
-            <Button onClick={() => runQueue(untaggedSubjects.map((subject) => subject.subject))} disabled={busy}>
+            <Button onClick={() => setConfirmAll(true)} disabled={busy}>
               <Icon name="spark" size={17} />
               全部科目一起標記
             </Button>
@@ -278,6 +279,42 @@ export function TopicsPage() {
           </div>
         </>
       )}
+
+      <Dialog
+        open={confirmAll}
+        onClose={() => setConfirmAll(false)}
+        title="全部科目一起標記？"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmAll(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmAll(false)
+                void runQueue(untaggedSubjects.map((subject) => subject.subject))
+              }}
+            >
+              開始標記
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3 text-[15px]">
+          <p className="m-0">
+            會依序標記 {untaggedSubjects.length} 個科目，大約呼叫 AI {totalCalls} 次（Haiku，每次約 0.003 美元，合計約{' '}
+            {usd(totalCalls * 0.003)}），每科 10–40 秒。會用到你的 Claude 訂閱額度。
+          </p>
+          <ul className="m-0 flex flex-col gap-1 pl-5 text-sm text-muted">
+            {untaggedSubjects.map((subject) => (
+              <li key={subject.subject}>
+                {shortName(subject.subject)}：約 {subject.estimated_calls} 次
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 text-sm text-muted">中途失敗的話，已完成的科目會保留。</p>
+        </div>
+      </Dialog>
 
       <Dialog
         open={retagTarget !== null}

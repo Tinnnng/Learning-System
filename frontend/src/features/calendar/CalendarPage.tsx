@@ -1,7 +1,7 @@
 /** 行事曆：下一場考試倒數、月曆、接下來的行程；手動新增或拍照讓 AI 辨識（確認後才加入）；匯出 .ics。 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { CountUp } from '@/components/CountUp'
 import { Switch } from '@/components/Controls'
@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { ApiError } from '@/lib/api'
 import { cx } from '@/lib/cx'
+import { isoDay } from '@/lib/format'
 import {
   createEvent,
   deleteEvent,
@@ -30,7 +31,7 @@ import { SubscriptionPanel } from './Subscriptions'
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const pad = (value: number) => String(value).padStart(2, '0')
 const iso = (year: number, month: number, day: number) => `${year}-${pad(month + 1)}-${pad(day)}`
-const todayIso = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
+const todayIso = () => isoDay()
 
 function dateLabel(event: Pick<EventOut, 'date' | 'end_date' | 'time'>) {
   const thisYear = Number(todayIso().slice(0, 4))
@@ -70,12 +71,48 @@ function Countdown() {
   )
 }
 
-function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: string) => void }) {
+/** 日期往前／往後移幾天（YYYY-MM-DD，本地日期） */
+function addDays(key: string, delta: number) {
+  const [year, month, day] = key.split('-').map(Number)
+  const date = new Date(year, month - 1, day + delta)
+  return iso(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+/** 同一天換到別的月份（31 日到沒有 31 日的月份時用月底） */
+function addMonths(key: string, delta: number) {
+  const [year, month, day] = key.split('-').map(Number)
+  const last = new Date(year, month - 1 + delta + 1, 0).getDate()
+  const date = new Date(year, month - 1 + delta, Math.min(day, last))
+  return iso(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+/**
+ * 月曆：整個月只有一個 Tab 停留點，用方向鍵在日期間移動
+ * （←→ 前後一天、↑↓ 前後一週、Home／End 週頭週尾、PageUp／PageDown 上下個月，跨月會自動翻頁）。
+ * 點沒有行程的日期直接新增；點有行程的日期先在月曆下方列出當天行程，再選要編輯或新增。
+ */
+function MonthGrid({
+  events,
+  onAdd,
+  onEdit,
+}: {
+  events: EventOut[]
+  onAdd: (date: string) => void
+  onEdit: (event: EventOut) => void
+}) {
   const today = todayIso()
-  const [cursor, setCursor] = useState(() => {
-    const [year, month] = today.split('-').map(Number)
-    return { year, month: month - 1 }
-  })
+  const [focused, setFocused] = useState(today)
+  const [picked, setPicked] = useState<string | null>(null)
+  const cursor = { year: Number(focused.slice(0, 4)), month: Number(focused.slice(5, 7)) - 1 }
+  const gridRef = useRef<HTMLDivElement>(null)
+  // 用鍵盤移動時才把焦點跟過去（換月按鈕、第一次顯示不搶焦點）
+  const moveFocus = useRef(false)
+  useEffect(() => {
+    if (!moveFocus.current) return
+    moveFocus.current = false
+    gridRef.current?.querySelector<HTMLElement>(`[data-date="${focused}"]`)?.focus()
+  }, [focused])
+
   const first = new Date(cursor.year, cursor.month, 1)
   const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate()
   const cells = [...Array(first.getDay()).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)]
@@ -89,14 +126,43 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
     }
   }
   const move = (delta: number) => {
-    const next = new Date(cursor.year, cursor.month + delta, 1)
-    setCursor({ year: next.getFullYear(), month: next.getMonth() })
+    setPicked(null)
+    setFocused(addMonths(focused, delta))
+  }
+  const pickedEvents = picked ? (byDay.get(picked) ?? []) : []
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const weekday = new Date(`${focused}T00:00:00`).getDay()
+    const next: Record<string, () => string> = {
+      ArrowLeft: () => addDays(focused, -1),
+      ArrowRight: () => addDays(focused, 1),
+      ArrowUp: () => addDays(focused, -7),
+      ArrowDown: () => addDays(focused, 7),
+      Home: () => addDays(focused, -weekday),
+      End: () => addDays(focused, 6 - weekday),
+      PageUp: () => addMonths(focused, -1),
+      PageDown: () => addMonths(focused, 1),
+    }
+    if (!(event.key in next) || event.altKey || event.ctrlKey || event.metaKey) return
+    event.preventDefault()
+    moveFocus.current = true
+    setFocused(next[event.key]())
+  }
+
+  const pick = (key: string) => {
+    setFocused(key)
+    if ((byDay.get(key) ?? []).length === 0) {
+      setPicked(null)
+      onAdd(key)
+    } else {
+      setPicked(picked === key ? null : key)
+    }
   }
 
   return (
     <section aria-label="月曆" className="flex flex-col gap-3 rounded-lg bg-sheet p-4 shadow-sheet sm:p-6">
       <div className="flex items-center justify-between">
-        <h2 className="m-0 font-display text-lg font-bold">
+        <h2 className="m-0 font-display text-lg font-bold" aria-live="polite">
           {cursor.year} 年 {cursor.month + 1} 月
         </h2>
         <div className="flex gap-1">
@@ -108,28 +174,37 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-accent pb-1 text-center text-xs text-accent">
+      <div className="grid grid-cols-7 border-b border-accent pb-1 text-center text-xs text-accent" aria-hidden="true">
         {WEEKDAYS.map((day) => (
           <span key={day}>{day}</span>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div ref={gridRef} className="grid grid-cols-7 gap-1" onKeyDown={onKeyDown}>
         {cells.map((day, index) => {
           if (day === null) return <span key={`blank-${index}`} />
           const key = iso(cursor.year, cursor.month, day)
           const dayEvents = byDay.get(key) ?? []
           const hasExam = dayEvents.some((event) => event.kind === 'exam')
+          const weekday = WEEKDAYS[new Date(cursor.year, cursor.month, day).getDay()]
           return (
             <button
               key={key}
               type="button"
-              onClick={() => onPick(key)}
+              data-date={key}
+              tabIndex={key === focused ? 0 : -1}
+              onClick={() => pick(key)}
               aria-current={key === today ? 'date' : undefined}
-              aria-label={`${cursor.year} 年 ${cursor.month + 1} 月 ${day} 日 星期${WEEKDAYS[new Date(cursor.year, cursor.month, day).getDay()]}${key === today ? '（今天）' : ''}${dayEvents.length ? `，${dayEvents.map((event) => event.title).join('、')}` : ''}，新增行程`}
+              aria-expanded={dayEvents.length > 0 ? picked === key : undefined}
+              aria-label={`${cursor.month + 1} 月 ${day} 日 星期${weekday}${key === today ? '（今天）' : ''}${
+                dayEvents.length
+                  ? `，${dayEvents.length} 個行程：${dayEvents.map((event) => event.title).join('、')}`
+                  : '，沒有行程，新增'
+              }`}
               className={cx(
                 'flex aspect-square min-h-11 flex-col items-center justify-start gap-1 rounded-sm pt-1.5 text-sm transition-colors hover:bg-accent-faint',
                 key === today && 'ring-1 ring-accent',
                 hasExam && 'bg-accent-faint',
+                picked === key && 'ring-2 ring-ink',
               )}
             >
               <span className={cx('tabular', key === today ? 'font-medium text-accent' : 'text-ink')}>{day}</span>
@@ -147,6 +222,37 @@ function MonthGrid({ events, onPick }: { events: EventOut[]; onPick: (date: stri
           )
         })}
       </div>
+      {picked && pickedEvents.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-rule pt-3 animate-[rise-in_var(--dur)_var(--ease-out)]">
+          <h3 className="m-0 text-sm font-medium text-ink">
+            {Number(picked.slice(5, 7))} 月 {Number(picked.slice(8))} 日的行程
+          </h3>
+          <ul className="m-0 flex list-none flex-col p-0">
+            {pickedEvents.map((event) => (
+              <li key={event.id} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[15px]">{event.title}</span>
+                  <span className="text-xs text-muted">
+                    {KIND_LABELS[event.kind ?? 'exam']}
+                    {event.time && `・${event.time}`}
+                    {event.location && `・${event.location}`}
+                    {event.subscription_name && `・訂閱：${event.subscription_name}`}
+                  </span>
+                </span>
+                {event.subscription_id == null && (
+                  <Button variant="ghost" size="sm" aria-label={`編輯 ${event.title}`} onClick={() => onEdit(event)}>
+                    <Icon name="edit" size={16} />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <Button variant="secondary" size="sm" className="self-start" onClick={() => onAdd(picked)}>
+            <Icon name="plus" size={16} />
+            在這天新增行程
+          </Button>
+        </div>
+      )}
     </section>
   )
 }
@@ -273,6 +379,11 @@ function PhotoImport({ open, onClose }: { open: boolean; onClose: () => void }) 
         {extract.isError && (
           <ErrorState error={extract.error instanceof ApiError ? extract.error : new ApiError(500, 'AI 辨識失敗')} />
         )}
+        <p className="sr-only" aria-live="polite">
+          {extract.data
+            ? [`找到 ${extract.data.drafts.length} 場考試`, ...extract.data.warnings].join('。')
+            : ''}
+        </p>
         {extract.data?.warnings.map((warning) => (
           <p key={warning} className="m-0 text-sm text-accent">
             {warning}
@@ -453,7 +564,11 @@ export function CalendarPage() {
         <ErrorState error={events.error} onRetry={() => events.refetch()} />
       ) : (
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <MonthGrid events={all} onPick={(date) => setEditing({ id: null, value: emptyEvent(date) })} />
+          <MonthGrid
+            events={all}
+            onAdd={(date) => setEditing({ id: null, value: emptyEvent(date) })}
+            onEdit={(event) => setEditing({ id: event.id, value: { ...event } })}
+          />
           <section aria-label="接下來的行程" className="flex flex-col gap-2">
             <h2 className="eyebrow m-0">接下來</h2>
             {upcoming.length === 0 ? (
@@ -484,13 +599,24 @@ export function CalendarPage() {
             <Button variant="ghost" onClick={() => setEditing(null)}>
               取消
             </Button>
-            <Button onClick={() => save.mutate()} disabled={!editing?.value.title.trim() || !editing?.value.date || save.isPending}>
+            <Button type="submit" form="event-form" disabled={!editing?.value.title.trim() || !editing?.value.date || save.isPending}>
               儲存
             </Button>
           </>
         }
       >
-        {editing && <EventForm value={editing.value} onChange={(value) => setEditing({ ...editing, value })} />}
+        {editing && (
+          // 包成表單：在欄位裡按 Enter 就是儲存（儲存按鈕在對話框底部，用 form 屬性連過來）
+          <form
+            id="event-form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (editing.value.title.trim() && editing.value.date && !save.isPending) save.mutate()
+            }}
+          >
+            <EventForm value={editing.value} onChange={(value) => setEditing({ ...editing, value })} />
+          </form>
+        )}
         {save.isError && (
           <div className="mt-4">
             <ErrorState error={save.error} />

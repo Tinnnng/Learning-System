@@ -31,7 +31,7 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
           type="button"
           onClick={onEdit}
           aria-label={`修改第 ${question.label ?? question.number} 題`}
-          className="absolute -top-1 right-0 inline-flex min-h-9 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition-[opacity,color,background-color] hover:bg-sheet-tint hover:text-accent [@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover/question:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
+          className="hit absolute -top-1 right-0 inline-flex min-h-9 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition-[color,background-color] hover:bg-sheet-tint hover:text-accent group-hover/question:text-ink-soft"
         >
           <Icon name="edit" size={14} />
           修改
@@ -123,7 +123,18 @@ export function PaperPage() {
       />
 
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,1fr)]">
-        <section aria-label="題目" className="order-2 rounded-lg bg-sheet px-4 shadow-sheet sm:px-7 lg:order-1">
+        {/* 開始作答放在 DOM 前面：手機上排在題目上方，Tab 順序也和畫面一致；桌機用格線放到右欄 */}
+        <aside className="rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24 lg:col-start-2 lg:row-start-1">
+          <h2 className="m-0 mb-5 font-display text-lg font-bold">開始寫這份試卷</h2>
+          <StartPanel
+            filter={{ paper_ids: [data.id] }}
+            questionCount={choiceCount}
+            essayCount={data.essay_count}
+            durationMinutes={data.duration_minutes}
+            title={data.title ?? data.subject}
+          />
+        </aside>
+        <section aria-label="題目" className="rounded-lg bg-sheet px-4 shadow-sheet sm:px-7 lg:col-start-1 lg:row-start-1">
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3 pt-5">
             <h2 className="eyebrow m-0">試題預覽</h2>
             <Switch label="顯示答案" checked={showAnswer} onChange={setShowAnswer} />
@@ -149,16 +160,6 @@ export function PaperPage() {
           </div>
         </section>
 
-        <aside className="order-1 rounded-lg bg-sheet p-5 shadow-sheet sm:p-6 lg:sticky lg:top-24 lg:order-2">
-          <h2 className="m-0 mb-5 font-display text-lg font-bold">開始寫這份試卷</h2>
-          <StartPanel
-            filter={{ paper_ids: [data.id] }}
-            questionCount={choiceCount}
-            essayCount={data.essay_count}
-            durationMinutes={data.duration_minutes}
-            title={data.title ?? data.subject}
-          />
-        </aside>
       </div>
       <QuestionEditorDialog
         title={editing?.id ? '修改題目' : '新增題目'}

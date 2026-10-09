@@ -45,6 +45,11 @@ function OutcomeNote({ outcome }: { outcome: ImportOutcome }) {
   )
 }
 
+/** 錯誤／提醒不只靠顏色區分，前面加上文字 */
+function issueLabel(level: string) {
+  return <span className="font-medium">{level === 'error' ? '錯誤：' : '提醒：'}</span>
+}
+
 function FileRow({ file }: { file: ConvertedFile }) {
   const run = useImport()
   const report = file.report
@@ -53,9 +58,10 @@ function FileRow({ file }: { file: ConvertedFile }) {
   return (
     <li className="grid gap-3 border-b border-rule py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 flex-col gap-1">
-        <Link to={`/import/${encodeURIComponent(file.name)}`} className="truncate font-display text-[17px] font-semibold text-ink hover:text-accent">
+        {/* 標題不做成連結：同一列已經有「對照預覽」連到同一頁，Tab 一次就好 */}
+        <span className="truncate font-display text-[17px] font-semibold text-ink">
           {report ? shortName(report.subject) : file.name}
-        </Link>
+        </span>
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
           <span className="font-mono">{file.name}</span>
           {report && <span>{report.question_count} 題</span>}
@@ -74,7 +80,7 @@ function FileRow({ file }: { file: ConvertedFile }) {
       <div className="flex gap-2">
         <Link
           to={`/import/${encodeURIComponent(file.name)}`}
-          className="inline-flex h-9 items-center rounded-md px-3 text-sm text-ink-soft hover:bg-accent-faint"
+          className="hit inline-flex h-9 items-center rounded-md px-3 text-sm text-ink-soft hover:bg-accent-faint"
         >
           對照預覽
         </Link>
@@ -168,6 +174,7 @@ export function ImportPreviewPage() {
         <ul className="m-0 flex list-none flex-col gap-1 rounded-md bg-accent-faint px-4 py-3 text-sm">
           {paperIssues.map((issue) => (
             <li key={issue.message} className={issue.level === 'error' ? 'text-bad' : 'text-ink-soft'}>
+              {issueLabel(issue.level)}
               {issue.message}
             </li>
           ))}
@@ -183,6 +190,9 @@ export function ImportPreviewPage() {
               type="button"
               onClick={() => setIndex(position)}
               aria-current={position === index ? 'true' : undefined}
+              aria-label={`第 ${entry.number} 題${
+                issues.some((issue) => issue.level === 'error') ? '，有錯誤' : issues.length > 0 ? '，有提醒' : ''
+              }`}
               className={cx(
                 'tabular h-8 min-w-8 rounded-sm border px-1.5 text-xs transition-colors',
                 position === index ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet hover:border-rule',
@@ -210,6 +220,7 @@ export function ImportPreviewPage() {
             </div>
             {issuesFor(question.number).map((issue) => (
               <p key={issue.message} className={cx('m-0 text-sm', issue.level === 'error' ? 'text-bad' : 'text-accent')}>
+                {issueLabel(issue.level)}
                 {issue.message}
               </p>
             ))}
@@ -262,7 +273,9 @@ export function ImportPreviewPage() {
               <img
                 src={`/api/bank/assets/${question.page_snapshot}`}
                 alt="原始試卷頁面"
-                className="w-full rounded-md border border-line bg-white shadow-sheet"
+                width={1240}
+                height={1754}
+                className="h-auto w-full rounded-md border border-line bg-white shadow-sheet"
               />
             ) : (
               <p className="m-0 text-sm text-muted">這份檔案沒有原始頁面截圖。</p>

@@ -7,7 +7,7 @@ import { Button, ButtonLink } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { ErrorState } from '@/components/States'
-import { clock, formatDateTime, parseUtc, score, shortName } from '@/lib/format'
+import { clock, formatDateTime, parseUtc, percent, score, shortName } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { ItemOut, SessionCreate, SessionOut } from '@/lib/types'
 import { QuestionBlock } from './QuestionBlock'
@@ -179,24 +179,26 @@ export function ResultView({ session }: { session: SessionOut }) {
             }))}
             onJump={(position) => {
               setFilter('all')
-              window.setTimeout(
-                () => document.getElementById(`item-${position}`)?.scrollIntoView({ behavior: 'smooth' }),
-                30,
-              )
+              // 焦點移到那一題的題號：鍵盤使用者接著按 Tab 就在那一題裡，不會跳回題號一覽
+              window.setTimeout(() => {
+                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                document.getElementById(`item-${position}`)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })
+                document.getElementById(`q-${position}`)?.focus({ preventScroll: true })
+              }, 30)
             }}
           />
           <div className="flex flex-col gap-1 text-xs text-muted">
             <span className="flex items-center gap-2">
-              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-ok-hl" /> 答對
+              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-ok-hl" /> ✓ 答對
             </span>
             <span className="flex items-center gap-2">
-              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-bad-hl" /> 答錯（已收進錯題本）
+              <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-bad-hl" /> × 答錯（已收進錯題本）
             </span>
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-5 rounded-[var(--radius-marker)] border border-dashed border-muted" /> 未作答
             </span>
           </div>
-          <p className="m-0 text-xs text-muted">得分率 {(ratio * 100).toFixed(0)}%</p>
+          <p className="m-0 text-xs text-muted">得分率 {percent(ratio)}</p>
         </aside>
       </div>
     </div>

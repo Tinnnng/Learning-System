@@ -62,6 +62,8 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
         <button
           type="button"
           aria-pressed={starred}
+          // 名稱固定是「收藏」，狀態交給 aria-pressed；不然會念成「已收藏，切換按鈕，已按下」
+          aria-label="收藏"
           onClick={() => save.mutate({ starred: !starred, note: draft !== null ? draft.trim() || null : text })}
           className={cx(
             'inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs transition-colors',

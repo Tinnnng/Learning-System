@@ -5,12 +5,13 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { RichText } from '@/components/RichText'
 import { api, ApiError, apiRequest } from '@/lib/api'
 import { cx } from '@/lib/cx'
+import { usd } from '@/lib/format'
 import type { components } from '@/lib/api-types'
 
 type Thread = components['schemas']['TutorThread']
@@ -32,7 +33,6 @@ function errorText(error: unknown) {
 // 手機用 dev:lan（http）連線時不是安全環境，沒有 crypto.randomUUID
 const requestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 
-const usd = (value: number) => `$${value > 0 && value < 0.01 ? value.toFixed(3) : value.toFixed(2)}`
 
 interface Running {
   id: string
@@ -49,6 +49,20 @@ interface AiTutorProps {
 export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  // 打開後焦點移進助教區塊、收合後回到「AI 助教」按鈕（只在使用者按了之後移，第一次顯示不搶焦點）
+  const toggled = useRef(false)
+  const sectionRef = useRef<HTMLElement>(null)
+  const openRef = useRef<HTMLButtonElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const toggle = (next: boolean) => {
+    toggled.current = true
+    setOpen(next)
+  }
+  useEffect(() => {
+    if (!toggled.current) return
+    if (open) sectionRef.current?.focus({ preventScroll: true })
+    else openRef.current?.focus()
+  }, [open])
   const [draft, setDraft] = useState('')
   // AI 回覆後念出來（「AI 回覆中…」消失後螢幕閱讀器原本不會知道有新內容）
   const [announcement, setAnnouncement] = useState('')
@@ -121,7 +135,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
   if (!open) {
     return (
       <div className={className}>
-        <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Button ref={openRef} variant="secondary" size="sm" onClick={() => toggle(true)}>
           <Icon name="spark" size={17} />
           AI 助教
         </Button>
@@ -131,8 +145,10 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
 
   return (
     <section
+      ref={sectionRef}
+      tabIndex={-1}
       aria-label="AI 助教"
-      className={cx('flex flex-col gap-4 rounded-md border border-rule bg-sheet-tint px-4 py-4 sm:px-5', className)}
+      className={cx('flex flex-col gap-4 rounded-md border border-rule bg-sheet-tint px-4 py-4 outline-none sm:px-5', className)}
     >
       <header className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5 text-sm font-medium text-accent">
@@ -140,7 +156,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
           AI 助教
           <span className="font-normal text-muted">・僅供參考，以官方答案為準</span>
         </span>
-        <button type="button" onClick={() => setOpen(false)} className="text-xs text-muted hover:text-ink">
+        <button type="button" ref={closeRef} onClick={() => toggle(false)} className="hit text-xs text-muted hover:text-ink">
           收合
         </button>
       </header>
@@ -184,12 +200,12 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
                 {message.flagged ? (
                   <span className="text-bad">已回報有誤</span>
                 ) : (
-                  <button type="button" className="hover:text-bad" onClick={() => flag.mutate(message.id)}>
+                  <button type="button" className="hit hover:text-bad" onClick={() => flag.mutate(message.id)}>
                     這段解釋有誤
                   </button>
                 )}
                 {message.kind === 'explanation' && (
-                  <button type="button" className="hover:text-ink" onClick={() => explain.mutate(true)} disabled={busy}>
+                  <button type="button" className="hit hover:text-ink" onClick={() => explain.mutate(true)} disabled={busy}>
                     重新產生
                   </button>
                 )}
@@ -208,7 +224,7 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
         <p className={cx('m-0 text-sm', cancelled ? 'text-muted' : 'text-bad')} role={cancelled ? 'status' : 'alert'}>
           {errorText(error)}
           {explain.isError && !hasExplanation && !cancelled && (
-            <button type="button" className="ml-2 underline" onClick={() => explain.mutate(false)}>
+            <button type="button" className="hit ml-2 underline" onClick={() => explain.mutate(false)}>
               再試一次
             </button>
           )}

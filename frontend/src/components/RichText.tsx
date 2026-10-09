@@ -93,6 +93,11 @@ export function RichText({ children, inline = false, className }: RichTextProps)
         img: ({ src, alt }) => (
           <img src={assetUrl(String(src ?? ''))} alt={alt || '題目附圖'} loading="lazy" className="my-2 max-w-full rounded-sm" />
         ),
+        table: ({ children: nodes }) => (
+          <div className="table-scroll">
+            <table>{nodes}</table>
+          </div>
+        ),
         a: ({ href, children: nodes }) => (
           <a href={href} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
             {nodes}

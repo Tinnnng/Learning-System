@@ -10,6 +10,7 @@ import { type BubbleState, OptionBubble } from '@/components/OptionBubble'
 import { QuestionFigure, RichText } from '@/components/RichText'
 import { cx } from '@/lib/cx'
 import { shortName } from '@/lib/format'
+import { onRovingKeyDown, rovingTabIndex } from '@/lib/roving'
 import type { ItemOut } from '@/lib/types'
 import { EssayAnswer } from './EssayAnswer'
 
@@ -61,6 +62,7 @@ export function QuestionBlock({
   const multiple = item.type === 'multi_choice'
   const isEssay = item.type === 'essay'
   const locked = item.revealed || busy
+  const chosen = item.revealed ? (item.response ?? []) : selection
 
   return (
     <article className="flex flex-col gap-4" aria-labelledby={`q-${item.position}`}>
@@ -82,7 +84,7 @@ export function QuestionBlock({
           <button
             type="button"
             onClick={() => setShowPage(true)}
-            className="inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:text-accent hover:underline"
+            className="hit inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:text-accent hover:underline"
           >
             <Icon name="page" size={15} />
             看原始試卷
@@ -92,9 +94,13 @@ export function QuestionBlock({
 
       {item.passage && (
         <details className="group rounded-md border border-rule bg-sheet-tint" open>
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm text-accent">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm text-accent [&::-webkit-details-marker]:hidden">
             {isEssay ? '題目說明' : '題組文章'}
-            <span className="text-xs text-muted group-open:hidden">展開</span>
+            <span className="flex items-center gap-1 text-xs text-muted">
+              <span className="group-open:hidden">展開</span>
+              <span className="hidden group-open:inline">收合</span>
+              <Icon name="right" size={14} className="transition-transform duration-[var(--dur)] group-open:-rotate-90 rotate-90" />
+            </span>
           </summary>
           <RichText className="max-h-[40vh] overflow-y-auto px-4 pb-4 text-[15px]">{item.passage}</RichText>
         </details>
@@ -109,7 +115,12 @@ export function QuestionBlock({
         essay && <EssayAnswer item={item} {...essay} />
       ) : (
         <>
-          <div role={multiple ? 'group' : 'radiogroup'} aria-label={`第 ${item.position} 題選項`} className="-mx-3 flex flex-col gap-0.5">
+          <div
+            role={multiple ? 'group' : 'radiogroup'}
+            aria-label={`第 ${item.position} 題選項`}
+            onKeyDown={(event) => onRovingKeyDown(event, false)}
+            className="-mx-3 flex flex-col gap-0.5"
+          >
             {item.options.map((option, index) => {
               const letter = LETTERS[index]
               return (
@@ -120,6 +131,7 @@ export function QuestionBlock({
                   multiple={multiple}
                   state={bubbleState(item, letter, selection)}
                   disabled={locked}
+                  tabIndex={multiple ? undefined : rovingTabIndex(chosen.includes(letter), index, chosen.length > 0)}
                   onSelect={() => onToggle(letter)}
                 />
               )

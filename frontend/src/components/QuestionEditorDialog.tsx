@@ -1,11 +1,11 @@
 /** 編輯題目的對話框：驗證、儲存中狀態、錯誤訊息都在這裡處理，呼叫端只要提供 onSave。 */
 
-import { useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Dialog } from '@/components/Dialog'
 import { QuestionEditor } from '@/components/QuestionEditor'
 import { ApiError } from '@/lib/api'
-import { type QuestionDraft, validateQuestion } from '@/lib/questionEdit'
+import { findProblem, type QuestionDraft, type QuestionProblem } from '@/lib/questionEdit'
 
 interface QuestionEditorDialogProps {
   title: string
@@ -17,26 +17,76 @@ interface QuestionEditorDialogProps {
   note?: string
 }
 
+const DISCARD_MESSAGE = '這題有還沒儲存的修改，確定要關閉嗎？'
+
 export function QuestionEditorDialog({ title, initial, onClose, onSave, note }: QuestionEditorDialogProps) {
+  // 內層回報有沒有改過；關閉（Esc、點背景、取消）前有修改就先確認
+  const dirty = useRef(false)
+  const confirmClose = useCallback(() => !dirty.current || window.confirm(DISCARD_MESSAGE), [])
+  const close = () => {
+    dirty.current = false
+    onClose()
+  }
   // 以 key 重新掛載內層，開啟不同題目時編輯狀態會重設
   return (
-    <Dialog open={initial !== null} onClose={onClose} title={title} wide>
-      {initial && <EditorBody key={JSON.stringify(initial)} initial={initial} onClose={onClose} onSave={onSave} note={note} />}
+    <Dialog open={initial !== null} onClose={close} confirmClose={confirmClose} title={title} wide>
+      {initial && (
+        <EditorBody
+          key={JSON.stringify(initial)}
+          initial={initial}
+          onClose={close}
+          onCancel={() => confirmClose() && close()}
+          onDirty={(value) => (dirty.current = value)}
+          onSave={onSave}
+          note={note}
+        />
+      )}
     </Dialog>
   )
 }
 
-function EditorBody({ initial, onClose, onSave, note }: Omit<QuestionEditorDialogProps, 'title' | 'initial'> & { initial: QuestionDraft }) {
+function EditorBody({
+  initial,
+  onClose,
+  onCancel,
+  onDirty,
+  onSave,
+  note,
+}: Omit<QuestionEditorDialogProps, 'title' | 'initial'> & {
+  initial: QuestionDraft
+  onCancel: () => void
+  onDirty: (dirty: boolean) => void
+}) {
   const [value, setValue] = useState(initial)
+  const [problem, setProblem] = useState<QuestionProblem | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const errorId = useId()
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  const change = (next: QuestionDraft) => {
+    setValue(next)
+    onDirty(JSON.stringify(next) !== JSON.stringify(initial))
+    // 改到出錯的地方後重新檢查，修好了就拿掉錯誤標記
+    if (problem) setProblem(findProblem(next))
+  }
 
   const save = async () => {
-    const problem = validateQuestion(value)
-    if (problem) {
-      setError(problem)
+    const found = findProblem(value)
+    if (found) {
+      setProblem(found)
+      setError(null)
+      // 焦點移到出錯的欄位（標了 aria-invalid 的那一個；沒有就移到同類欄位的第一個）
+      window.setTimeout(() => {
+        const body = bodyRef.current
+        const target =
+          body?.querySelector<HTMLElement>(`[data-field="${found.field}"][aria-invalid="true"]`) ??
+          body?.querySelector<HTMLElement>(`[data-field="${found.field}"]`)
+        target?.focus()
+      }, 0)
       return
     }
+    setProblem(null)
     setSaving(true)
     setError(null)
     try {
@@ -49,17 +99,16 @@ function EditorBody({ initial, onClose, onSave, note }: Omit<QuestionEditorDialo
     }
   }
 
+  const message = problem?.message ?? error
   return (
-    <div className="flex flex-col gap-5">
+    <div ref={bodyRef} className="flex flex-col gap-5">
       {note && <p className="m-0 rounded-md bg-accent-faint px-4 py-2 text-sm text-ink-soft">{note}</p>}
-      <QuestionEditor value={value} onChange={setValue} />
-      {error && (
-        <p className="m-0 text-sm text-bad" role="alert">
-          {error}
-        </p>
-      )}
+      <QuestionEditor value={value} onChange={change} problem={problem} errorId={errorId} />
+      <p id={errorId} className="m-0 text-sm text-bad empty:hidden" role="alert">
+        {message}
+      </p>
       <div className="flex justify-end gap-2 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" onClick={onCancel}>
           取消
         </Button>
         <Button onClick={save} disabled={saving}>

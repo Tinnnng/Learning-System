@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clock, parseUtc, plainText, relativeDay, shortName } from './format'
+import { clock, fileSize, isoDay, parseUtc, percent, plainText, relativeDay, shortName, usd } from './format'
 
 describe('format', () => {
   it('shortName 去掉「(包括…)」說明', () => {
@@ -23,6 +23,20 @@ describe('format', () => {
     const now = new Date('2026-10-06T01:00:00Z') // 台灣 09:00
     expect(relativeDay('2026-10-06T15:00:00', now)).toBe('今天') // UTC 15:00＝台灣 10/6 23:00
     expect(relativeDay('2026-10-06T16:30:00', now)).toBe('明天') // UTC 16:30＝台灣 10/7 00:30
+  })
+
+  it('percent、usd、fileSize', () => {
+    expect(percent(0.756)).toBe('76%')
+    expect(percent(0.5, 1)).toBe('50.0%')
+    expect(usd(0.24)).toBe('$0.24')
+    expect(usd(0.0042)).toBe('$0.004')
+    expect(usd(0)).toBe('$0.00')
+    expect(fileSize(2.5 * 1024 * 1024)).toBe('2.5 MB')
+    expect(fileSize(100)).toBe('1 KB')
+  })
+
+  it('isoDay 以台灣時間分天', () => {
+    expect(isoDay(new Date('2026-10-06T16:30:00Z'))).toBe('2026-10-07')
   })
 
   it('clock', () => {

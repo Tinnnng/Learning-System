@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Button } from '@/components/Button'
 import { Segmented } from '@/components/Controls'
 import { EssayReference } from '@/components/EssayReference'
@@ -88,7 +89,10 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
 
 export function NotesPage() {
   const queryClient = useQueryClient()
-  const [which, setWhich] = useState<Which>('all')
+  // 篩選放在網址（?which=starred）：重新整理、上一頁回來都還在
+  const [params, setParams] = useSearchParams()
+  const which: Which = (['all', 'starred', 'noted'] as const).find((value) => value === params.get('which')) ?? 'all'
+  const setWhich = (value: Which) => setParams(value === 'all' ? {} : { which: value }, { replace: true })
   const list = useQuery({ queryKey: ['notes', 'list', which], queryFn: () => api.get<NotedQuestion[]>(`/notes/list?which=${which}`) })
   const start = useStartSession()
   const entries = list.data ?? []

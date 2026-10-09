@@ -5,12 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { AnswerGrid } from '@/components/AnswerGrid'
 import { Button } from '@/components/Button'
-import { Segmented } from '@/components/Controls'
+import { Segmented, Switch } from '@/components/Controls'
 import { Dialog } from '@/components/Dialog'
 import { Icon } from '@/components/Icon'
 import { ErrorState } from '@/components/States'
 import { cx } from '@/lib/cx'
 import { shortName } from '@/lib/format'
+import { setShortcutsEnabled, useShortcutsEnabled } from '@/lib/shortcuts'
 import type { ItemOut, SessionOut } from '@/lib/types'
 import { answerItem, deleteSession, submitSession } from './api'
 import { LETTERS, QuestionBlock } from './QuestionBlock'
@@ -142,7 +143,8 @@ export function TakingView({ session }: { session: SessionOut }) {
     [answer, drafts, isPractice, items.length, view],
   )
 
-  // 鍵盤：1–9 / A–J 選選項，←→ 換題，Enter 下一題
+  // 鍵盤：1–9 / A–J 選選項（可關閉），←→ 換題，Enter 下一題
+  const shortcuts = useShortcutsEnabled()
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return
@@ -152,7 +154,7 @@ export function TakingView({ session }: { session: SessionOut }) {
       const onControl = Boolean(target.closest('a, summary, [role="radio"], [role="checkbox"], [role="radiogroup"], [role="group"]'))
       const key = event.key.toUpperCase()
       const index = /^[1-9]$/.test(key) ? Number(key) - 1 : LETTERS.indexOf(key)
-      if (index >= 0 && index < item.options.length && key.length === 1) {
+      if (shortcuts && index >= 0 && index < item.options.length && key.length === 1) {
         event.preventDefault()
         toggle(item, LETTERS[index])
       } else if (onControl && ['ArrowRight', 'ArrowLeft', 'Enter'].includes(event.key)) {
@@ -165,7 +167,7 @@ export function TakingView({ session }: { session: SessionOut }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [current, goTo, item, items.length, toggle])
+  }, [current, goTo, item, items.length, shortcuts, toggle])
 
   const selectionFor = (entry: ItemOut) => drafts[entry.position] ?? entry.response ?? []
   const unanswered = items.filter((entry) => !entry.answered).length
@@ -299,14 +301,21 @@ export function TakingView({ session }: { session: SessionOut }) {
           <button
             type="button"
             onClick={() => setConfirmAbandon(true)}
-            className="text-xs text-muted underline-offset-4 hover:text-bad hover:underline"
+            className="hit text-xs text-muted underline-offset-4 hover:text-bad hover:underline"
           >
             放棄這次測驗
           </button>
-          <p className="m-0 text-xs leading-relaxed text-muted">
-            鍵盤：<kbd className="tabular">1</kbd>–<kbd className="tabular">4</kbd> 或 <kbd className="tabular">A</kbd>–
-            <kbd className="tabular">D</kbd> 選答案，<kbd>←</kbd> <kbd>→</kbd> 換題
-          </p>
+          <Switch
+            label="單鍵快捷鍵"
+            description={
+              <>
+                <kbd className="tabular">1</kbd>–<kbd className="tabular">4</kbd> 或 <kbd className="tabular">A</kbd>–
+                <kbd className="tabular">D</kbd> 選答案；<kbd>←</kbd> <kbd>→</kbd> 換題不受影響
+              </>
+            }
+            checked={shortcuts}
+            onChange={setShortcutsEnabled}
+          />
         </aside>
       </div>
 

@@ -46,6 +46,9 @@
   --shadow-sheet: var(--shadow-sheet);
   --shadow-pop: var(--shadow-pop);
   --ease-out: var(--ease-out);
+
+  /* 觸控目標（h-11、min-h-11、w-11）固定 44px：根字級是 15px，預設的 11×0.25rem 只有 41.25px */
+  --spacing-11: 44px;
 }
 
 @layer base {
@@ -136,6 +139,20 @@
     -webkit-box-decoration-break: slice;
     box-decoration-break: slice;
     transition: background-size var(--dur-marker-text, var(--dur-marker)) var(--ease-marker);
+  }
+
+  /* 小按鈕的觸控範圍：外觀不變，看不見的點擊範圍至少 44×44px（文字連結式按鈕、Button sm、篩選標籤） */
+  .hit {
+    position: relative;
+  }
+  .hit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
   }
 
   /* 數字對齊 */
@@ -263,9 +280,11 @@
     border-collapse: collapse;
     font-family: var(--font-sans);
     font-size: 14px;
-    margin: 0.6em 0;
-    display: block;
+  }
+  /* 寬表格在外層捲動（RichText 包一層），table 本身維持表格語意，螢幕閱讀器才念得出欄列 */
+  .prose-question .table-scroll {
     overflow-x: auto;
+    margin: 0.6em 0;
   }
   .prose-question th,
   .prose-question td {
@@ -307,6 +326,12 @@
 }
 :is(input, textarea, select).border-line {
   border-color: var(--field);
+}
+/* 驗證失敗的欄位（aria-invalid）：粉紅框，和錯誤訊息同色 */
+[aria-invalid='true'],
+:is(input, textarea, select).border-line[aria-invalid='true'] {
+  border-color: var(--bad);
+  box-shadow: inset 0 0 0 1px var(--bad);
 }
 
 /* 觸控裝置（iPhone）：

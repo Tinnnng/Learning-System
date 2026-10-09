@@ -10,9 +10,11 @@ interface DialogProps {
   children: ReactNode
   actions?: ReactNode
   wide?: boolean
+  /** 按 Esc 或點背景關閉前先問（例如有未儲存的修改）；回傳 false 就不關 */
+  confirmClose?: () => boolean
 }
 
-export function Dialog({ open, onClose, title, children, actions, wide }: DialogProps) {
+export function Dialog({ open, onClose, title, children, actions, wide, confirmClose }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   // 按下和放開都在背景上才關閉：在輸入框裡拖曳選字、放開在外面時，不能把編輯中的內容關掉
@@ -30,11 +32,14 @@ export function Dialog({ open, onClose, title, children, actions, wide }: Dialog
       ref={ref}
       aria-labelledby={titleId}
       onClose={onClose}
+      onCancel={(event) => {
+        if (confirmClose && !confirmClose()) event.preventDefault()
+      }}
       onMouseDown={(event) => {
         pressedOnBackdrop.current = event.target === ref.current
       }}
       onClick={(event) => {
-        if (pressedOnBackdrop.current && event.target === ref.current) onClose()
+        if (pressedOnBackdrop.current && event.target === ref.current && (!confirmClose || confirmClose())) onClose()
         pressedOnBackdrop.current = false
       }}
       className={cx(

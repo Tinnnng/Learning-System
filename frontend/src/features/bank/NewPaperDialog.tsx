@@ -45,7 +45,7 @@ export function NewPaperDialog({ open, onClose }: { open: boolean; onClose: () =
         </p>
         <label className="flex flex-col gap-1.5 text-xs text-muted">
           科目
-          <input required className={field} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="例如：程式設計" />
+          <input required className={field} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="例如：程式設計…" />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5 text-xs text-muted">

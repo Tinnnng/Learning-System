@@ -3,12 +3,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
+import { Switch } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { OptionBubble } from '@/components/OptionBubble'
 import { RichText } from '@/components/RichText'
 import { ErrorState } from '@/components/States'
 import { ZhengTally } from '@/components/ZhengTally'
 import { cx } from '@/lib/cx'
+import { setShortcutsEnabled, useShortcutsEnabled } from '@/lib/shortcuts'
+import { onRovingKeyDown, rovingTabIndex } from '@/lib/roving'
 import type { QuizItem, VocabAnswerResult } from '@/lib/types'
 import { answerWord, type QuizContext } from './api'
 
@@ -117,9 +120,12 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
     if (nextIndex >= items.length) onFinish?.(Object.values(results))
   }
 
-  // 鍵盤：1–4 選選項，Enter 下一個
+  // 鍵盤：1–4 選選項（可關閉）
+  const shortcuts = useShortcutsEnabled()
   useEffect(() => {
+    if (!shortcuts) return
     const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return
       if (!item || (event.target as HTMLElement).closest('input, textarea')) return
       const number = Number(event.key)
       if (!result && item.options && number >= 1 && number <= item.options.length && !answer.isPending) {
@@ -129,7 +135,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [answer, item, result])
+  }, [answer, item, result, shortcuts])
 
   if (!item) return null
 
@@ -174,7 +180,12 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
       </div>
 
       {item.options ? (
-        <div role="radiogroup" aria-labelledby="quiz-prompt" className="-mx-3 flex flex-col gap-0.5">
+        <div
+          role="radiogroup"
+          aria-labelledby="quiz-prompt"
+          onKeyDown={(event) => onRovingKeyDown(event, false)}
+          className="-mx-3 flex flex-col gap-0.5"
+        >
           {item.options.map((option, position) => {
             const letter = LETTERS[position]
             const isPicked = picked === option
@@ -197,6 +208,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
                 text={option}
                 state={state}
                 disabled={Boolean(result) || answer.isPending}
+                tabIndex={rovingTabIndex(isPicked, position, picked !== null)}
                 onSelect={() => {
                   setPicked(option)
                   answer.mutate(option)
@@ -221,7 +233,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
               autoCapitalize="off"
               spellCheck={false}
               className="h-12 min-w-0 flex-1 rounded-md border border-rule bg-sheet px-4 font-mono text-lg text-ink outline-none transition-colors focus:border-ink"
-              placeholder="輸入英文"
+              placeholder="輸入英文…"
             />
             {!result && (
               <Button type="submit" size="lg" disabled={!spelling.trim() || answer.isPending}>
@@ -232,6 +244,21 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
         </form>
       )}
 
+      {item.options && !result && (
+        // 手機通常沒有實體鍵盤，只在桌機顯示
+        <div className="hidden lg:block">
+          <Switch
+            label="單鍵快捷鍵"
+            description={
+              <>
+                按 <kbd className="tabular">1</kbd>–<kbd className="tabular">{item.options.length}</kbd> 選答案
+              </>
+            }
+            checked={shortcuts}
+            onChange={setShortcutsEnabled}
+          />
+        </div>
+      )}
       {answer.isError && <ErrorState error={answer.error} />}
       {result && <WordReveal result={result} />}
       {result && (

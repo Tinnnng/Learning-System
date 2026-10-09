@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { ButtonLink } from '@/components/Button'
 import { cx } from '@/lib/cx'
-import { percent, shortName } from '@/lib/format'
+import { isoDay, percent, shortName } from '@/lib/format'
 import type { Overview } from '@/lib/types'
 
 const fetchOverview = () => api.get<Overview>('/review/overview')
@@ -17,7 +17,7 @@ function lastDays(count: number): string[] {
   for (let offset = count - 1; offset >= 0; offset -= 1) {
     const date = new Date(today)
     date.setDate(today.getDate() - offset)
-    days.push(date.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }))
+    days.push(isoDay(date))
   }
   return days
 }
@@ -106,7 +106,7 @@ function AccuracyList({ title, stats }: { title: string; stats: Overview['by_sub
               <span className="col-span-2 h-[6px] overflow-hidden rounded-full bg-line">
                 <span
                   className={cx('block h-full rounded-full transition-[width] duration-[var(--dur-slow)]', weak ? 'bg-bad' : 'bg-ok')}
-                  style={{ width: percent(stat.accuracy) }}
+                  style={{ width: `${stat.accuracy * 100}%` }}
                 />
               </span>
               <span className="col-span-2 text-xs text-muted">

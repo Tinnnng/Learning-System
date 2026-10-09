@@ -43,9 +43,11 @@ export function QuestionSearchForm({ initial = '', className }: { initial?: stri
         <Icon name="search" size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
         <input
           type="search"
+          name="q"
+          autoComplete="off"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="搜尋題目，例如：比例原則、總統 任期"
+          placeholder="搜尋題目，例如：比例原則、總統 任期…"
           aria-label="搜尋題目"
           enterKeyHint="search"
           className="h-11 w-full rounded-md border border-line bg-sheet pl-10 pr-4 text-ink outline-none transition-colors focus:border-ink"

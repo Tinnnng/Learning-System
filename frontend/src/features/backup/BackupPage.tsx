@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { api } from '@/lib/api'
 import type { components } from '@/lib/api-types'
 import { cx } from '@/lib/cx'
-import { formatDateTime, relativeDay } from '@/lib/format'
+import { fileSize, formatDateTime, relativeDay } from '@/lib/format'
 
 type BackupStatus = components['schemas']['BackupStatus']
 type Snapshot = components['schemas']['SnapshotOut']
@@ -21,10 +21,6 @@ const KIND_LABEL: Record<Snapshot['kind'], string> = {
   auto: '自動',
   manual: '手動',
   'before-restore': '還原前',
-}
-
-function fileSize(bytes: number): string {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
 function SnapshotRow({
@@ -132,6 +128,10 @@ export function BackupPage() {
         }
       />
 
+      {/* 朗讀區一直存在、完成後才填字，螢幕閱讀器才念得出來 */}
+      <p className="sr-only" aria-live="polite">
+        {create.data ? `已備份：${create.data.name}` : ''}
+      </p>
       {create.isError && <ErrorState error={create.error} />}
       {restore.data && (
         <p className="m-0 rounded-md bg-ok-soft/60 px-4 py-3 text-[15px]" role="status">
