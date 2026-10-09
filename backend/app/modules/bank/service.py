@@ -2,12 +2,14 @@
 
 import re
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
+from app.core.database import begin_write
 from app.modules.bank.models import ExamPaper, PaperCategory, Question
 from app.modules.bank.schemas import (
     FilterOptions,
@@ -39,7 +41,9 @@ def upsert_paper(db: Session, data: PaperUpsert) -> UpsertResult:
     - 題目以題號比對：已存在就更新內容、保留 id（作答紀錄不會斷掉）；
       資料庫有但這次沒匯入的題目不刪除，只回報題號。
     - 在系統裡手動新增的題目（added_in_app）不會被同題號的匯入題目覆蓋：手動題挪到最後面，匯入題另外新增。
+    - 同一份試卷同時匯入兩次時排隊進行（begin_write），第二次會當成重新匯入。
     """
+    begin_write(db)
     paper = db.scalar(
         select(ExamPaper)
         .where(ExamPaper.source_key == data.paper.source_key)
@@ -331,26 +335,53 @@ def update_question(db: Session, question_id: int, data: QuestionEdit) -> Questi
     return QuestionOut.model_validate(question)
 
 
+# 同一個「新增」請求重送（網路重試、連按）的判斷時間：這段時間內內容完全相同的，當成同一次
+RESEND_WINDOW = timedelta(seconds=30)
+
+
+def _just_created(created_at: datetime | None) -> bool:
+    return created_at is not None and datetime.now(UTC).replace(tzinfo=None) - created_at < RESEND_WINDOW
+
+
 def add_question(db: Session, paper_id: int, data: QuestionEdit) -> QuestionOut:
+    begin_write(db)  # 同時新增兩題時題號不會撞在一起
     paper = db.get(ExamPaper, paper_id)
     if paper is None:
         raise BankError("找不到這份試卷", status_code=404)
-    last = db.scalar(select(func.max(Question.number)).where(Question.paper_id == paper_id)) or 0
-    question = Question(paper_id=paper_id, number=last + 1, answer_source="manual", assets=[], added_in_app=True)
+    last = db.scalar(select(Question).where(Question.paper_id == paper_id).order_by(Question.number.desc()).limit(1))
+    question = Question(paper_id=paper_id, number=(last.number if last else 0) + 1, answer_source="manual", assets=[], added_in_app=True)
     _apply_edit(question, data)
+    if last is not None and last.added_in_app and _just_created(last.created_at) and _same_content(last, question):
+        return QuestionOut.model_validate(last)  # 同一個請求重送：不再新增一題
     db.add(question)
     db.commit()
     return QuestionOut.model_validate(question)
 
 
+def _same_content(a: Question, b: Question) -> bool:
+    fields = ("type", "label", "passage", "stem", "options", "answer", "points", "explanation", "rubric", "tags")
+    return all(getattr(a, field) == getattr(b, field) for field in fields)
+
+
 def create_paper(db: Session, data: PaperCreate) -> PaperDetail:
+    begin_write(db)
+    title = data.title or f"{data.subject}（自建）"
+    latest = db.scalar(select(ExamPaper).where(ExamPaper.origin == "manual").order_by(ExamPaper.id.desc()).limit(1))
+    if (
+        latest is not None
+        and _just_created(latest.created_at)
+        and (latest.exam_type, latest.year, latest.subject, latest.title, latest.duration_minutes)
+        == (data.exam_type, data.year, data.subject, title, data.duration_minutes)
+        and [category.name for category in latest.categories] == list(dict.fromkeys(data.categories))
+    ):
+        return get_paper(db, latest.id)  # 同一個請求重送：不再建一份
     paper = ExamPaper(
         source_key=f"manual-{uuid.uuid4().hex[:12]}",
         origin="manual",
         exam_type=data.exam_type,
         year=data.year,
         subject=data.subject,
-        title=data.title or f"{data.subject}（自建）",
+        title=title,
         duration_minutes=data.duration_minutes,
         source_files=[],
         categories=[PaperCategory(name=name) for name in dict.fromkeys(data.categories)],

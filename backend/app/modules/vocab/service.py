@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import begin_write
 from app.core.text import match_key
 from app.modules.ai import service as ai_service
 from app.modules.bank import service as bank_service
@@ -95,6 +96,7 @@ def merge_meanings(old: str, new: str) -> str:
 def upsert_words(db: Session, words: list[WordIn], source: str | None) -> ImportResult:
     """同一個字（比對規則見 _term_key）已存在時合併，不覆蓋：中文意思取聯集；詞性、例句保留原本的，
     原本沒有才補上；分類標籤合併。作答紀錄保留。同一個檔案內的重複列也照這個規則合併。"""
+    begin_write(db)  # 同時匯入兩次：第二次要看到第一次新增的字，合併而不是撞唯一限制
     existing = {word.term_key: word for word in db.scalars(select(Word))}
     created = updated = 0
     for item in words:
@@ -283,6 +285,9 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
 
     daily = db.get(DailySet, day)
     if daily is None:
+        begin_write(db)  # 兩個分頁同時第一次打開：只抽一組，不撞主鍵
+        daily = db.get(DailySet, day)
+    if daily is None:
         rng = random.Random(day)
         attempts = _attempt_counts(db)
         chosen = _pick_words(db, words, get_settings().daily_vocab_count, rng, now, attempts)
@@ -381,6 +386,7 @@ def _replayed(db: Session, word: Word, client_id: str | None) -> AnswerResult | 
 
 def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerResult:
     now = now or _utc_now()
+    begin_write(db)  # 每日作答同時送兩次：第二次要看到第一次的紀錄（今天已作答）
     word = db.get(Word, data.word_id)
     if word is None:
         raise VocabError("找不到這個單字", status_code=404)

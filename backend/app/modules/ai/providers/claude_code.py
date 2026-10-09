@@ -81,10 +81,8 @@ class ClaudeCodeProvider:
                 result = event
         if result is None:
             raise ProviderError("Claude Code 沒有回傳結果。")
-        if result.get("is_error"):
-            raise ProviderError(f"Claude Code 回報錯誤：{result.get('result') or result.get('subtype')}")
         usage = result.get("usage", {})
-        return Completion(
+        completion = Completion(
             text=(result.get("result") or "").strip(),
             input_tokens=usage.get("input_tokens", 0)
             + usage.get("cache_read_input_tokens", 0)
@@ -94,6 +92,10 @@ class ClaudeCodeProvider:
             model=model,
             raw={"session_id": result.get("session_id"), "duration_ms": result.get("duration_ms")},
         )
+        if result.get("is_error"):
+            # 失敗也可能已經花了用量，一起帶出去記帳
+            raise ProviderError(f"Claude Code 回報錯誤：{result.get('result') or result.get('subtype')}", usage=completion)
+        return completion
 
     def complete(
         self, system: str, prompt: str, images: list[ImageInput] | None = None, cancel: Event | None = None
@@ -130,8 +132,8 @@ class ClaudeCodeProvider:
             if cancel is not None and cancel.is_set():
                 process.kill()
                 process.communicate()
-                raise ProviderCancelled("已中斷，這次沒有產生內容。")
+                raise ProviderCancelled("已中斷，這次沒有產生內容。", spent=True)
             if time.monotonic() > deadline:
                 process.kill()
                 process.communicate()
-                raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。")
+                raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。", spent=True)

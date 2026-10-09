@@ -165,3 +165,32 @@ def test_snippet_trims_long_text():
     snippet = service._snippet(text, "關鍵字")
     assert snippet.startswith("…") and snippet.endswith("…") and "關鍵字" in snippet
     assert len(snippet) < 120
+
+
+def test_category_names_are_normalized(db):
+    first = service.upsert_paper(db, make_bundle(questions=1, categories=["一般行政 ", "一般　行政"]))
+    paper = service.get_paper(db, first.paper_id)
+    assert paper.categories == ["一般行政"]
+    assert [p.id for p in service.list_papers(db, category="一般行政")] == [first.paper_id]
+
+
+def test_manual_paper_strips_names(client):
+    response = client.post("/api/bank/papers", json={"subject": " 程式設計 ", "exam_type": "期中考 ", "categories": [" 資工系", ""]})
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert (body["subject"], body["exam_type"], body["categories"]) == ("程式設計", "期中考", ["資工系"])
+    assert client.post("/api/bank/papers", json={"subject": "　"}).status_code == 422
+
+
+def test_resent_create_requests_do_not_duplicate(client):
+    paper = {"subject": "程式設計", "categories": ["資工系"]}
+    first = client.post("/api/bank/papers", json=paper).json()
+    assert client.post("/api/bank/papers", json=paper).json()["id"] == first["id"]  # 重送：同一份
+    assert client.post("/api/bank/papers", json={**paper, "subject": "資料結構"}).json()["id"] != first["id"]
+
+    question = {"stem": "1+1=?", "options": ["1", "2"], "answer": ["B"]}
+    url = f"/api/bank/papers/{first['id']}/questions"
+    one = client.post(url, json=question).json()
+    assert client.post(url, json=question).json()["id"] == one["id"]
+    two = client.post(url, json={**question, "stem": "2+2=?", "options": ["4", "5"], "answer": ["A"]}).json()
+    assert (one["number"], two["number"]) == (1, 2)

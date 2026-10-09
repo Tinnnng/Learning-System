@@ -11,14 +11,15 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from icalendar import Calendar
 
 DEADLINE_WORDS = re.compile(r"報名|截止|繳費|繳件|申請|上傳|登記|放榜|榜單|公告|簡章|成績|准考證")
 EXAM_WORDS = re.compile(r"考試|測驗|筆試|口試|面試|實作|會考|檢定|甄試|學測|統測|分科")
-GOOGLE_CALENDAR_ID = re.compile(r"^[\w.+-]+@(group\.calendar\.google\.com|gmail\.com)$")
+GOOGLE_CALENDAR_ID = re.compile(r"^[\w.+-]+@(group\.calendar\.google\.com|gmail\.com)$", re.IGNORECASE)
+GOOGLE_ICAL_PATH = re.compile(r"^(/calendar/ical/)([^/]+)(/.*)$")
 FETCH_TIMEOUT_SECONDS = 20
 MAX_ICS_BYTES = 5 * 1024 * 1024
 PRESETS_FILE = Path(__file__).parent / "data" / "presets.json"
@@ -45,15 +46,35 @@ def google_ical_url(calendar_id: str) -> str:
 
 
 def normalize_url(value: str) -> str:
-    """接受 https://、webcal://，或直接貼 Google 日曆 ID。"""
+    """接受 https://、webcal://（大小寫都可以），或直接貼 Google 日曆 ID。
+
+    協定與網域轉小寫；Google 日曆 ID 不分大小寫，一律轉小寫。
+    """
     value = value.strip()
     if GOOGLE_CALENDAR_ID.match(value):
-        return google_ical_url(value)
-    if value.startswith("webcal://"):
-        value = "https://" + value.removeprefix("webcal://")
-    if not value.startswith(("https://", "http://")):
+        return google_ical_url(value.lower())
+    scheme, sep, rest = value.partition("://")
+    scheme = scheme.lower()
+    if sep and scheme in ("webcal", "webcals"):
+        scheme = "https"
+    if not sep or scheme not in ("https", "http"):
         raise SubscriptionError("請貼上 iCal 網址（https:// 或 webcal:// 開頭），或 Google 日曆 ID")
-    return value
+    parts = urlsplit(f"{scheme}://{rest}")
+    path = parts.path
+    google = GOOGLE_ICAL_PATH.match(path) if parts.netloc.lower() == "calendar.google.com" else None
+    if google:
+        path = f"{google[1]}{quote(unquote(google[2]).lower(), safe='')}{google[3]}"
+    return urlunsplit((scheme, parts.netloc.lower(), path, parts.query, ""))
+
+
+def url_key(url: str) -> str:
+    """判斷兩個訂閱網址是不是同一個行事曆：不管 http／https、網域與 Google 日曆 ID 的大小寫、結尾斜線。"""
+    try:
+        url = normalize_url(url)
+    except SubscriptionError:
+        pass
+    parts = urlsplit(url)
+    return f"{parts.netloc.lower()}{parts.path.rstrip('/')}{'?' + parts.query if parts.query else ''}"
 
 
 def classify(title: str) -> str:

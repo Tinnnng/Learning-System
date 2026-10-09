@@ -64,7 +64,11 @@ export function NoteControls({ questionId, className }: { questionId: number; cl
           aria-pressed={starred}
           // 名稱固定是「收藏」，狀態交給 aria-pressed；不然會念成「已收藏，切換按鈕，已按下」
           aria-label="收藏"
-          onClick={() => save.mutate({ starred: !starred, note: draft !== null ? draft.trim() || null : text })}
+          // 前一次儲存還沒回來時先不送：星號狀態以伺服器回傳為準，連點才不會送出相反的狀態
+          aria-disabled={save.isPending || undefined}
+          onClick={() => {
+            if (!save.isPending) save.mutate({ starred: !starred, note: draft !== null ? draft.trim() || null : text })
+          }}
           className={cx(
             'inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs transition-colors',
             starred ? 'text-ink' : 'text-muted hover:bg-sheet-tint hover:text-ink',

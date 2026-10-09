@@ -11,8 +11,9 @@ import re
 import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime
+from threading import Lock
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -156,14 +157,39 @@ def _classify(db: Session, subject: str, topics: list[str], batch: list[Question
     return result
 
 
+# 同一科一次只標一次：兩個分頁同時按「標記」時，後到的等前一個做完，題目都標好了就不再花用量。
+_subject_locks: defaultdict[str, Lock] = defaultdict(Lock)
+_subject_locks_guard = Lock()
+
+
+def _subject_lock(subject: str) -> Lock:
+    with _subject_locks_guard:
+        return _subject_locks[subject]
+
+
 def tag_subject(db: Session, data: TagRequest) -> TagResult:
     """用 AI 幫一個科目的題目標知識點。已標過的題目會略過（retag 時重來）。"""
+    with _subject_lock(data.subject):
+        db.expire_all()
+        return _tag_subject(db, data)
+
+
+def _tag_subject(db: Session, data: TagRequest) -> TagResult:
     ids = bank_service.query_question_ids(db, QuestionFilter(subject=data.subject, types=ALL_TYPES))
     if not ids:
         raise TopicsError("找不到這個科目的題目", 404)
+    # 試卷重新匯入時改了科目名稱：這些題目的標記還掛在舊科目名稱下，改成現在的名稱，
+    # 知識點清單才會接續使用、重新標記也清得掉
+    db.execute(
+        update(TopicTag).where(TopicTag.question_id.in_(ids), TopicTag.subject != data.subject).values(subject=data.subject)
+    )
     if data.retag:
-        db.execute(delete(TopicTag).where(TopicTag.subject == data.subject, TopicTag.source == "ai"))
-        db.commit()
+        db.execute(
+            delete(TopicTag).where(
+                or_(TopicTag.subject == data.subject, TopicTag.question_id.in_(ids)), TopicTag.source == "ai"
+            )
+        )
+    db.commit()
 
     tagged = set(db.scalars(select(TopicTag.question_id).where(TopicTag.question_id.in_(ids))))
     todo = [qid for qid in ids if qid not in tagged]

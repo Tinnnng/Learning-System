@@ -156,6 +156,144 @@ def test_cancel_stops_request(db, fake_ai, question_id, client):
         tutor_service.explain(db, question_id, request_id="req-2")
 
 
+def test_precancel_expires_and_running_ids_are_not_shared(db, fake_ai, monkeypatch):
+    import threading
+
+    from app.modules.ai.providers.base import ProviderCancelled
+
+    clock = [1000.0]
+    monkeypatch.setattr(ai_service.time, "monotonic", lambda: clock[0])
+    assert ai_service.cancel("gone") is False  # 中斷一個不存在的請求：只記一段時間
+    clock[0] += ai_service._PRECANCEL_TTL_SECONDS + 1
+    ai_service.cancel("other")  # 任何一次操作都會清掉過期的
+    assert "gone" not in ai_service._precancelled
+    assert ai_service.complete(db, "test", "系統", "問題", request_id="gone").text  # 過期後同一個 id 照常執行
+
+    started, release = threading.Event(), threading.Event()
+
+    class SlowProvider:
+        name = "slow"
+
+        def complete(self, system, prompt, images=None, cancel=None):
+            started.set()
+            release.wait(5)
+            if cancel.is_set():
+                raise ProviderCancelled("已中斷")
+            return ai_service.Completion(text="好", cost_usd=0.002, model="slow")
+
+    ai_service.set_provider(SlowProvider())
+    from app.core.database import SessionLocal
+
+    def run():
+        with SessionLocal() as other:
+            ai_service.complete(other, "test", "系統", "問題", request_id="same")
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    assert started.wait(5)
+    with pytest.raises(ai_service.AiUnavailable, match="處理中"):  # 同一個請求重送：不再花一次用量
+        ai_service.complete(db, "test", "系統", "問題", request_id="same")
+    release.set()
+    worker.join(5)
+    assert "same" not in ai_service._running
+
+
+def test_failed_calls_still_count_toward_budget(db):
+    from app.modules.ai.providers.base import ProviderCancelled, ProviderError
+
+    class FailingProvider:
+        name = "failing"
+
+        def __init__(self, error):
+            self.error = error
+
+        def complete(self, system, prompt, images=None, cancel=None):
+            raise self.error
+
+    ai_service.set_provider(FakeProvider())
+    ai_service.complete(db, "tutor_explain", "系統", "問題")  # 成功一次 0.001，當作估計的基準
+    try:
+        reported = ai_service.Completion(text="", cost_usd=0.004, model="m")
+        ai_service.set_provider(FailingProvider(ProviderError("回報錯誤", usage=reported)))
+        with pytest.raises(ai_service.AiUnavailable):
+            ai_service.complete(db, "tutor_explain", "系統", "問題")
+        ai_service.set_provider(FailingProvider(ProviderCancelled("已中斷", spent=True)))
+        with pytest.raises(ai_service.AiCancelled):
+            ai_service.complete(db, "tutor_explain", "系統", "問題")
+        ai_service.set_provider(FailingProvider(ProviderCancelled("已中斷")))  # 還沒開始就中斷：不記
+        with pytest.raises(ai_service.AiCancelled):
+            ai_service.complete(db, "tutor_explain", "系統", "問題")
+    finally:
+        ai_service.set_provider(None)
+    status_now = ai_service.status(db)
+    assert status_now.month_calls == 3
+    assert status_now.month_cost_usd == pytest.approx(0.001 + 0.004 + (0.001 + 0.004) / 2)
+
+
+def test_claude_code_error_result_reports_cost():
+    from app.modules.ai.providers.base import ProviderError
+
+    stdout = json.dumps({"type": "result", "is_error": True, "subtype": "error_max_turns", "total_cost_usd": 0.003})
+    with pytest.raises(ProviderError) as caught:
+        ClaudeCodeProvider.parse(stdout, "claude-haiku-4-5")
+    assert caught.value.usage is not None and caught.value.usage.cost_usd == 0.003
+
+
+def test_concurrent_explain_calls_ai_once(fake_ai, question_id):
+    import threading
+
+    from app.core.database import SessionLocal
+
+    started, release = threading.Event(), threading.Event()
+    original = fake_ai.complete
+
+    def slow(*args, **kwargs):
+        started.set()
+        release.wait(5)
+        return original(*args, **kwargs)
+
+    fake_ai.complete = slow
+    results = []
+
+    def run():
+        with SessionLocal() as session:
+            results.append(tutor_service.explain(session, question_id))
+
+    first = threading.Thread(target=run)
+    first.start()
+    assert started.wait(5)
+    second = threading.Thread(target=run)
+    second.start()
+    import time
+
+    time.sleep(0.3)  # 讓第二個請求先走到「檢查有沒有詳解」那一步
+    release.set()
+    first.join(5)
+    second.join(5)
+    assert len(fake_ai.calls) == 1
+    assert [len(thread.messages) for thread in results] == [1, 1]
+
+
+def test_regenerate_keeps_follow_ups_sent_meanwhile(db, fake_ai, question_id):
+    fake_ai.replies = ["舊詳解", "新詳解"]
+    tutor_service.explain(db, question_id)
+    original = fake_ai.complete
+
+    def with_follow_up(*args, **kwargs):
+        # 重新產生的這段時間，另一個分頁送出追問（直接寫進資料庫）
+        from app.core.database import SessionLocal
+        from app.modules.tutor.models import TutorMessage
+
+        with SessionLocal() as other:
+            other.add(TutorMessage(question_id=question_id, role="user", kind="chat", content="期間的追問", flagged=False, created_at=tutor_service._now()))
+            other.commit()
+        return original(*args, **kwargs)
+
+    fake_ai.complete = with_follow_up
+    thread = tutor_service.explain(db, question_id, regenerate=True)
+    assert [m.content for m in thread.messages] == ["期間的追問", "新詳解"]
+
+
 def test_tutor_api_reports_ai_unavailable(client, db, question_id, monkeypatch):
     from app.core.config import get_settings
 
@@ -522,6 +660,29 @@ def test_subscription_without_deadlines_and_errors(db, remote_ics):
     assert subscriptions.classify("一般警察特考筆試") == "exam"
     assert subscriptions.classify("放榜") == "deadline"
     assert subscriptions._location("TW") is None and subscriptions._location("臺北考區") == "臺北考區"
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["WEBCAL://Example.com/exams.ics", "http://example.com/exams.ics", "https://EXAMPLE.COM/exams.ics/", "Webcal://example.com/exams.ics"],
+)
+def test_same_calendar_with_different_spelling_is_one_subscription(db, remote_ics, variant):
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    remote_ics["data"] = make_ics([])
+    calendar_service.subscribe(db, SubscriptionIn(url="webcal://example.com/exams.ics"))
+    with pytest.raises(calendar_service.CalendarError, match="已經訂閱過"):
+        calendar_service.subscribe(db, SubscriptionIn(url=variant))
+
+
+def test_google_calendar_id_is_case_insensitive(db, remote_ics):
+    from app.modules.calendar.schemas import SubscriptionIn
+
+    remote_ics["data"] = make_ics([])
+    calendar_service.subscribe(db, SubscriptionIn(url="Someone@Gmail.com"))
+    assert remote_ics["urls"][0] == "https://calendar.google.com/calendar/ical/someone%40gmail.com/public/basic.ics"
+    with pytest.raises(calendar_service.CalendarError, match="已經訂閱過"):
+        calendar_service.subscribe(db, SubscriptionIn(url="https://calendar.google.com/calendar/ical/SOMEONE%40gmail.com/public/basic.ics"))
 
 
 def test_presets_list(db):

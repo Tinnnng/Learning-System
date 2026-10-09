@@ -11,6 +11,24 @@ _EDGE_CHARS = "\"'“”‘’「」『』《》〈〉()（）[]【】.,;:!?。�
 _EDGE_PUNCT = re.compile(f"^[{re.escape(_EDGE_CHARS)}]+|[{re.escape(_EDGE_CHARS)}]+$")
 
 
+# 中日韓文字：和它相鄰的空白是打錯字（「一般 行政」「一般　行政」都是「一般行政」）
+_CJK = "\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_CJK_SPACE = re.compile(f"(?<=[{_CJK}]) +| +(?=[{_CJK}])")
+
+
+def clean_text(text: str) -> str:
+    """顯示用的名稱整理：去掉零寬字元、空白（含全形空白、換行）合併成一個、去頭尾空白。不改字形。"""
+    return " ".join(_INVISIBLE.sub("", text).split())
+
+
+def clean_label(text: str) -> str:
+    """分類名稱（類科、考試類型）存進資料庫前的標準寫法：同一個類科只能有一種寫法，篩選與分組才不會分成兩個。
+
+    全形英數轉半形（NFKC）、去掉零寬字元、空白合併，中文字旁邊的空白拿掉。
+    """
+    return _CJK_SPACE.sub("", clean_text(unicodedata.normalize("NFKC", text)))
+
+
 def strip_edge_punct(text: str) -> str:
     """去掉前後的句讀、引號與括號，給顯示用的名稱整理（例如 AI 回傳的「作業系統。」）。"""
     return _EDGE_PUNCT.sub("", text.strip()).strip() or text.strip()

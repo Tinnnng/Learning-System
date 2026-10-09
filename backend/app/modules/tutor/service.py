@@ -6,7 +6,9 @@
 - 追問只帶最近幾則對話控制用量；不限次數，但顯示這題花了多少，送出後可以中斷。
 """
 
+from collections import defaultdict
 from datetime import UTC, datetime
+from threading import Lock
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -90,6 +92,17 @@ def get_thread(db: Session, question_id: int) -> TutorThread:
     )
 
 
+# 同一題的詳解一次只產生一份：兩個分頁同時按「請 AI 詳解」時，後到的等前一個做完直接用它的結果，不再花一次用量。
+# 單一使用者、單一程序，鎖放在記憶體就夠了。
+_explain_locks: defaultdict[int, Lock] = defaultdict(Lock)
+_explain_locks_guard = Lock()
+
+
+def _explain_lock(question_id: int) -> Lock:
+    with _explain_locks_guard:
+        return _explain_locks[question_id]
+
+
 def _call(db: Session, feature: str, system: str, prompt: str, request_id: str | None) -> ai_service.Completion:
     try:
         return ai_service.complete(db, feature, system, prompt, request_id=request_id)
@@ -108,14 +121,23 @@ def explain(
 ) -> TutorThread:
     """取得 AI 詳解；已經有就直接回傳（不花用量），regenerate 才重新產生。"""
     question = _get_question(db, question_id)
-    existing = [m for m in _messages(db, question_id) if m.kind == "explanation"]
-    if existing and not regenerate:
-        return get_thread(db, question_id)
+    with _explain_lock(question_id):
+        db.expire_all()  # 等鎖的期間別的請求可能已經存好詳解，重新讀
+        messages = _messages(db, question_id)
+        if any(m.kind == "explanation" for m in messages) and not regenerate:
+            return get_thread(db, question_id)
+        # 重新產生時只清掉「按下去之前」的對話；產生期間另外送出的追問保留
+        cutoff = max((m.id for m in messages), default=0)
 
-    prompt = question_context(question, my_answer) + "\n\n請解釋這一題。"
-    completion = _call(db, "tutor_explain", SYSTEM_PROMPT, prompt, request_id)
-    if regenerate:
-        db.execute(delete(TutorMessage).where(TutorMessage.question_id == question_id))
+        prompt = question_context(question, my_answer) + "\n\n請解釋這一題。"
+        completion = _call(db, "tutor_explain", SYSTEM_PROMPT, prompt, request_id)
+        if regenerate:
+            db.execute(delete(TutorMessage).where(TutorMessage.question_id == question_id, TutorMessage.id <= cutoff))
+        _save_explanation(db, question_id, completion)
+    return get_thread(db, question_id)
+
+
+def _save_explanation(db: Session, question_id: int, completion: ai_service.Completion) -> None:
     db.add(
         TutorMessage(
             question_id=question_id,
@@ -128,7 +150,6 @@ def explain(
         )
     )
     db.commit()
-    return get_thread(db, question_id)
 
 
 def ask(db: Session, question_id: int, content: str, request_id: str | None = None) -> TutorThread:

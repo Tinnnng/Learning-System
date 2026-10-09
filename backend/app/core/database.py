@@ -32,6 +32,22 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
         cursor.close()
 
 
+def begin_write(db: Session) -> None:
+    """「先讀、檢查、再寫」的操作（作答、交卷、評分、第一次建立資料…）一開始呼叫。
+
+    用 SQLite 的 BEGIN IMMEDIATE 先拿到寫入鎖：同時送來的第二個請求（兩個分頁、網路重送，
+    甚至 npm run dev 和 npm run serve 兩個伺服器）會等第一個寫完才往下讀，讀到的是最新資料，
+    「已經作答過」「已經存在」這類檢查才有效，不會兩邊都通過檢查、各寫一筆或撞唯一限制。
+    已經在寫入交易中（同一個請求前面寫過東西）就不重開。
+    """
+    connection = db.connection()
+    raw = connection.connection.driver_connection
+    if getattr(raw, "in_transaction", True):
+        return
+    connection.exec_driver_sql("BEGIN IMMEDIATE")
+    db.expire_all()  # 等鎖之前讀過的物件可能已經過時，之後用到時重新讀
+
+
 def get_db() -> Iterator[Session]:
     """FastAPI dependency：每個請求一個 session。"""
     db = SessionLocal()

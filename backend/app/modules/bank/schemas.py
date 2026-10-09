@@ -2,7 +2,9 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.core.text import clean_label, clean_text
 
 QuestionType = Literal["single_choice", "multi_choice", "essay"]
 Origin = Literal["official", "generated", "manual"]
@@ -52,7 +54,33 @@ class QuestionIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class PaperIn(BaseModel):
+def _not_blank(value: str) -> str:
+    if not value:
+        raise ValueError("不能是空白")
+    return value
+
+
+class _PaperNames(BaseModel):
+    """試卷名稱欄位的整理（匯入與自建共用）：類科、考試類型用標準寫法（clean_label），
+    「一般行政 」「一般　行政」才不會變成不同類科；科目只去掉多餘空白與零寬字元，保留原本的字形。"""
+
+    @field_validator("exam_type", check_fields=False)
+    @classmethod
+    def _clean_exam_type(cls, value: str) -> str:
+        return _not_blank(clean_label(value))
+
+    @field_validator("subject", check_fields=False)
+    @classmethod
+    def _clean_subject(cls, value: str) -> str:
+        return _not_blank(clean_text(value))
+
+    @field_validator("categories", check_fields=False)
+    @classmethod
+    def _clean_categories(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(name for name in (clean_label(item) for item in value) if name))
+
+
+class PaperIn(_PaperNames):
     source_key: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,99}$")
     origin: Origin
     exam_type: str = Field(min_length=1, description="高考／普考／期中考…")
@@ -220,7 +248,7 @@ class QuestionEdit(BaseModel):
         return self
 
 
-class PaperCreate(BaseModel):
+class PaperCreate(_PaperNames):
     """自建題組（例如期中考自己出題），之後用 QuestionEdit 一題一題加。"""
 
     exam_type: str = Field(default="期中考", min_length=1, max_length=50)

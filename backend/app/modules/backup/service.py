@@ -30,7 +30,7 @@ from app.modules.backup.schemas import BackupStatus, RestoreResult, SnapshotKind
 
 FORMAT_VERSION = 1
 APP_ID = "learning-system"
-_NAME = re.compile(r"^learning-(\d{8}-\d{6})-(auto|manual|before-restore)(?:-\d+)?\.zip$")
+_NAME = re.compile(r"^learning-(\d{8}-\d{6})-(auto|manual|before-restore)(?:-(\d+))?\.zip$")
 
 
 class BackupError(Exception):
@@ -72,9 +72,15 @@ def _describe(path: Path) -> SnapshotOut | None:
     return SnapshotOut(name=path.name, kind=match[2], created_at=created, size_bytes=path.stat().st_size)
 
 
+def _order(snapshot: SnapshotOut) -> tuple[datetime, int]:
+    """新到舊排序用：同一秒的備份依序號（沒有序號是第 1 份），-10 要排在 -2 後面，不能照字串排。"""
+    match = _NAME.match(snapshot.name)
+    return snapshot.created_at, int(match[3]) if match and match[3] else 1
+
+
 def list_snapshots() -> list[SnapshotOut]:
     snapshots = [s for s in (_describe(p) for p in backups_dir().glob("learning-*.zip")) if s]
-    return sorted(snapshots, key=lambda s: (s.created_at, s.name), reverse=True)
+    return sorted(snapshots, key=_order, reverse=True)
 
 
 def status() -> BackupStatus:
@@ -95,19 +101,45 @@ def _db_revision(connection: sqlite3.Connection) -> str | None:
     return row[0] if row else None
 
 
-def _unique_path(stamp: str, kind: SnapshotKind) -> Path:
+def _reserve_path(stamp: str, kind: SnapshotKind) -> tuple[Path, Path]:
+    """找一個沒人用的檔名，並且用「獨佔建立」暫存檔的方式先佔住它。
+
+    同一秒同時備份兩次時，兩邊不會挑到同一個檔名、寫同一個暫存檔（Windows 會 PermissionError）。
+    回傳（正式檔名, 已建立的暫存檔）。
+    """
     folder = backups_dir()
-    path = folder / f"learning-{stamp}-{kind}.zip"
-    counter = 2
-    while path.exists():
-        path = folder / f"learning-{stamp}-{kind}-{counter}.zip"
+    counter = 1
+    while True:
+        suffix = "" if counter == 1 else f"-{counter}"
+        path = folder / f"learning-{stamp}-{kind}{suffix}.zip"
+        partial = path.with_suffix(".partial")
         counter += 1
-    return path
+        if path.exists():
+            continue
+        try:
+            partial.open("xb").close()
+        except FileExistsError:
+            continue
+        return path, partial
 
 
 def create_snapshot(kind: SnapshotKind = "manual", now: datetime | None = None) -> SnapshotOut:
     now = (now or _now()).astimezone(_tz())
-    target = _unique_path(now.strftime("%Y%m%d-%H%M%S"), kind)
+    target, partial = _reserve_path(now.strftime("%Y%m%d-%H%M%S"), kind)
+    try:
+        _write_snapshot(target, partial, now, kind)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+
+    if kind == "auto":
+        _prune_auto()
+    snapshot = _describe(target)
+    assert snapshot is not None
+    return snapshot
+
+
+def _write_snapshot(target: Path, partial: Path, now: datetime, kind: SnapshotKind) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         db_copy = Path(tmp) / "learning.db"
         destination = sqlite3.connect(db_copy)
@@ -120,7 +152,6 @@ def create_snapshot(kind: SnapshotKind = "manual", now: datetime | None = None) 
             destination.close()
 
         manifest = {"app": APP_ID, "format": FORMAT_VERSION, "created_at": now.isoformat(), "kind": kind, "revision": revision}
-        partial = target.with_suffix(".partial")
         with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
             archive.write(db_copy, "learning.db")
@@ -130,12 +161,6 @@ def create_snapshot(kind: SnapshotKind = "manual", now: datetime | None = None) 
                     if file.is_file():
                         archive.write(file, f"assets/{file.relative_to(assets).as_posix()}")
         partial.replace(target)
-
-    if kind == "auto":
-        _prune_auto()
-    snapshot = _describe(target)
-    assert snapshot is not None
-    return snapshot
 
 
 def _prune_auto() -> None:

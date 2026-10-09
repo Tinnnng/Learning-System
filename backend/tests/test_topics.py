@@ -143,3 +143,49 @@ def test_topic_names_ignore_fullwidth_and_punctuation(db, fake, question_ids):
     assert by_topic["TCP/IP"] == [question_ids[0]]
     assert by_topic["作業系統"] == [question_ids[1]]
     assert (by_topic["C#"], by_topic["C++"]) == ([question_ids[2]], [question_ids[3]])
+
+
+def test_renamed_subject_keeps_and_clears_old_tags(db, fake, question_ids):
+    """同一份試卷重新匯入時改了科目名稱：舊名稱下的標記要接到新名稱，重新標記也要清得掉。"""
+    _reply(fake, {"topics": ["行政處分"]})
+    _reply(fake, {"tags": {str(n): ["行政處分"] for n in range(1, 6)}})
+    service.tag_subject(db, TagRequest(subject="行政法"))
+
+    bank_service.upsert_paper(db, make_bundle("topics-1", questions=5, subject="行政法概要"))
+    assert service.tag_subject(db, TagRequest(subject="行政法概要")).calls == 0  # 舊標記接過來，不用再花用量
+
+    _reply(fake, {"topics": ["行政罰"]})
+    _reply(fake, {"tags": {str(n): ["行政罰"] for n in range(1, 6)}})
+    service.tag_subject(db, TagRequest(subject="行政法概要", retag=True))
+    subject = next(s for s in service.overview(db).subjects if s.subject == "行政法概要")
+    assert [stat.topic for stat in subject.topics] == ["行政罰"]
+
+
+def test_concurrent_tagging_of_one_subject_runs_once(fake, question_ids):
+    import threading
+    import time
+
+    from app.core.database import SessionLocal
+
+    _reply(fake, {"topics": ["行政處分"]})
+    _reply(fake, {"tags": {str(n): ["行政處分"] for n in range(1, 6)}})
+    original = fake.complete
+
+    def slow(*args, **kwargs):
+        time.sleep(0.2)
+        return original(*args, **kwargs)
+
+    fake.complete = slow
+    results = []
+
+    def run():
+        with SessionLocal() as session:
+            results.append(service.tag_subject(session, TagRequest(subject="行政法")).calls)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert sorted(results) == [0, 2]
+    assert len(fake.calls) == 2

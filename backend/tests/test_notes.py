@@ -39,3 +39,22 @@ def test_starred_questions_as_exam_source(db, client):
     assert response.json()["note"] == "重要"
     assert len(client.get(f"/api/notes/questions?ids={q1}&ids={q2}").json()) == 2
     assert client.get("/api/notes/list?which=noted").json()[0]["question"]["id"] == q1
+
+
+def test_concurrent_first_saves_do_not_collide(db):
+    """新題目同時收到「收藏」與「自動儲存筆記」：以前後到的會撞主鍵回 500。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.core.database import SessionLocal
+
+    (q1,) = _ids(db, questions=1)
+
+    def save(data):
+        with SessionLocal() as session:
+            return service.save_note(session, q1, data)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(save, [NoteIn(starred=True, note="筆記"), NoteIn(starred=True, note="筆記")]))
+    assert all(result.starred for result in results)
+    db.expire_all()
+    assert service.get_note(db, q1).note == "筆記"

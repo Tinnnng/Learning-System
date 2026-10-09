@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
+from app.core.database import begin_write
 from app.modules.ai import service as ai_service
 from app.modules.bank import service as bank_service
 from app.modules.bank.schemas import OPTION_LETTERS, QuestionFilter, QuestionWithPaper
@@ -105,7 +106,8 @@ def _default_title(data: SessionCreate, questions: list[QuestionWithPaper]) -> s
 
 def create_session(db: Session, data: SessionCreate) -> SessionOut:
     rng = random.Random(data.seed)
-    question_ids = _resolve_question_ids(db, data)
+    # 同一題只出一次：指定題目重複（[1, 1, 1]）時，一次測驗就會累積好幾次連續答對
+    question_ids = list(dict.fromkeys(_resolve_question_ids(db, data)))
     if not question_ids:
         raise ExamError("沒有符合條件的題目")
     if data.shuffle_questions:
@@ -257,6 +259,7 @@ def _find_item(session: ExamSession, position: int) -> ExamItem:
 
 
 def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> ItemOut:
+    begin_write(db)  # 同一題同時送兩次：第二次要看到第一次的結果（已揭曉／已交卷）
     session = _load(db, session_id)
     if session.submitted_at is not None:
         raise ExamError("這次測驗已經交卷", status_code=409)
@@ -313,6 +316,7 @@ def _essay_item(db: Session, session_id: int, position: int) -> tuple[ExamSessio
 
 def reveal_item(db: Session, session_id: int, position: int) -> ItemOut:
     """練習模式：寫完申論題後看參考答案與得分要點（之後不能再改答案）。"""
+    begin_write(db)
     session, item, question = _essay_item(db, session_id, position)
     if session.mode != "practice" and session.submitted_at is None:
         raise ExamError("模擬考要交卷後才能看參考答案", status_code=409)
@@ -330,6 +334,7 @@ def _session_score(session: ExamSession) -> None:
 
 def grade_item(db: Session, session_id: int, position: int, data: GradeIn) -> ItemOut:
     """申論題自評：勾選寫到的得分要點，加總成分數。第一次評分時記入錯題本，之後修改只更新分數。"""
+    begin_write(db)
     session, item, question = _essay_item(db, session_id, position)
     if not (item.revealed or session.submitted_at is not None):
         raise ExamError("先看參考答案再評分", status_code=409)
@@ -413,6 +418,7 @@ def ai_grade_item(db: Session, session_id: int, position: int) -> ItemOut:
 
 
 def submit_session(db: Session, session_id: int) -> SessionOut:
+    begin_write(db)  # 同一題同時送兩次：第二次要看到第一次的結果（已揭曉／已交卷）
     session = _load(db, session_id)
     if session.submitted_at is not None:
         raise ExamError("這次測驗已經交卷", status_code=409)

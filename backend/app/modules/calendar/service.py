@@ -399,10 +399,13 @@ def sync_stale(db: Session, now: datetime | None = None) -> list[SyncResult]:
 
 def presets(db: Session) -> PresetList:
     source, calendars = subscriptions.load_presets()
-    subscribed = set(db.scalars(select(CalendarSubscription.url)))
+    subscribed = {subscriptions.url_key(url) for url in db.scalars(select(CalendarSubscription.url))}
     return PresetList(
         source=source,
-        calendars=[PresetCalendar(name=c["name"], url=c["url"], subscribed=c["url"] in subscribed) for c in calendars],
+        calendars=[
+            PresetCalendar(name=c["name"], url=c["url"], subscribed=subscriptions.url_key(c["url"]) in subscribed)
+            for c in calendars
+        ],
     )
 
 
@@ -461,7 +464,9 @@ def subscribe(db: Session, data: SubscriptionIn) -> SyncResult:
         url = subscriptions.normalize_url(data.url)
     except subscriptions.SubscriptionError as error:
         raise CalendarError(str(error)) from error
-    if db.scalar(select(CalendarSubscription.id).where(CalendarSubscription.url == url)):
+    # 只差 http／https、網域大小寫、結尾斜線的也算同一個（訂閱數量很少，直接逐一比對）
+    key = subscriptions.url_key(url)
+    if any(subscriptions.url_key(existing) == key for existing in db.scalars(select(CalendarSubscription.url))):
         raise CalendarError("已經訂閱過這個行事曆了", status_code=409)
     try:
         name, _ = subscriptions.parse(subscriptions.fetch(url), get_settings().timezone, today())

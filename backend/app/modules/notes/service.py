@@ -2,7 +2,8 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from app.modules.bank import service as bank_service
@@ -28,20 +29,16 @@ def get_notes(db: Session, question_ids: list[int]) -> list[NoteOut]:
 def save_note(db: Session, question_id: int, data: NoteIn) -> NoteOut:
     """收藏與筆記都空的時候刪掉資料列，不留空紀錄。"""
     note = (data.note or "").strip() or None
-    row = db.get(QuestionNote, question_id)
     if not data.starred and note is None:
-        if row is not None:
-            db.delete(row)
-            db.commit()
+        db.execute(delete(QuestionNote).where(QuestionNote.question_id == question_id))
+        db.commit()
         return _out(question_id, None)
-    if row is None:
-        row = QuestionNote(question_id=question_id)
-        db.add(row)
-    row.starred = data.starred
-    row.note = note
-    row.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    # 一句 upsert：新題目同時收到「收藏」和「自動儲存筆記」兩個請求時，後到的不會撞主鍵（以前會回 500、內容遺失）
+    values = {"question_id": question_id, "starred": data.starred, "note": note, "updated_at": datetime.now(UTC).replace(tzinfo=None)}
+    statement = insert(QuestionNote).values(**values)
+    db.execute(statement.on_conflict_do_update(index_elements=[QuestionNote.question_id], set_=values))
     db.commit()
-    return _out(question_id, row)
+    return _out(question_id, db.get(QuestionNote, question_id, populate_existing=True))
 
 
 def starred_question_ids(db: Session) -> list[int]:

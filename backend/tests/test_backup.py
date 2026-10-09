@@ -133,3 +133,20 @@ def test_backup_api(client):
     assert client.get("/api/backup/snapshots/..%2Flearning.db").status_code == 404
     assert client.delete(f"/api/backup/snapshots/{created['name']}").status_code == 204
     assert client.post(f"/api/backup/snapshots/{created['name']}/restore").status_code == 404
+
+
+def test_same_second_backups_get_distinct_names_in_order(db):
+    from concurrent.futures import ThreadPoolExecutor
+
+    moment = datetime(2026, 10, 9, 12, 0, 0, tzinfo=service._tz())
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        names = list(pool.map(lambda _: service.create_snapshot("manual", moment).name, range(4)))
+    for _ in range(7):
+        names.append(service.create_snapshot("manual", moment).name)
+    assert len(set(names)) == 11
+    listed = [s.name for s in service.list_snapshots() if s.name.startswith("learning-20261009-120000")]
+    # 新到舊：-11、-10、…、-2、沒有序號的第 1 份
+    assert listed[0].endswith("-manual-11.zip")
+    assert listed[1].endswith("-manual-10.zip")
+    assert listed[-1] == "learning-20261009-120000-manual.zip"
+    assert not list(service.backups_dir().glob("*.partial"))

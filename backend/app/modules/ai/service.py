@@ -1,5 +1,6 @@
 """AI 的公開介面：其他模組呼叫 complete()，這裡負責選模型、檢查每月上限、記錄用量。"""
 
+import time
 from datetime import UTC, datetime
 from threading import Event, Lock
 from zoneinfo import ZoneInfo
@@ -27,16 +28,26 @@ class AiCancelled(AiUnavailable):
 
 # 進行中的 AI 呼叫：request_id → 中斷旗標。前端送出時附上 request_id，按「中斷」時呼叫 cancel()。
 _running: dict[str, Event] = {}
+# 先按中斷、請求才到（或請求根本沒到）：request_id → 按中斷的時間。只保留一段時間，不會一直累積。
+_precancelled: dict[str, float] = {}
+_PRECANCEL_TTL_SECONDS = 300
 _running_lock = Lock()
 
 
+def _prune_precancelled(now: float) -> None:
+    for request_id, at in list(_precancelled.items()):
+        if now - at > _PRECANCEL_TTL_SECONDS:
+            del _precancelled[request_id]
+
+
 def cancel(request_id: str) -> bool:
-    """中斷進行中的呼叫；呼叫還沒開始也會記下來，開始時立刻中斷。回傳是否找到進行中的呼叫。"""
+    """中斷進行中的呼叫；呼叫還沒開始也會記下來（5 分鐘內開始就立刻中斷）。回傳是否找到進行中的呼叫。"""
+    now = time.monotonic()
     with _running_lock:
+        _prune_precancelled(now)
         event = _running.get(request_id)
         if event is None:
-            _running[request_id] = Event()
-            _running[request_id].set()
+            _precancelled[request_id] = now
             return False
         event.set()
         return True
@@ -108,26 +119,52 @@ def complete(
     flag: Event | None = None
     if request_id:
         with _running_lock:
-            flag = _running.setdefault(request_id, Event())
+            _prune_precancelled(time.monotonic())
+            if request_id in _running:
+                # 同一個請求重送（例如網路重試）：不要再花一次用量，也不要和前一個共用中斷旗標
+                raise AiUnavailable("這個請求已經在處理中，請稍候。")
+            flag = _running[request_id] = Event()
+            if _precancelled.pop(request_id, None) is not None:
+                flag.set()
     try:
         completion = provider.complete(system, prompt, images, cancel=flag)
-    except ProviderCancelled as error:
-        raise AiCancelled(str(error)) from error
     except ProviderError as error:
+        _record_failed(db, feature, error)
+        if isinstance(error, ProviderCancelled):
+            raise AiCancelled(str(error)) from error
         raise AiUnavailable(str(error)) from error
     finally:
         if request_id:
             with _running_lock:
                 _running.pop(request_id, None)
+    _record(db, feature, completion)
+    return completion
+
+
+def _record(db: Session, feature: str, completion: Completion, *, model: str | None = None) -> None:
     db.add(
         AiUsage(
             created_at=datetime.now(UTC).replace(tzinfo=None),
             feature=feature,
-            model=completion.model or get_settings().ai_model,
+            model=model or completion.model or get_settings().ai_model,
             input_tokens=completion.input_tokens,
             output_tokens=completion.output_tokens,
             cost_usd=completion.cost_usd,
         )
     )
     db.commit()
-    return completion
+
+
+def _record_failed(db: Session, feature: str, error: ProviderError) -> None:
+    """失敗的呼叫也記用量，每月上限才不會低估。
+
+    有回報用量就記實際的；被中斷或逾時（已經開始跑、但不知道花了多少）就用同一功能最近 20 次的平均估計。
+    """
+    if error.usage is not None:
+        _record(db, feature, error.usage)
+    elif error.spent:
+        recent = db.scalars(
+            select(AiUsage.cost_usd).where(AiUsage.feature == feature, AiUsage.cost_usd > 0).order_by(AiUsage.id.desc()).limit(20)
+        ).all()
+        estimate = sum(recent) / len(recent) if recent else 0.0
+        _record(db, feature, Completion(text="", cost_usd=round(estimate, 6)), model=f"{get_settings().ai_model}（中斷，估計）")

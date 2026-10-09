@@ -1,6 +1,7 @@
 import pytest
 
 from app.modules.bank import service as bank_service
+from app.modules.bank.schemas import QuestionFilter
 from app.modules.exam import service
 from app.modules.exam.schemas import AnswerIn, ExamSource, SessionCreate
 from app.modules.review import service as review_service
@@ -135,3 +136,48 @@ def test_exam_api_flow(client, db, paper_id):
     other = client.post("/api/exam/sessions", json={"source": {"filter": {"paper_ids": [paper_id]}}}).json()
     assert client.delete(f"/api/exam/sessions/{other['id']}").status_code == 204
     assert client.get(f"/api/exam/sessions/{other['id']}").status_code == 404
+
+
+def test_duplicate_question_ids_appear_once(db, paper_id):
+    ids = bank_service.query_question_ids(db, QuestionFilter(paper_ids=[paper_id]))[:2]
+    session = service.create_session(
+        db, SessionCreate(source=ExamSource(kind="questions", question_ids=[ids[0], ids[0], ids[1], ids[0]]), shuffle_questions=False)
+    )
+    assert [item.question_id for item in session.items] == [ids[0], ids[1]]
+
+
+def test_same_answer_sent_twice_at_once_is_recorded_once(db, paper_id, monkeypatch):
+    """兩個分頁或網路重送「同時」作答同一題：只能記一次作答（以前兩邊都通過「還沒揭曉」的檢查）。"""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy import func, select
+
+    from app.core.database import SessionLocal
+    from app.modules.review.models import AttemptLog
+
+    session = create(db, paper_id, shuffle_questions=False)
+    original = review_service.record_attempts
+    first = threading.Event()
+
+    def slow_record(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if not first.is_set():
+            first.set()
+            time.sleep(0.4)  # 第一個請求寫到一半，第二個請求進來
+        return result
+
+    monkeypatch.setattr(review_service, "record_attempts", slow_record)
+
+    def answer(_):
+        with SessionLocal() as other:
+            try:
+                return service.answer_item(other, session.id, 1, AnswerIn(response=["A"])).revealed
+            except service.ExamError as error:
+                return error.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = sorted(map(str, pool.map(answer, range(2))))
+    assert outcomes == ["409", "True"]
+    assert db.scalar(select(func.count(AttemptLog.id))) == 1
