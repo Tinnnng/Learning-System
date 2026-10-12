@@ -31,6 +31,7 @@ ENABLED_MODULES: list[str] = [
     "notes",
     "backup",
     "topics",
+    "activity",
 ]
 
 

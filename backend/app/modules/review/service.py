@@ -273,3 +273,8 @@ def reset_all(db: Session) -> int:
     db.execute(delete(QuestionProgress))
     srs_service.remove_all(db, "question")
     return attempts
+
+
+def answer_times(db: Session, since: datetime) -> list[datetime]:
+    """since（UTC，不含時區）之後每一筆作答的時間，給讀書日曆分天統計用。"""
+    return list(db.scalars(select(AttemptLog.answered_at).where(AttemptLog.answered_at >= since)))

@@ -11,6 +11,9 @@ import { formatDateTime, score, shortName, todayLabel } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { SessionSummary } from '@/lib/types'
 import { fetchCountdown, fetchOverview, fetchPapers, fetchSessions, fetchVocabStats } from './api'
+import { FortuneCard } from './FortuneCard'
+import { PomodoroCard } from './PomodoroCard'
+import { StudyCalendar } from './StudyCalendar'
 
 /** 一排短短的螢光筆劃記，用來表示「完成幾個」 */
 function Bubbles({ total, done, label }: { total: number; done: number; label: string }) {
@@ -133,6 +136,7 @@ export function HomePage() {
       />
 
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-6">
         <section aria-labelledby="tasks-title" className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
           <h2 id="tasks-title" className="sr-only">
             今日任務
@@ -221,6 +225,13 @@ export function HomePage() {
             />
           </ol>
         </section>
+          <StudyCalendar />
+          {/* 讀累了：番茄鐘、白噪音和每日抽籤（手機上疊成一欄） */}
+          <div className="grid items-start gap-6 md:grid-cols-2">
+            <PomodoroCard />
+            <FortuneCard />
+          </div>
+        </div>
 
         <aside className="flex flex-col gap-8">
           <section aria-labelledby="glance-title" className="flex flex-col gap-4">

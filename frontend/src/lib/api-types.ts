@@ -1260,10 +1260,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/activity/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendar
+         * @description 讀書日曆：最近 days 天每天寫了幾題、背了幾個字，以及連續讀書天數。
+         */
+        get: operations["calendar_api_activity_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/fortune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fortune */
+        get: operations["fortune_api_activity_fortune_get"];
+        put?: never;
+        /**
+         * Draw Fortune
+         * @description 抽今天的籤（一天一支，抽過再按回傳同一支）。
+         */
+        post: operations["draw_fortune_api_activity_fortune_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivityCalendar */
+        ActivityCalendar: {
+            /**
+             * Days
+             * @description 從最早一天到今天，每天一筆（沒讀書的天數也有，數量是 0）
+             */
+            days: components["schemas"]["ActivityDay"][];
+            /** Today */
+            today: string;
+            /**
+             * Streak
+             * @description 連續讀書天數（今天還沒讀不算斷，從昨天往回算）
+             */
+            streak: number;
+            /** Longest Streak */
+            longest_streak: number;
+            /**
+             * Active Days
+             * @description 這段期間有讀書的天數
+             */
+            active_days: number;
+        };
+        /** ActivityDay */
+        ActivityDay: {
+            /**
+             * Date
+             * @description YYYY-MM-DD（台灣時間）
+             */
+            date: string;
+            /**
+             * Questions
+             * @description 這天作答的題數
+             */
+            questions: number;
+            /**
+             * Words
+             * @description 這天單字作答次數
+             */
+            words: number;
+        };
         /** AiStatus */
         AiStatus: {
             /** Enabled */
@@ -1657,6 +1738,38 @@ export interface components {
             subjects: string[];
             /** Origins */
             origins: ("official" | "generated" | "manual")[];
+        };
+        /** Fortune */
+        Fortune: {
+            /** Day */
+            day: string;
+            /**
+             * Level
+             * @description 大吉、中吉、小吉、吉、末吉、小凶
+             */
+            level: string;
+            /** Line */
+            line: string;
+            /**
+             * Good
+             * @description 今日宜
+             */
+            good: string;
+            /**
+             * Bad
+             * @description 今日忌
+             */
+            bad: string;
+            /**
+             * Lucky
+             * @description 幸運小物
+             */
+            lucky: string;
+        };
+        /** FortuneToday */
+        FortuneToday: {
+            /** @description 今天還沒抽是 null */
+            fortune: components["schemas"]["Fortune"] | null;
         };
         /** GaopuConvertIn */
         GaopuConvertIn: {
@@ -5322,6 +5435,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calendar_api_activity_calendar_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityCalendar"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fortune_api_activity_fortune_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FortuneToday"];
+                };
+            };
+        };
+    };
+    draw_fortune_api_activity_fortune_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fortune"];
                 };
             };
         };

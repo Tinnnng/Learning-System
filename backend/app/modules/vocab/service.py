@@ -586,3 +586,8 @@ def reset_progress(db: Session) -> VocabResetResult:
     srs_service.remove_all(db, "word")
     db.commit()
     return VocabResetResult(words=words, backup=backup.name)
+
+
+def answer_times(db: Session, since: datetime) -> list[datetime]:
+    """since（UTC，不含時區）之後每一次單字作答的時間，給讀書日曆分天統計用。"""
+    return list(db.scalars(select(WordAttempt.answered_at).where(WordAttempt.answered_at >= since)))

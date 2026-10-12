@@ -11,7 +11,8 @@
 2026-10-09 下午把兩份稽核剩下的項目都做完：無障礙中低優先（方向鍵、快捷鍵開關、44px 觸控、編輯器未存確認…）、
 並行寫入（`core/database.begin_write` 用 SQLite BEGIN IMMEDIATE 讓「先讀再寫」的操作排隊）、名稱與網址正規化、AI 失敗呼叫也記用量。
 2026-10-12 使用者回饋第 2 輪：單字規則（連續答對 3 次學會、錯題 5 次、已學會分頁、每日混合抽字、錯題一次 5 個）、
-清除單字進度／清除作答紀錄（清除前自動備份）、匯入頁可以自己上傳並轉檔（高普考自動轉檔／AI 校對、教材 AI 出題）。
+清除單字進度／清除作答紀錄（清除前自動備份）、匯入頁可以自己上傳並轉檔（高普考自動轉檔／AI 校對、教材 AI 出題）、
+首頁左下的讀書日曆、番茄鐘＋白噪音、每日抽籤。
 **下一步沒有指定**：等使用者回饋；可做的事見下方「還沒做的」。
 
 ## 已完成的功能（後端模組 → 前端頁面）
@@ -27,6 +28,7 @@
 | 系統內 AI | `ai`、`tutor` | AI 助教 | 本機 Claude Code CLI（Haiku 4.5）；按鈕才用；可中斷；顯示這題／本月用量 |
 | 行事曆 | `calendar` | 行事曆、首頁倒數 | 手動、照片／PDF AI 辨識（依考試分類勾選、已在行事曆的標示）、訂閱 iCal、匯出 .ics |
 | 收藏與筆記、知識點弱點、備份還原 | `notes`、`topics`、`backup` | 收藏、弱點、備份 | — |
+| 讀書日曆、每日抽籤 | `activity` | 首頁左下（番茄鐘與白噪音是純前端 `lib/pomodoro`、`lib/noise`） | 清除作答紀錄／單字進度也會清掉日曆的紀錄 |
 | iPhone 版 | `core/frontend.py` | PWA（manifest、圖示、service worker） | `npm run serve`／`start-server.cmd` 在 127.0.0.1:8765；手機經 `tailscale serve` 的 HTTPS 連線，見 `docs/iphone.md` |
 
 ## 使用者真正的資料庫（`data/learning.db`）現況（2026-10-09）
@@ -53,7 +55,7 @@
 
 - 開發：`npm run dev`（http://localhost:5173，後端 8000）。正式／手機：`npm run serve` 或雙擊 `start-server.cmd`（127.0.0.1:8765，用真正的資料）。兩者可同時開。
 - Tailscale：`tailscale serve --bg 8765` 已設定過（網址 `https://desktop-v3393bq.taila1733a.ts.net`，只有自己的 tailnet 連得到）。電腦重開機後先確認 `tailscale serve status`，沒有設定就再執行一次。使用者**不要**開機自動啟動 `start-server.cmd`（2026-10-08 決定）。
-- 測試：`npm test`（後端 209、前端 19）；改 API 後 `npm run gen:api`；改 models 後 migration（autogenerate 要對**資料庫副本**跑：`LS_DATA_DIR=<副本>`，真正的資料庫套用前先手動備份）。
+- 測試：`npm test`（後端 213、前端 19）；改 API 後 `npm run gen:api`；改 models 後 migration（autogenerate 要對**資料庫副本**跑：`LS_DATA_DIR=<副本>`，真正的資料庫套用前先手動備份）。
 - 截圖／測試要造資料：複製 `data/` 到暫存區、`LS_DATA_DIR` 指向副本，**不要碰真正的資料庫**；使用者常開著 8000／5173 或 8765，另開測試伺服器用 8010／5180／8766，不要關掉使用者的伺服器。
 - 無障礙自動掃描：用 Playwright 開頁面後注入 `https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js` 跑 `axe.run`（上一輪腳本已刪，照這個做法重寫即可）。
 - 已安裝的技能：`web-design-guidelines`（Vercel，執行時會下載最新規範）、`accessibility`（WCAG 2.2），在 `~/.claude/skills/`。

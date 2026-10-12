@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useMatches } from 'react-router'
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/Icon'
+import { PomodoroChip } from '@/components/PomodoroChip'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { cx } from '@/lib/cx'
 import { navItems } from './registry'
@@ -151,7 +152,10 @@ export function Layout() {
               />
             </ul>
           </nav>
-          <ThemeToggle className="ml-auto" />
+          <div className="ml-auto flex items-center gap-3">
+            <PomodoroChip />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
