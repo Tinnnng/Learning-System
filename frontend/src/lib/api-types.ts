@@ -262,6 +262,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ingest/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pending Sources
+         * @description 上傳過、等著轉檔的高普考試卷與教材。
+         */
+        get: operations["pending_sources_api_ingest_uploads_get"];
+        put?: never;
+        /**
+         * Upload Sources
+         * @description 上傳題目文字檔（直接可以匯入）、高普考題目與答案 PDF、或上課教材。
+         */
+        post: operations["upload_sources_api_ingest_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingest/uploads/papers/{source_key}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Paper
+         * @description 高普考試卷轉成匯入檔：use_ai=false 只用程式（不花用量），true 再讓 AI 對照每頁圖片校對。
+         */
+        post: operations["convert_paper_api_ingest_uploads_papers__source_key__convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingest/uploads/lectures/{name}/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estimate Lecture */
+        get: operations["estimate_lecture_api_ingest_uploads_lectures__name__estimate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingest/uploads/lectures/{name}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Lecture
+         * @description AI 依教材出選擇題（附詳解與出處），存成匯入檔，到匯入預覽頁確認後再匯入。
+         */
+        post: operations["generate_lecture_api_ingest_uploads_lectures__name__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/srs/summary/{item_type}": {
         parameters: {
             query?: never;
@@ -1283,6 +1364,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_sources_api_ingest_uploads_post */
+        Body_upload_sources_api_ingest_uploads_post: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "gaopu" | "lecture" | "text";
+            /** Files */
+            files: string[];
+            /** Exam Type */
+            exam_type?: string | null;
+            /** Category */
+            category?: string | null;
+        };
         /** BuiltinList */
         BuiltinList: {
             /** Name */
@@ -1304,6 +1399,22 @@ export interface components {
             issues: components["schemas"]["Issue"][];
             /** Ok */
             readonly ok: boolean;
+        };
+        /** ConvertResult */
+        ConvertResult: {
+            /**
+             * File
+             * @description data/converted/ 裡的檔名，到匯入預覽頁確認
+             */
+            file: string;
+            report: components["schemas"]["CheckReport"];
+            /**
+             * Calls
+             * @description 這次呼叫 AI 幾次
+             */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: number;
         };
         /**
          * ConvertedFile
@@ -1547,6 +1658,16 @@ export interface components {
             /** Origins */
             origins: ("official" | "generated" | "manual")[];
         };
+        /** GaopuConvertIn */
+        GaopuConvertIn: {
+            /**
+             * Use Ai
+             * @default false
+             */
+            use_ai: boolean;
+            /** Request Id */
+            request_id?: string | null;
+        };
         /** GradeIn */
         GradeIn: {
             /**
@@ -1596,6 +1717,13 @@ export interface components {
              * @description 試卷宣告的題數，用來檢查有沒有漏題
              */
             expected_question_count?: number | null;
+            /**
+             * Review Notes
+             * @description 系統自動轉檔時要使用者確認的地方（題號 → 說明，0 是整份的說明）。匯入預覽頁列成提醒，不會匯入題庫
+             */
+            review_notes?: {
+                [key: string]: string[];
+            };
         };
         /** ImportOutcome */
         ImportOutcome: {
@@ -1695,6 +1823,23 @@ export interface components {
             mastery_streak: number;
             /** Daily Vocab Count */
             daily_vocab_count: number;
+        };
+        /** LectureEstimate */
+        LectureEstimate: {
+            /** Calls */
+            calls: number;
+        };
+        /** LectureGenerateIn */
+        LectureGenerateIn: {
+            /**
+             * Count
+             * @default 15
+             */
+            count: number;
+            /** Subject */
+            subject?: string | null;
+            /** Request Id */
+            request_id?: string | null;
         };
         /** MessageOut */
         MessageOut: {
@@ -1922,6 +2067,67 @@ export interface components {
              * @default 0
              */
             essay_count: number;
+        };
+        /** PendingLecture */
+        PendingLecture: {
+            /** Name */
+            name: string;
+            /** Source Key */
+            source_key: string;
+            /** Converted */
+            converted: boolean;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /**
+         * PendingPaper
+         * @description 上傳的高普考試卷（題目＋答案 PDF）。
+         */
+        PendingPaper: {
+            /** Source Key */
+            source_key: string;
+            /** Subject */
+            subject: string;
+            /** Exam Type */
+            exam_type: string;
+            /** Year */
+            year: number;
+            /** Categories */
+            categories: string[];
+            /** Has Question */
+            has_question: boolean;
+            /** Has Answer */
+            has_answer: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "choice" | "mixed" | "essay" | "unknown";
+            /** Pages */
+            pages: number;
+            /**
+             * Converted
+             * @description data/converted/ 已經有轉好的檔案
+             */
+            converted: boolean;
+            /**
+             * Reviewed
+             * @description 已經有 Claude Code 校對過的版本，系統不會再轉、不會覆蓋
+             * @default false
+             */
+            reviewed: boolean;
+            /**
+             * Estimated Calls
+             * @description AI 校對要呼叫幾次（一頁一次）
+             */
+            estimated_calls: number;
+        };
+        /** PendingSources */
+        PendingSources: {
+            /** Papers */
+            papers: components["schemas"]["PendingPaper"][];
+            /** Lectures */
+            lectures: components["schemas"]["PendingLecture"][];
         };
         /** PresetCalendar */
         PresetCalendar: {
@@ -2578,6 +2784,16 @@ export interface components {
             messages: components["schemas"]["MessageOut"][];
             /** Cost Usd */
             cost_usd: number;
+        };
+        /** UploadResult */
+        UploadResult: {
+            /**
+             * Saved
+             * @description 存下來的檔名（同名不同內容時會加 -2）
+             */
+            saved: string[];
+            /** Warnings */
+            warnings?: string[];
         };
         /** UpsertResult */
         UpsertResult: {
@@ -3265,6 +3481,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportOutcome"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_sources_api_ingest_uploads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingSources"];
+                };
+            };
+        };
+    };
+    upload_sources_api_ingest_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_sources_api_ingest_uploads_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    convert_paper_api_ingest_uploads_papers__source_key__convert_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GaopuConvertIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_lecture_api_ingest_uploads_lectures__name__estimate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectureEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_lecture_api_ingest_uploads_lectures__name__generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LectureGenerateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertResult"];
                 };
             };
             /** @description Validation Error */

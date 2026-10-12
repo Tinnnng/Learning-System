@@ -1,7 +1,7 @@
 # 目前進度（交接用）
 
 > 最後更新：2026-10-09。開新對話時先讀這份，再看 `CHECKLIST.md`（逐項進度的唯一來源）與 `CLAUDE.md`（決策與規則）。
-> 2026-10-09 下午的兩個 commit（無障礙、並行寫入）**還沒推送**，使用者說「推送上去」再推。
+> 最後更新 2026-10-12。2026-10-09 之後的 commit **都還沒推送**，使用者說「推送上去」再推。
 
 ## 一句話
 
@@ -10,6 +10,8 @@
 13 個服務的重複資料稽核與修正、iPhone 版（PWA＋Tailscale）、前端無障礙稽核與修正。
 2026-10-09 下午把兩份稽核剩下的項目都做完：無障礙中低優先（方向鍵、快捷鍵開關、44px 觸控、編輯器未存確認…）、
 並行寫入（`core/database.begin_write` 用 SQLite BEGIN IMMEDIATE 讓「先讀再寫」的操作排隊）、名稱與網址正規化、AI 失敗呼叫也記用量。
+2026-10-12 使用者回饋第 2 輪：單字規則（連續答對 3 次學會、錯題 5 次、已學會分頁、每日混合抽字、錯題一次 5 個）、
+清除單字進度／清除作答紀錄（清除前自動備份）、匯入頁可以自己上傳並轉檔（高普考自動轉檔／AI 校對、教材 AI 出題）。
 **下一步沒有指定**：等使用者回饋；可做的事見下方「還沒做的」。
 
 ## 已完成的功能（後端模組 → 前端頁面）
@@ -38,10 +40,11 @@
 
 ## 還沒做的（都在 CHECKLIST）
 
-1. 重複資料稽核只剩「ingest 文字檔改名會變成另一份題組」：設計取捨（檔名就是代碼），文件已建議在檔案裡寫「# 代碼」，沒有改。
-2. **iPhone 實機測試**：使用者還沒回報在 iPhone 上加入主畫面、拍照辨識、AI 助教的結果。
-3. JAVA 第 2～7 章教材在 `C:\Users\Administrator\OneDrive\桌面\JAVA_PPT\`，使用者說先測第 1 章，之後可能要全部出題（流程見 `docs/ingest-lecture.md`；教材是整頁掃描圖，要看 `<檔名>-images/` 的圖出題）。
-4. 准考證照片的辨識實測 → 需要使用者提供照片。
+1. 使用者還沒實際按過「AI 校對後轉檔」「AI 出題」（會花額度），等他回報結果再調整 prompt。
+2. 重複資料稽核只剩「ingest 文字檔改名會變成另一份題組」：設計取捨（檔名就是代碼），文件已建議在檔案裡寫「# 代碼」，沒有改。
+3. **iPhone 實機測試**：使用者還沒回報在 iPhone 上加入主畫面、拍照辨識、AI 助教的結果。
+4. JAVA 第 2～7 章教材在 `C:\Users\Administrator\OneDrive\桌面\JAVA_PPT\`，使用者說先測第 1 章，之後可能要全部出題（流程見 `docs/ingest-lecture.md`；教材是整頁掃描圖，要看 `<檔名>-images/` 的圖出題）。
+5. 准考證照片的辨識實測 → 需要使用者提供照片。
 
 ## 開發環境與注意事項
 
@@ -50,7 +53,7 @@
 
 - 開發：`npm run dev`（http://localhost:5173，後端 8000）。正式／手機：`npm run serve` 或雙擊 `start-server.cmd`（127.0.0.1:8765，用真正的資料）。兩者可同時開。
 - Tailscale：`tailscale serve --bg 8765` 已設定過（網址 `https://desktop-v3393bq.taila1733a.ts.net`，只有自己的 tailnet 連得到）。電腦重開機後先確認 `tailscale serve status`，沒有設定就再執行一次。使用者**不要**開機自動啟動 `start-server.cmd`（2026-10-08 決定）。
-- 測試：`npm test`（後端 195、前端 19）；改 API 後 `npm run gen:api`；改 models 後 migration（autogenerate 要對**資料庫副本**跑：`LS_DATA_DIR=<副本>`，真正的資料庫套用前先手動備份）。
+- 測試：`npm test`（後端 209、前端 19）；改 API 後 `npm run gen:api`；改 models 後 migration（autogenerate 要對**資料庫副本**跑：`LS_DATA_DIR=<副本>`，真正的資料庫套用前先手動備份）。
 - 截圖／測試要造資料：複製 `data/` 到暫存區、`LS_DATA_DIR` 指向副本，**不要碰真正的資料庫**；使用者常開著 8000／5173 或 8765，另開測試伺服器用 8010／5180／8766，不要關掉使用者的伺服器。
 - 無障礙自動掃描：用 Playwright 開頁面後注入 `https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js` 跑 `axe.run`（上一輪腳本已刪，照這個做法重寫即可）。
 - 已安裝的技能：`web-design-guidelines`（Vercel，執行時會下載最新規範）、`accessibility`（WCAG 2.2），在 `~/.claude/skills/`。

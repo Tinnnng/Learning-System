@@ -16,6 +16,7 @@ import { shortName } from '@/lib/format'
 import { type QuestionDraft, toDraft } from '@/lib/questionEdit'
 import type { ConvertedFile, ImportOutcome } from '@/lib/types'
 import { fetchBundle, fetchConverted, importFile } from './api'
+import { UploadPanel } from './UploadPanel'
 
 const LETTERS = 'ABCDEFGHIJ'
 
@@ -104,16 +105,18 @@ export function ImportListPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         eyebrow="匯入"
-        title="待匯入的題目"
-        description="把試卷 PDF、教材或題目文字檔交給 Claude Code 轉檔，轉好的檔案會出現在這裡（data/converted/）。匯入前可以逐題對照原始試卷。重新匯入同一份試卷會更新題目，作答紀錄會保留。"
+        title="匯入題目"
+        description="上傳高普考試卷、上課教材或題目文字檔，轉好的檔案會出現在「待匯入」。匯入前可以逐題對照原始試卷。重新匯入同一份試卷會更新題目，作答紀錄會保留。"
       />
+      <UploadPanel />
+      <h2 className="eyebrow m-0 -mb-4">待匯入</h2>
       {files.isPending ? (
         <Loading />
       ) : files.isError ? (
         <ErrorState error={files.error} onRetry={() => files.refetch()} />
       ) : files.data.length === 0 ? (
         <EmptyState title="沒有待匯入的檔案">
-          在 Claude Code 說「幫我把 data/inbox 裡的試卷轉檔」，流程說明在 docs/ingest-gaopu.md、docs/ingest-lecture.md。
+          從上面上傳檔案並轉檔，或在 Claude Code 說「幫我把 data/inbox 裡的試卷轉檔」（流程在 docs/ingest-gaopu.md、docs/ingest-lecture.md）。
         </EmptyState>
       ) : (
         <section className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
@@ -146,7 +149,10 @@ export function ImportPreviewPage() {
   const saveEdit = async (draft: QuestionDraft) => {
     // 只換掉可編輯的欄位，圖片、頁面截圖、答案來源等保留
     const questions = data.questions.map((item, position) => (position === index ? { ...item, ...draft } : item))
-    await api.put(`/ingest/files/${encodeURIComponent(name)}`, { ...data, questions })
+    // 改過的題目就是確認過了：拿掉系統轉檔留下的「請確認」提醒
+    const reviewNotes = { ...(data.review_notes ?? {}) }
+    delete reviewNotes[String(data.questions[index].number)]
+    await api.put(`/ingest/files/${encodeURIComponent(name)}`, { ...data, questions, review_notes: reviewNotes })
     await queryClient.invalidateQueries({ queryKey: ['ingest'] })
   }
   const issuesFor = (number: number) => report?.issues.filter((issue) => issue.question === number) ?? []

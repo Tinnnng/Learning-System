@@ -2,6 +2,10 @@
 
 所有指令都在 `backend/` 執行，`<資料夾>` 是放高普考 PDF 的資料夾，預設放在 `data/inbox/gaopu/`（子資料夾命名為 `115普考QA-一般行政` 這種格式）。
 
+**使用者在匯入頁上傳的試卷**放在 `data/inbox/gaopu/uploads/`（底下一樣是 `115普考QA-類科` 子資料夾），`<資料夾>` 用它就好。
+使用者可能已經在網頁上按過「自動轉檔」或「AI 校對後轉檔」，`data/converted/<source_key>.json` 會有 `review_notes`（要確認的地方）；
+使用者請你轉時，照下面流程重新產生草稿、逐題校對後 build，覆蓋掉系統轉的檔案（build 出來的檔案不會有 `review_notes`）。
+
 資料夾分工：原始 PDF 放 `data/inbox/`，草稿在 `data/drafts/`，解析完成的匯入檔在 `data/converted/`，三者不要混放。
 
 ```bash

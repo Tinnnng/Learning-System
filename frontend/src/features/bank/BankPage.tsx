@@ -126,7 +126,7 @@ export function BankPage() {
                 )
               }
             >
-              {hasFilter ? '換個條件試試看。' : '把試卷 PDF 交給 Claude Code 轉檔後，到「匯入」頁匯入。'}
+              {hasFilter ? '換個條件試試看。' : '到「匯入」頁上傳試卷 PDF、教材或題目文字檔。'}
             </EmptyState>
           ) : (
             <ul className="stagger m-0 list-none border-t border-rule p-0">

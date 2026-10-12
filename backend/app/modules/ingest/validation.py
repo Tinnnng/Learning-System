@@ -75,6 +75,11 @@ def check_bundle(bundle: ImportBundle) -> CheckReport:
         if question.page_snapshot and not (assets_dir / question.page_snapshot).is_file():
             add("warning", f"找不到頁面截圖：{question.page_snapshot}")
 
+    # 系統自動轉檔留下的確認事項：只提醒，不擋匯入
+    for number, notes in sorted(bundle.review_notes.items()):
+        for note in notes:
+            issues.append(Issue(level="warning", question=number or None, message=note))
+
     return CheckReport(
         source_key=bundle.paper.source_key,
         subject=bundle.paper.subject,

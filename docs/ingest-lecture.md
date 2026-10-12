@@ -2,6 +2,10 @@
 
 使用者把教材（PPTX／DOCX／PDF）放進 `data/inbox/lecture/`，請 Claude Code 出題。抽出的文字放 `data/drafts/lecture/`，出好的題目放 `data/converted/`。所有指令在 `backend/` 執行。
 
+**使用者在匯入頁上傳的教材**放在 `data/inbox/lecture/`。網頁上的「AI 出題」用系統內 AI（Haiku）出題，存成
+`data/converted/lecture-upload-<雜湊>.json`（有 `review_notes`）；使用者請你出題時照下面步驟做，`source_key` 可以沿用同一個覆蓋它，
+或另取名字（例如 `lecture-java-ch02`）再請使用者刪掉系統出的那份。
+
 ## 步驟
 
 1. **抽出教材文字**（標示投影片編號或頁碼）：
