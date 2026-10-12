@@ -463,6 +463,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/exam/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Records
+         * @description 清除所有作答紀錄、錯題本（題庫、收藏與筆記不動）。清除前自動備份。
+         */
+        post: operations["reset_records_api_exam_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocab/daily": {
         parameters: {
             query?: never;
@@ -552,6 +572,26 @@ export interface paths {
         get: operations["wrong_words_api_vocab_wrong_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocab/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Progress
+         * @description 清除單字進度：所有單字變回沒學過（單字庫不動）。清除前自動備份。
+         */
+        post: operations["reset_progress_api_vocab_reset_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2205,6 +2245,24 @@ export interface components {
             /** Is Correct */
             is_correct?: boolean | null;
         };
+        /** ResetResult */
+        ResetResult: {
+            /**
+             * Sessions
+             * @description 刪掉的測驗數
+             */
+            sessions: number;
+            /**
+             * Attempts
+             * @description 刪掉的作答紀錄數
+             */
+            attempts: number;
+            /**
+             * Backup
+             * @description 清除前自動建立的備份檔名
+             */
+            backup: string;
+        };
         /** RestoreResult */
         RestoreResult: {
             /** Restored From */
@@ -2378,7 +2436,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "auto" | "manual" | "before-restore";
+            kind: "auto" | "manual" | "before-restore" | "before-reset";
             /**
              * Created At
              * Format: date-time
@@ -2554,6 +2612,19 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VocabResetResult */
+        VocabResetResult: {
+            /**
+             * Words
+             * @description 變回沒學過的單字數
+             */
+            words: number;
+            /**
+             * Backup
+             * @description 清除前自動建立的備份檔名
+             */
+            backup: string;
         };
         /** VocabStats */
         VocabStats: {
@@ -3617,6 +3688,26 @@ export interface operations {
             };
         };
     };
+    reset_records_api_exam_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetResult"];
+                };
+            };
+        };
+    };
     daily_api_vocab_daily_get: {
         parameters: {
             query?: never;
@@ -3786,6 +3877,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WordOut"][];
+                };
+            };
+        };
+    };
+    reset_progress_api_vocab_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocabResetResult"];
                 };
             };
         };

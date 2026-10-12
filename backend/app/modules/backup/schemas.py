@@ -3,7 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-SnapshotKind = Literal["auto", "manual", "before-restore"]
+SnapshotKind = Literal["auto", "manual", "before-restore", "before-reset"]
+"""before-reset＝按「清除單字進度／清除作答紀錄」之前自動備份"""
 """auto＝啟動時自動備份；manual＝手動備份；before-restore＝還原前自動留的備份。"""
 
 

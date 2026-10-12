@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     daily_vocab_count: int = 5
     """每日單字複習的題數。"""
     word_mastery_streak: int = 5
+    word_new_mastery_streak: int = 3
+    """沒錯過的單字：連續答對幾次算「已學會」，之後不再出現在每日單字（2026-10-12 使用者決定 3 次）"""
+    daily_review_slots: int = 2
+    """每日單字裡最多幾個位置給「學習中＋錯題」的字，其餘抽沒學過的新字（不夠時互相補）"""
     """單字連續答對幾次才移出錯題單字。"""
     essay_wrong_ratio: float = 0.6
     """申論題得分低於配分的這個比例就收進錯題本。"""

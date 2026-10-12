@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import type { components } from '@/lib/api-types'
 import type {
   BuiltinList,
   DailyQuiz,
@@ -37,6 +38,8 @@ export const fetchWords = (params: { search?: string; status?: WordStatus | null
   query.set('limit', String(params.limit ?? 40))
   return api.get<WordPage>(`/vocab/words?${query}`)
 }
+
+export const resetVocab = () => api.post<components['schemas']['VocabResetResult']>('/vocab/reset')
 
 export const fetchBuiltin = () => api.get<BuiltinList[]>('/vocab/builtin')
 export const importBuiltin = (name: string) => api.post<ImportResult>(`/vocab/builtin/${name}/import`)

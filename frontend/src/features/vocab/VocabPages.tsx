@@ -7,6 +7,7 @@ import { Button, ButtonLink } from '@/components/Button'
 import { ChipGroup } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { PageHeader } from '@/components/PageHeader'
+import { ResetButton } from '@/components/ResetButton'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { ZhengTally } from '@/components/ZhengTally'
 import { cx } from '@/lib/cx'
@@ -21,6 +22,7 @@ import {
   fetchWords,
   fetchWrongWords,
   importBuiltin,
+  resetVocab,
   uploadWords,
   type WordStatus,
 } from './api'
@@ -31,10 +33,11 @@ function VocabTabs() {
   const tabs = [
     { to: '/vocab', label: '每日複習', end: true },
     { to: '/vocab/wrong', label: '錯題單字', end: false },
+    { to: '/vocab/mastered', label: '已學會單字', end: false },
     { to: '/vocab/words', label: '單字庫', end: false },
   ]
   return (
-    <nav aria-label="單字" className="-mt-2 flex gap-1 border-b border-line">
+    <nav aria-label="單字" className="-mt-2 flex gap-1 overflow-x-auto border-b border-line [scrollbar-width:none]">
       {tabs.map((tab) => (
         <NavLink
           key={tab.to}
@@ -42,7 +45,7 @@ function VocabTabs() {
           end={tab.end}
           className={({ isActive }) =>
             cx(
-              '-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors',
+              '-mb-px flex-none whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors',
               isActive ? 'border-accent font-medium text-ink' : 'border-transparent text-muted hover:text-ink',
             )
           }
@@ -66,6 +69,7 @@ interface ExtraRound {
 }
 
 export function DailyPage() {
+  const queryClient = useQueryClient()
   const daily = useQuery({ queryKey: ['vocab', 'daily'], queryFn: fetchDaily, staleTime: Infinity })
   const stats = useQuery({ queryKey: ['vocab', 'stats'], queryFn: fetchStats })
   const [finished, setFinished] = useState(false)
@@ -82,7 +86,11 @@ export function DailyPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader eyebrow={todayLabel()} title="每日單字" description="每天抽 5 個字：先複習該複習的，再補新單字，可以分次寫完。寫完還想背，可以「再測一組」新的字。" />
+      <PageHeader
+        eyebrow={todayLabel()}
+        title="每日單字"
+        description="每天 5 個字：新單字加上還沒學會、答錯過的字，隨機輪流出現。連續答對 3 次就算學會，之後不再出現；中途答錯會收進錯題單字。"
+      />
       <VocabTabs />
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Sheet>
@@ -119,8 +127,8 @@ export function DailyPage() {
               {[
                 ['單字庫', stats.data.total],
                 ['學過', stats.data.studied],
+                ['已學會', stats.data.mastered],
                 ['錯題單字', stats.data.wrong_list],
-                ['今天到期', stats.data.due_today],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-baseline justify-between gap-3 border-b border-rule pb-2">
                   <dt className="text-sm text-muted">{label}</dt>
@@ -128,6 +136,24 @@ export function DailyPage() {
                 </div>
               ))}
             </dl>
+            <ResetButton
+              className="mt-4 border-t border-rule pt-4"
+              label="清除單字進度"
+              title="清除所有單字的學習進度？"
+              confirmLabel="清除進度"
+              run={resetVocab}
+              doneText={(result) => `已清除，${result.words} 個單字都變回沒學過。`}
+              onDone={() => {
+                setFinished(false)
+                setRound(null)
+                queryClient.invalidateQueries({ queryKey: ['vocab'] })
+              }}
+            >
+              <p className="m-0">
+                所有單字會變回「沒學過」：已學會、學習中、錯題單字、作答紀錄和今天的每日單字都會清掉，重新開始背。
+              </p>
+              <p className="m-0">單字庫裡的單字本身（英文、中文、例句）不會刪除。</p>
+            </ResetButton>
           </aside>
         )}
       </div>
@@ -170,7 +196,7 @@ function RoundDone({ round, onNext, pending }: { round: ExtraRound; onNext: () =
         {results.length} 個單字答對 <span className="tabular text-accent">{correct}</span> 個
       </p>
       <p className="m-0 text-muted">
-        {correct < results.length ? '答錯的字已經收進錯題單字。' : '全對！'}這組的字也會依記憶曲線排進之後的複習。
+        {correct < results.length ? '答錯的字已經收進錯題單字。' : '全對！'}連續答對 3 次的字就算學會，不會再出現。
       </p>
       <div className="flex flex-wrap gap-2">
         <NextRoundButton onNext={onNext} pending={pending} primary />
@@ -198,7 +224,7 @@ function DailyDone({ onNext, pending }: { onNext: () => void; pending: boolean }
         {total} 個單字答對 <span className="tabular text-accent">{correct}</span> 個
       </p>
       <p className="m-0 text-muted">
-        {correct < total ? '答錯的字已經收進錯題單字，明天會優先再出現。' : '全對！'}還想多背幾個，可以再測一組新的字。
+        {correct < total ? '答錯的字已經收進錯題單字，之後會再出現。' : '全對！'}還想多背幾個，可以再測一組。
       </p>
       <div className="flex flex-wrap gap-2">
         <NextRoundButton onNext={onNext} pending={pending} primary />
@@ -230,17 +256,28 @@ function WordLine({ word, extra }: { word: WordOut; extra?: ReactNode }) {
 
 export function WrongWordsPage() {
   const wrong = useQuery({ queryKey: ['vocab', 'wrong'], queryFn: fetchWrongWords })
+  const queryClient = useQueryClient()
+  const stats = useQuery({ queryKey: ['vocab', 'stats'], queryFn: fetchStats })
+  const roundSize = stats.data?.daily_total || 5
   const [quiz, setQuiz] = useState<QuizItem[] | null>(null)
-  const startQuiz = useMutation({ mutationFn: () => fetchQuiz('wrong', 20), onSuccess: setQuiz })
+  const [roundResults, setRoundResults] = useState<VocabAnswerResult[] | null>(null)
+  // 一次一組，和每日單字一樣 5 個；最久沒複習的字先出
+  const startQuiz = useMutation({
+    mutationFn: () => fetchQuiz('wrong', roundSize),
+    onSuccess: (items) => {
+      setRoundResults(null)
+      setQuiz(items)
+    },
+  })
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         eyebrow="錯題單字"
         title="答錯過的單字"
-        description="連續答對 5 次（寫滿一個「正」字）才會移出。集中複習一次最多 20 個，題型隨機。"
+        description="答錯過的字要連續答對 5 次（寫滿一個「正」字）才會移出、變成已學會。集中複習一次 5 個，最久沒複習的先出。"
         actions={
-          wrong.data && wrong.data.length > 0 && !quiz ? (
+          wrong.data && wrong.data.length > 0 && !quiz && !roundResults ? (
             <Button onClick={() => startQuiz.mutate()} disabled={startQuiz.isPending}>
               <Icon name="play" size={16} />
               集中複習
@@ -254,8 +291,41 @@ export function WrongWordsPage() {
           {quiz.length === 0 ? (
             <p className="m-0 text-muted">沒有錯題單字了。</p>
           ) : (
-            <QuizRunner items={quiz} context="wrong" onFinish={() => setQuiz(null)} />
+            <QuizRunner
+              items={quiz}
+              context="wrong"
+              onFinish={(results) => {
+                setQuiz(null)
+                setRoundResults(results)
+                queryClient.invalidateQueries({ queryKey: ['vocab'] })
+              }}
+            />
           )}
+        </Sheet>
+      ) : roundResults ? (
+        <Sheet>
+          <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
+            <span className="eyebrow">這組複習完了</span>
+            <p className="m-0 font-display text-2xl font-bold">
+              {roundResults.length} 個字答對 <span className="tabular text-accent">{roundResults.filter((r) => r.is_correct).length}</span> 個
+            </p>
+            <p className="m-0 text-muted">
+              {roundResults.filter((r) => r.word.status === 'mastered').length > 0
+                ? `${roundResults.filter((r) => r.word.status === 'mastered').length} 個字寫滿「正」字，移到已學會。`
+                : '每個字連續答對 5 次才會移出。'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(wrong.data?.length ?? 0) > 0 && (
+                <Button onClick={() => startQuiz.mutate()} disabled={startQuiz.isPending}>
+                  <Icon name="refresh" size={17} />
+                  {startQuiz.isPending ? '抽題中…' : '再複習一組'}
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setRoundResults(null)}>
+                看錯題單字列表
+              </Button>
+            </div>
+          </div>
         </Sheet>
       ) : wrong.isPending ? (
         <Loading />
@@ -284,7 +354,7 @@ export function WrongWordsPage() {
   )
 }
 
-const STATUS_LABELS: Record<WordStatus, string> = { new: '沒學過', learning: '學習中', wrong: '錯題', mastered: '已掌握' }
+const STATUS_LABELS: Record<WordStatus, string> = { new: '沒學過', learning: '學習中', wrong: '錯題', mastered: '已學會' }
 
 function ImportPanel() {
   const queryClient = useQueryClient()
@@ -464,6 +534,60 @@ export function WordsPage() {
         </div>
         <ImportPanel />
       </div>
+    </div>
+  )
+}
+
+/** 已學會的單字：連續答對 3 次（錯過的字要 5 次）就算學會，不再出現在每日單字 */
+export function MasteredWordsPage() {
+  const [limit, setLimit] = useState(60)
+  const words = useQuery({
+    queryKey: ['vocab', 'words', '', 'mastered', limit],
+    queryFn: () => fetchWords({ status: 'mastered', limit }),
+    placeholderData: (previous) => previous,
+  })
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow="已學會"
+        title="已學會的單字"
+        description="連續答對 3 次的字（答錯過的要連續答對 5 次）算學會，不會再出現在每日單字。之後在任何測驗答錯，會回到錯題單字。"
+      />
+      <VocabTabs />
+      {words.isPending ? (
+        <Loading />
+      ) : words.isError ? (
+        <ErrorState error={words.error} onRetry={() => words.refetch()} />
+      ) : words.data.total === 0 ? (
+        <EmptyState title="還沒有學會的單字">每日單字連續答對 3 次的字會收進這裡。</EmptyState>
+      ) : (
+        <section className="rounded-lg bg-sheet px-5 shadow-sheet sm:px-7">
+          <p className="m-0 border-b border-accent py-3 text-sm text-muted">
+            已學會 <span className="tabular text-ink">{words.data.total}</span> 個單字
+          </p>
+          <ul className="stagger m-0 list-none p-0">
+            {words.data.items.map((word) => (
+              <WordLine
+                key={word.id}
+                word={word}
+                extra={
+                  word.progress?.mastered_at && (
+                    <span className="text-right text-xs text-muted">{relativeDay(word.progress.mastered_at)}學會</span>
+                  )
+                }
+              />
+            ))}
+          </ul>
+          {words.data.total > words.data.items.length && (
+            <div className="flex justify-center border-t border-rule py-4">
+              <Button variant="ghost" onClick={() => setLimit(limit + 60)}>
+                再顯示 60 個
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

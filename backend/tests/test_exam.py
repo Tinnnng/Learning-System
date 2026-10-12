@@ -181,3 +181,15 @@ def test_same_answer_sent_twice_at_once_is_recorded_once(db, paper_id, monkeypat
         outcomes = sorted(map(str, pool.map(answer, range(2))))
     assert outcomes == ["409", "True"]
     assert db.scalar(select(func.count(AttemptLog.id))) == 1
+
+
+def test_reset_records_clears_attempts_and_wrong_book(db, paper_id, client):
+    session = create(db, paper_id, shuffle_questions=False)
+    service.answer_item(db, session.id, 1, AnswerIn(response=["A"]))
+    assert review_service.wrong_question_ids(db)
+    body = client.post("/api/exam/reset").json()
+    assert body["sessions"] == 1 and body["attempts"] == 1 and "before-reset" in body["backup"]
+    db.expire_all()
+    assert review_service.wrong_question_ids(db) == []
+    assert client.get("/api/exam/sessions").json() == []
+    assert bank_service.query_question_ids(db, QuestionFilter(paper_ids=[paper_id]))  # 題庫不動

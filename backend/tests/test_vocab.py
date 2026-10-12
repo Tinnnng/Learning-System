@@ -168,14 +168,14 @@ def test_next_round_skips_words_seen_today(db, words):
     assert [i.word_id for i in second] == [first[1].word_id]  # 再測一組時避開剛剛寫過的字
 
     tomorrow = service.build_quiz(db, "next", count=5, seed=3, now=NOW + timedelta(days=1))
-    assert tomorrow[0].word_id == item.word_id  # 隔天：昨天答錯、到期的字排第一
+    assert item.word_id in {i.word_id for i in tomorrow}  # 隔天：昨天答錯、到期的字會出現
 
 
 def test_due_words_are_picked_first_the_next_day(db, words):
     wrong = words["revenue"]
     service.answer(db, AnswerIn(word_id=wrong.id, quiz_type="spelling", response="x"), now=NOW)
     tomorrow = service.get_daily(db, now=NOW + timedelta(days=1))
-    assert tomorrow.items[0].word_id == wrong.id
+    assert wrong.id in {item.word_id for item in tomorrow.items}
 
 
 def test_wrong_word_mastery_after_five_correct(db, words):
@@ -257,3 +257,81 @@ def test_extract_words_without_english_questions(db):
 
     result = service.extract_from_questions(db, ExtractRequest(source="wrong"))
     assert result.drafts == [] and "沒有找到英文題目" in result.message
+
+
+def _answer(db, word, correct: bool, day: int):
+    response = word.term if correct else "x"
+    return service.answer(db, AnswerIn(word_id=word.id, quiz_type="spelling", response=response), now=NOW + timedelta(days=day))
+
+
+def test_new_word_is_learned_after_three_correct_in_a_row(db, words):
+    """2026-10-12 使用者決定：沒錯過的字連續答對 3 次才算學會，之後不再出現在每日單字。"""
+    word = words["invoice"]
+    assert _answer(db, word, True, 0).word.status == "learning"
+    result = _answer(db, word, True, 1)
+    assert result.word.status == "learning" and result.word.progress.mastery_target == 3
+    assert _answer(db, word, True, 2).word.status == "mastered"
+    assert service.list_words(db, status="mastered").items[0].term == "invoice"
+    for day in range(3, 10):  # 已學會的字不再被抽到
+        ids = {item.word_id for item in service.get_daily(db, now=NOW + timedelta(days=day)).items}
+        assert word.id not in ids
+
+
+def test_a_wrong_answer_on_the_way_sends_word_to_wrong_list(db, words):
+    word = words["invoice"]
+    _answer(db, word, True, 0)
+    _answer(db, word, True, 1)
+    result = _answer(db, word, False, 2)
+    assert result.word.status == "wrong" and result.word.progress.mastery_target == 5  # 錯題要連續答對 5 次
+    for day in range(3, 7):
+        assert _answer(db, word, True, day).word.status == "wrong"
+    assert _answer(db, word, True, 7).word.status == "mastered"
+
+
+def test_daily_mixes_new_and_review_words(db, words, monkeypatch):
+    from app.core.config import get_settings
+
+    for term in ["negotiate", "invoice", "deadline"]:
+        _answer(db, words[term], term != "deadline", 0)  # 兩個學習中、一個錯題
+    reviewing = {words[t].id for t in ["negotiate", "invoice", "deadline"]}
+    daily = service.get_daily(db, now=NOW + timedelta(days=1))
+    ids = [item.word_id for item in daily.items]
+    assert len(ids) == 5 and len(set(ids)) == 5
+    assert len(reviewing & set(ids)) == get_settings().daily_review_slots  # 2 個複習、3 個新字
+
+    monkeypatch.setattr(get_settings(), "daily_review_slots", 0)
+    later = service.build_quiz(db, "next", count=5, seed=1, now=NOW + timedelta(days=2))
+    assert len(later) == 5 and len(reviewing & {i.word_id for i in later}) == 1  # 新字只剩 4 個，用複習的字補
+
+
+def test_review_words_take_turns(db, words):
+    """學習中的字輪流出現：最久沒寫的先出，不會一直抽到同幾個。"""
+    for term in ["negotiate", "invoice", "deadline", "postpone"]:
+        _answer(db, words[term], True, 0)
+    first = {i.word_id for i in service.build_quiz(db, "next", count=2, seed=1, now=NOW + timedelta(days=1))}
+    by_id = {word.id: word for word in words.values()}
+    for word_id in first:
+        service.answer(db, AnswerIn(word_id=word_id, quiz_type="spelling", response=by_id[word_id].term), now=NOW + timedelta(days=1, hours=1))
+    pool = {words[t].id for t in ["negotiate", "invoice", "deadline", "postpone"]}
+    second = service.build_quiz(db, "next", count=5, seed=2, now=NOW + timedelta(days=2))
+    picked_review = {i.word_id for i in second} & pool
+    assert picked_review == pool - first  # 另外兩個比較久沒寫，這次輪到它們
+
+
+def test_wrong_review_is_one_round_of_daily_size(db, words):
+    for word in words.values():
+        _answer(db, word, False, 0)
+    assert len(service.build_quiz(db, "wrong", count=5, seed=1)) == 5
+
+
+def test_reset_progress_makes_every_word_new(db, words, client):
+    _answer(db, words["invoice"], True, 0)
+    _answer(db, words["deadline"], False, 0)
+    service.get_daily(db, now=NOW)
+    response = client.post("/api/vocab/reset")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["words"] == 2 and body["backup"].endswith("-before-reset.zip")
+    db.expire_all()
+    assert service.list_words(db, status="new").total == 7
+    assert service.stats(db, now=NOW).studied == 0 and service.wrong_words(db) == []

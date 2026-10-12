@@ -1,8 +1,13 @@
 """單字的公開介面。
 
-- 每日複習：每天抽 daily_vocab_count 個字（預設 5），優先抽間隔複習到期的，再補新單字，最後隨機補滿。
-- 答錯進「錯題單字」，連續答對 word_mastery_streak 次（預設 5）才移出。
-- 每次作答都交給 srs 排下次複習時間（不論對錯，長期記憶都需要複習）。
+- 單字狀態（2026-10-12 使用者決定）：
+  - 沒學過 → 答對過但還沒連續答對 word_new_mastery_streak 次（預設 3）是「學習中」，滿了就是「已學會」。
+  - 中間答錯一次就進「錯題單字」，之後要連續答對 word_mastery_streak 次（預設 5）才移出、變成已學會。
+  - 已學會的字不再出現在每日單字與再測一組。
+- 每日複習：每天抽 daily_vocab_count 個字（預設 5）。最多 daily_review_slots 個（預設 2）給學習中＋錯題的字
+  （到期的優先、再來是最久沒寫的），其餘從沒學過的字隨機抽；任一邊不夠就用另一邊補。順序打亂。
+- 錯題單字集中複習：一次 daily_vocab_count 個，最久沒寫的優先。
+- 每次作答都交給 srs 排下次複習時間；已學會的字移出 srs。
 """
 
 import json
@@ -13,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,6 +26,7 @@ from app.core.config import get_settings
 from app.core.database import begin_write
 from app.core.text import match_key
 from app.modules.ai import service as ai_service
+from app.modules.backup import service as backup_service
 from app.modules.bank import service as bank_service
 from app.modules.bank.schemas import QuestionFilter
 from app.modules.review import service as review_service
@@ -37,6 +43,7 @@ from app.modules.vocab.schemas import (
     ExtractRequest,
     ImportResult,
     QuizItem,
+    VocabResetResult,
     VocabStats,
     WordIn,
     WordOut,
@@ -165,6 +172,16 @@ def _status(progress: WordProgress | None) -> WordStatus:
     return "learning"
 
 
+def _mastery_target(progress: WordProgress) -> int:
+    """錯題單字要連續答對 5 次才移出；沒錯過的字連續答對 3 次就算學會。"""
+    settings = get_settings()
+    return settings.word_mastery_streak if progress.in_wrong_list else settings.word_new_mastery_streak
+
+
+def _is_mastered(progress: WordProgress | None) -> bool:
+    return progress is not None and progress.mastered_at is not None and not progress.in_wrong_list
+
+
 def _word_out(word: Word, progress: WordProgress | None, review_due: datetime | None) -> WordOut:
     return WordOut(
         id=word.id,
@@ -181,7 +198,7 @@ def _word_out(word: Word, progress: WordProgress | None, review_due: datetime | 
             correct_count=progress.correct_count,
             wrong_count=progress.wrong_count,
             correct_streak=progress.correct_streak,
-            mastery_target=get_settings().word_mastery_streak,
+            mastery_target=_mastery_target(progress),
             in_wrong_list=progress.in_wrong_list,
             last_answered_at=progress.last_answered_at,
             mastered_at=progress.mastered_at,
@@ -244,6 +261,13 @@ def _attempt_counts(db: Session) -> dict[int, int]:
     return {p.word_id: p.attempts for p in db.scalars(select(WordProgress))}
 
 
+def _least_recent(progress: list[WordProgress], rng: random.Random, due: set[int] | None = None) -> list[int]:
+    """複習的字的出題順序：到期的優先，再來是最久沒寫的；同時間的隨機。每個字輪流出現，不會一直抽到同幾個。"""
+    due = due or set()
+    keyed = [(p.word_id not in due, p.last_answered_at or datetime.min, rng.random(), p.word_id) for p in progress]
+    return [word_id for *_, word_id in sorted(keyed)]
+
+
 def _pick_words(
     db: Session,
     words: dict[int, Word],
@@ -253,16 +277,21 @@ def _pick_words(
     attempts: dict[int, int],
     exclude: set[int] | None = None,
 ) -> list[int]:
-    """每日單字的選字順序：先抽間隔複習到期的，再補沒學過的新單字，最後隨機補滿。"""
+    """每日單字（與再測一組）的選字：學習中＋錯題的字最多 daily_review_slots 個，其餘是隨機的新字，
+    任一邊不夠就用另一邊補；已學會的字不出。見模組說明。"""
     exclude = exclude or set()
-    candidates = [wid for wid in words if wid not in exclude]
-    chosen = [wid for wid in srs_service.due_item_ids(db, "word", now=now) if wid in words and wid not in exclude][:count]
-    new_words = [wid for wid in candidates if wid not in attempts and wid not in chosen]
-    rng.shuffle(new_words)
-    chosen += new_words[: count - len(chosen)]
-    rest = [wid for wid in candidates if wid not in chosen]
-    rng.shuffle(rest)
-    chosen += rest[: count - len(chosen)]
+    progress = {p.word_id: p for p in db.scalars(select(WordProgress)) if p.word_id in words and p.word_id not in exclude}
+    reviewing = [p for p in progress.values() if not _is_mastered(p)]
+    due = set(srs_service.due_item_ids(db, "word", now=now))
+    review_ids = _least_recent(reviewing, rng, due)
+    new_ids = [wid for wid in words if wid not in exclude and wid not in progress]
+    rng.shuffle(new_ids)
+
+    review_count = min(get_settings().daily_review_slots, len(review_ids), count)
+    new_count = min(count - review_count, len(new_ids))
+    review_count = min(count - new_count, len(review_ids))  # 新字不夠時，多出幾個位置給複習的字
+    chosen = review_ids[:review_count] + new_ids[:new_count]
+    rng.shuffle(chosen)
     return chosen
 
 
@@ -331,7 +360,12 @@ def build_quiz(
             for wid in ids
         ]
     if source == "wrong":
-        ids = [word.id for word in wrong_words(db)]
+        wrong = list(db.scalars(select(WordProgress).where(WordProgress.in_wrong_list.is_(True))))
+        ids = _least_recent([p for p in wrong if p.word_id in words], rng)[:count]
+        return [
+            quiz.build_item(words[wid], quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)), pool, rng)
+            for wid in ids
+        ]
     elif source == "due":
         ids = [wid for wid in srs_service.due_item_ids(db, "word") if wid in words]
     elif source == "new":
@@ -345,7 +379,7 @@ def build_quiz(
     ]
 
 
-def _update_progress(db: Session, word_id: int, correct: bool, answered_at: datetime) -> None:
+def _update_progress(db: Session, word_id: int, correct: bool, answered_at: datetime) -> WordProgress:
     progress = db.get(WordProgress, word_id)
     if progress is None:
         progress = WordProgress(
@@ -357,7 +391,7 @@ def _update_progress(db: Session, word_id: int, correct: bool, answered_at: date
     if correct:
         progress.correct_count += 1
         progress.correct_streak += 1
-        if progress.in_wrong_list and progress.correct_streak >= get_settings().word_mastery_streak:
+        if progress.correct_streak >= _mastery_target(progress) and not _is_mastered(progress):
             progress.in_wrong_list = False
             progress.mastered_at = answered_at
     else:
@@ -366,6 +400,7 @@ def _update_progress(db: Session, word_id: int, correct: bool, answered_at: date
         progress.in_wrong_list = True
         progress.mastered_at = None
         progress.last_wrong_at = answered_at
+    return progress
 
 
 def _replayed(db: Session, word: Word, client_id: str | None) -> AnswerResult | None:
@@ -416,8 +451,11 @@ def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerRe
             client_id=data.client_id,
         )
     )
-    _update_progress(db, word.id, correct, _naive(now))
-    srs_service.review(db, "word", word.id, "good" if correct else "again", now=now)
+    progress = _update_progress(db, word.id, correct, _naive(now))
+    if _is_mastered(progress):
+        srs_service.remove(db, "word", word.id)  # 已學會：不再排複習
+    else:
+        srs_service.review(db, "word", word.id, "good" if correct else "again", now=now)
     try:
         db.commit()
     except IntegrityError:
@@ -535,3 +573,16 @@ def parse_word_drafts(text: str) -> list[WordIn]:
 
 def add_words(db: Session, data: WordBatchIn) -> ImportResult:
     return upsert_words(db, data.words, data.source)
+
+
+def reset_progress(db: Session) -> VocabResetResult:
+    """「清除單字進度」：所有單字變回沒學過（作答紀錄、每日單字、複習排程都清掉）。單字庫本身不動。
+    清除前先自動備份一份「清除前」快照，按錯了可以到備份頁還原。"""
+    backup = backup_service.create_snapshot("before-reset")
+    begin_write(db)
+    words = db.execute(delete(WordProgress)).rowcount or 0
+    db.execute(delete(WordAttempt))
+    db.execute(delete(DailySet))
+    srs_service.remove_all(db, "word")
+    db.commit()
+    return VocabResetResult(words=words, backup=backup.name)

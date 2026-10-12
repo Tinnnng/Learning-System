@@ -12,16 +12,18 @@ import random
 import re
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
 from app.core.database import begin_write
 from app.modules.ai import service as ai_service
+from app.modules.backup import service as backup_service
 from app.modules.bank import service as bank_service
 from app.modules.bank.schemas import OPTION_LETTERS, QuestionFilter, QuestionWithPaper
 from app.modules.exam.models import ExamItem, ExamSession
 from app.modules.exam.schemas import (
+    ResetResult,
     AnswerIn,
     GradeIn,
     ItemOut,
@@ -482,3 +484,15 @@ def delete_session(db: Session, session_id: int) -> None:
         raise ExamError("已交卷的測驗不能刪除", status_code=409)
     db.delete(session)
     db.commit()
+
+
+def reset_records(db: Session) -> ResetResult:
+    """「清除作答紀錄」：所有測驗（含進行中的）、作答紀錄、錯題本、題目的複習排程歸零。
+    題庫、收藏與筆記、AI 詳解不動。清除前先自動備份一份「清除前」快照，按錯了可以到備份頁還原。"""
+    backup = backup_service.create_snapshot("before-reset")
+    begin_write(db)
+    sessions = db.execute(delete(ExamSession)).rowcount or 0
+    db.execute(delete(ExamItem))
+    attempts = review_service.reset_all(db)
+    db.commit()
+    return ResetResult(sessions=sessions, attempts=attempts, backup=backup.name)

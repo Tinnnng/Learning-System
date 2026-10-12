@@ -21,6 +21,7 @@ const KIND_LABEL: Record<Snapshot['kind'], string> = {
   auto: '自動',
   manual: '手動',
   'before-restore': '還原前',
+  'before-reset': '清除前',
 }
 
 function SnapshotRow({

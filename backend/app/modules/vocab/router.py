@@ -13,6 +13,7 @@ from app.modules.vocab.schemas import (
     ExtractRequest,
     ImportResult,
     QuizItem,
+    VocabResetResult,
     VocabStats,
     WordOut,
     WordPage,
@@ -58,6 +59,12 @@ def list_words(
 @router.get("/wrong", response_model=list[WordOut])
 def wrong_words(db: Session = Depends(get_db)) -> list[WordOut]:
     return service.wrong_words(db)
+
+
+@router.post("/reset", response_model=VocabResetResult)
+def reset_progress(db: Session = Depends(get_db)) -> VocabResetResult:
+    """清除單字進度：所有單字變回沒學過（單字庫不動）。清除前自動備份。"""
+    return service.reset_progress(db)
 
 
 @router.get("/stats", response_model=VocabStats)

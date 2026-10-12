@@ -7,7 +7,7 @@
 from datetime import UTC, datetime
 
 import fsrs
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.srs.models import SrsCard
@@ -88,3 +88,9 @@ def summary(db: Session, item_type: ItemType, now: datetime | None = None) -> Du
         due_now=db.scalar(base.where(SrsCard.due <= _naive(now or utc_now()))) or 0,
         total=db.scalar(base) or 0,
     )
+
+
+def remove_all(db: Session, item_type: ItemType) -> int:
+    """清除某一類的所有複習排程（清除單字進度、清除作答紀錄用）。不會 commit。回傳刪掉幾張。"""
+    result = db.execute(delete(SrsCard).where(SrsCard.item_type == item_type))
+    return result.rowcount or 0

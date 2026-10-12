@@ -1,9 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ChipGroup } from '@/components/Controls'
 import { Icon } from '@/components/Icon'
 import { PageHeader } from '@/components/PageHeader'
+import { ResetButton } from '@/components/ResetButton'
+import { api } from '@/lib/api'
+import type { components } from '@/lib/api-types'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { Button, ButtonLink } from '@/components/Button'
 import { fetchFilters, fetchPapers, type PaperFilters } from './api'
@@ -40,7 +43,10 @@ function GroupRow({ group }: { group: PaperGroup }) {
   )
 }
 
+const resetRecords = () => api.post<components['schemas']['ResetResult']>('/exam/reset')
+
 export function BankPage() {
+  const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
   const [creating, setCreating] = useState(false)
   // 題庫只用「考試」「年度」篩選；類科併進分組名稱（115普考－一般行政），科目在分組頁裡看
@@ -146,6 +152,20 @@ export function BankPage() {
             questionCount={questionCount}
             essayCount={essayCount}
           />
+          <ResetButton
+            className="mt-6 border-t border-rule pt-5"
+            label="清除作答紀錄"
+            title="清除所有題目的作答紀錄？"
+            confirmLabel="清除紀錄"
+            run={resetRecords}
+            doneText={(result) => `已清除 ${result.sessions} 次測驗、${result.attempts} 筆作答。`}
+            onDone={() => queryClient.invalidateQueries()}
+          >
+            <p className="m-0">
+              所有測驗（包含還沒交卷的）、每一題的作答紀錄、錯題本、正確率與知識點弱點統計都會歸零，像第一次寫一樣。
+            </p>
+            <p className="m-0">題庫裡的題目、收藏與筆記、AI 詳解不會刪除；單字進度另外在單字頁清除。</p>
+          </ResetButton>
         </aside>
       </div>
       <NewPaperDialog open={creating} onClose={() => setCreating(false)} />

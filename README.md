@@ -7,28 +7,28 @@
 
 ## 功能一覽
 
-| 頁面 | 能做什麼 |
-|---|---|
-| 今日 | 今天該複習的錯題與單字、考試倒數 |
-| 題庫 | 依考試類型與年度篩選，同年度＋考試＋類科合成一組（例如「115普考－一般行政」），可整組出題或挑一科寫；全文搜尋題幹、選項、文章與詳解；手動新增或修改題目 |
-| 作答 | 練習模式（每題立即對答案）或模擬考（計時、交卷才評分）；可打亂題目與選項；申論題打字作答後對照參考答案勾得分要點自評，也可請 AI 評分 |
-| 錯題本 | 選擇題連續答對 5 次才移出（用「正」字記進度）；申論題低於 60% 進錯題本、連續 2 次 80% 以上移出；以 FSRS 排複習日；可匯出 PDF |
-| 單字 | 每日 5 個單字測驗與間隔複習，寫完可以「再測一組」新的字；重複匯入的字會合併中文意思、保留進度；內建多益核心 468 字、可匯入 CSV／Excel、可請 AI 從考古題英文題抽生字 |
-| 行事曆 | 手動輸入考試日期、拍照或 PDF 由 AI 辨識後依高考／普考／地方特考等分類勾選要加入的考試、訂閱 iCal 考試行事曆、匯出 .ics |
-| 總覽／弱點 | 作答統計；AI 依科目整理知識點，作答 3 次以上且正確率低於 60% 列為弱點，可直接練 |
-| 收藏 | 收藏題目，每題底下有自動儲存的筆記區 |
-| 匯入 | 預覽匯入檔（解析結果與原始試卷頁面並排）、修改後再匯入 |
-| 備份 | 每天第一次啟動自動備份，也可手動備份、下載、還原 |
+| 頁面       | 能做什麼                                                                                                                                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 今日       | 今天該複習的錯題與單字、考試倒數                                                                                                                                    |
+| 題庫       | 依考試類型與年度篩選，同年度＋考試＋類科合成一組（例如「115普考－一般行政」），可整組出題或挑一科寫；全文搜尋題幹、選項、文章與詳解；手動新增或修改題目             |
+| 作答       | 練習模式（每題立即對答案）或模擬考（計時、交卷才評分）；可打亂題目與選項；申論題打字作答後對照參考答案勾得分要點自評，也可請 AI 評分                                |
+| 錯題本     | 選擇題連續答對 5 次才移出（用「正」字記進度）；申論題低於 60% 進錯題本、連續 2 次 80% 以上移出；以 FSRS 排複習日；可匯出 PDF                                        |
+| 單字       | 每日 5 個單字測驗與間隔複習，寫完可以「再測一組」新的字；重複匯入的字會合併中文意思、保留進度；內建多益核心 468 字、可匯入 CSV／Excel、可請 AI 從考古題英文題抽生字 |
+| 行事曆     | 手動輸入考試日期、拍照或 PDF 由 AI 辨識後依高考／普考／地方特考等分類勾選要加入的考試、訂閱 iCal 考試行事曆、匯出 .ics                                              |
+| 總覽／弱點 | 作答統計；AI 依科目整理知識點，作答 3 次以上且正確率低於 60% 列為弱點，可直接練                                                                                     |
+| 收藏       | 收藏題目，每題底下有自動儲存的筆記區                                                                                                                                |
+| 匯入       | 預覽匯入檔（解析結果與原始試卷頁面並排）、修改後再匯入                                                                                                              |
+| 備份       | 每天第一次啟動自動備份，也可手動備份、下載、還原                                                                                                                    |
 
 ## 快速開始
 
 ### 1. 需要先安裝
 
-| 工具 | 版本 | 用途 |
-|---|---|---|
-| [Python](https://www.python.org/) | 3.13 | 後端 |
-| [uv](https://docs.astral.sh/uv/) | 最新版 | 安裝後端套件 |
-| [Node.js](https://nodejs.org/) | 22 | 前端 |
+| 工具                                          | 版本   | 用途                                                 |
+| --------------------------------------------- | ------ | ---------------------------------------------------- |
+| [Python](https://www.python.org/)             | 3.13   | 後端                                                 |
+| [uv](https://docs.astral.sh/uv/)              | 最新版 | 安裝後端套件                                         |
+| [Node.js](https://nodejs.org/)                | 22     | 前端                                                 |
 | [Claude Code](https://claude.com/claude-code) | 已登入 | 系統內 AI 功能與題目轉檔（不用 AI 也能使用其餘功能） |
 
 ### 2. 安裝與啟動
@@ -58,11 +58,11 @@ npm run dev        # 同時啟動後端（:8000）與前端（:5173）
 
 資料夾分工：原始檔放 `data/inbox/`，轉檔中間產物在 `data/drafts/`，可以匯入的檔案在 `data/converted/`（匯入頁只看這裡），三者不要混放。
 
-| 來源 | 放在哪裡 | 怎麼轉 |
-|---|---|---|
-| 高普考題目＋答案 PDF | `data/inbox/gaopu/<例如 115普考QA-一般行政>/` | 請 Claude Code 照 [`docs/ingest-gaopu.md`](docs/ingest-gaopu.md) 轉檔 |
-| 期中考教材（PPTX／DOCX／PDF，舊版 PPT／DOC 會自動用 Office 轉檔） | `data/inbox/lecture/` | 請 Claude Code 照 [`docs/ingest-lecture.md`](docs/ingest-lecture.md) 讀教材出題（每題附答案、詳解、出處頁碼） |
-| 自己整理的題目文字檔 | `data/inbox/text/` | 照 [`docs/text-question-format.md`](docs/text-question-format.md) 的格式寫，系統直接解析，不需要 AI（範例：[`docs/examples/sample-questions.txt`](docs/examples/sample-questions.txt)） |
+| 來源                                                              | 放在哪裡                                      | 怎麼轉                                                                                                                                                                                  |
+| ----------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 高普考題目＋答案 PDF                                              | `data/inbox/gaopu/<例如 115普考QA-一般行政>/` | 請 Claude Code 照 [`docs/ingest-gaopu.md`](docs/ingest-gaopu.md) 轉檔                                                                                                                   |
+| 期中考教材（PPTX／DOCX／PDF，舊版 PPT／DOC 會自動用 Office 轉檔） | `data/inbox/lecture/`                         | 請 Claude Code 照 [`docs/ingest-lecture.md`](docs/ingest-lecture.md) 讀教材出題（每題附答案、詳解、出處頁碼）                                                                           |
+| 自己整理的題目文字檔                                              | `data/inbox/text/`                            | 照 [`docs/text-question-format.md`](docs/text-question-format.md) 的格式寫，系統直接解析，不需要 AI（範例：[`docs/examples/sample-questions.txt`](docs/examples/sample-questions.txt)） |
 
 轉好的檔案可以在「匯入」頁預覽、修改後匯入，也可以用指令（在 `backend/` 執行）：
 
@@ -92,6 +92,7 @@ npm run dev:lan
 ```
 
 終端機會顯示手機要開的網址。前端只綁定 Wi-Fi 的 IP（不開放給 VPN 上的人），但系統沒有登入，**只在信任的網路使用**。IP 判斷錯誤時，用環境變數 `LS_LAN_HOST` 指定。
+"https://desktop-v3393bq.taila1733a.ts.net"
 
 ## 調整設定
 
@@ -114,13 +115,13 @@ LS_BACKUP_KEEP=10              # 保留幾份自動備份
 
 ## 開發
 
-| 指令 | 用途 |
-|---|---|
-| `npm test` | 後端 pytest 與前端 Vitest（含模組邊界檢查） |
-| `npm run migrate` | 套用資料庫 migration |
-| `cd backend && uv run alembic revision --autogenerate -m "說明"` | 改了 models 後產生 migration |
-| `npm run gen:api` | 後端 API 改了之後重新產生前端型別 |
-| `cd frontend && npm run build` / `npm run lint` | 型別檢查＋建置 / oxlint |
+| 指令                                                             | 用途                                        |
+| ---------------------------------------------------------------- | ------------------------------------------- |
+| `npm test`                                                       | 後端 pytest 與前端 Vitest（含模組邊界檢查） |
+| `npm run migrate`                                                | 套用資料庫 migration                        |
+| `cd backend && uv run alembic revision --autogenerate -m "說明"` | 改了 models 後產生 migration                |
+| `npm run gen:api`                                                | 後端 API 改了之後重新產生前端型別           |
+| `cd frontend && npm run build` / `npm run lint`                  | 型別檢查＋建置 / oxlint                     |
 
 - 技術：前端 React + TypeScript + Vite + Tailwind CSS；後端 Python + FastAPI + SQLAlchemy + SQLite；PDF 處理用 PyMuPDF。
 - 後端 API 文件：http://127.0.0.1:8000/docs

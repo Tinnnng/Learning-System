@@ -30,7 +30,7 @@ from app.modules.backup.schemas import BackupStatus, RestoreResult, SnapshotKind
 
 FORMAT_VERSION = 1
 APP_ID = "learning-system"
-_NAME = re.compile(r"^learning-(\d{8}-\d{6})-(auto|manual|before-restore)(?:-(\d+))?\.zip$")
+_NAME = re.compile(r"^learning-(\d{8}-\d{6})-(auto|manual|before-restore|before-reset)(?:-(\d+))?\.zip$")
 
 
 class BackupError(Exception):

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.exam import service
-from app.modules.exam.schemas import AnswerIn, GradeIn, ItemOut, SessionCreate, SessionOut, SessionSummary
+from app.modules.exam.schemas import AnswerIn, GradeIn, ItemOut, ResetResult, SessionCreate, SessionOut, SessionSummary
 
 router = APIRouter(tags=["exam"])
 
@@ -78,6 +78,12 @@ def submit_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut
         return service.submit_session(db, session_id)
     except service.ExamError as error:
         raise _handle(error) from error
+
+
+@router.post("/reset", response_model=ResetResult)
+def reset_records(db: Session = Depends(get_db)) -> ResetResult:
+    """清除所有作答紀錄、錯題本（題庫、收藏與筆記不動）。清除前自動備份。"""
+    return service.reset_records(db)
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

@@ -117,3 +117,8 @@ class ExtractedWords(BaseModel):
 class WordBatchIn(BaseModel):
     words: list[WordIn] = Field(min_length=1, max_length=200)
     source: str = Field(default="考古題生字", max_length=100)
+
+
+class VocabResetResult(BaseModel):
+    words: int = Field(description="變回沒學過的單字數")
+    backup: str = Field(description="清除前自動建立的備份檔名")

@@ -7,7 +7,7 @@
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -265,3 +265,11 @@ def overview(db: Session, now: datetime | None = None) -> Overview:
         by_tag=_group_stats(by_tag),
         daily=[DailyStat(day=day, attempts=values[0], correct=values[1]) for day, values in sorted(daily.items())],
     )
+
+
+def reset_all(db: Session) -> int:
+    """清除所有題目的作答紀錄、錯題本與複習排程（使用者按「清除作答紀錄」）。不會 commit。回傳刪掉幾筆作答。"""
+    attempts = db.execute(delete(AttemptLog)).rowcount or 0
+    db.execute(delete(QuestionProgress))
+    srs_service.remove_all(db, "question")
+    return attempts

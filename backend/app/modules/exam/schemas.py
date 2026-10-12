@@ -123,3 +123,9 @@ class SessionSummary(BaseModel):
     correct_count: int | None
     score: float | None
     max_score: float
+
+
+class ResetResult(BaseModel):
+    sessions: int = Field(description="刪掉的測驗數")
+    attempts: int = Field(description="刪掉的作答紀錄數")
+    backup: str = Field(description="清除前自動建立的備份檔名")
