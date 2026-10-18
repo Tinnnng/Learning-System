@@ -2,13 +2,17 @@
 
 時間一律用 UTC；資料庫存無時區的 datetime（SQLite 不保存時區）。
 學習步驟（幾分鐘後再複習）關閉，因為使用方式是一天複習一次，排程直接以天為單位。
+「到期」也以天為單位：到期時刻落在本地（設定的時區）今天之內就算今天到期，不必等到那個整點。
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import fsrs
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
 
 from app.modules.srs.models import SrsCard
 from app.modules.srs.schemas import CardOut, DueSummary, Grade, ItemType
@@ -23,6 +27,17 @@ def utc_now() -> datetime:
 
 def _naive(moment: datetime) -> datetime:
     return moment.astimezone(UTC).replace(tzinfo=None)
+
+
+def _due_cutoff(now: datetime | None) -> datetime:
+    """本地今天結束的時刻（UTC、無時區）：到期時刻在這之前的都算今天到期。"""
+    zone = ZoneInfo(get_settings().timezone)
+    now = now or utc_now()
+    if now.tzinfo is None:  # 無時區的時間一律是 UTC（和資料庫一致）
+        now = now.replace(tzinfo=UTC)
+    local_day = now.astimezone(zone).date()
+    end_of_day = datetime.combine(local_day + timedelta(days=1), time.min, tzinfo=zone)
+    return _naive(end_of_day) - timedelta(microseconds=1)
 
 
 def _out(card: SrsCard) -> CardOut:
@@ -41,6 +56,10 @@ def review(db: Session, item_type: ItemType, item_id: int, grade: Grade, now: da
     now = now or utc_now()
     card = db.scalar(select(SrsCard).where(SrsCard.item_type == item_type, SrsCard.item_id == item_id))
     fsrs_card = fsrs.Card.from_dict(card.state) if card else fsrs.Card()
+    # 作答時間可能比上次複習還早（例如模擬考隔幾天才交卷，用的是當初的作答時間）。
+    # 這時當成在上次複習的同一刻再複習一次：結果照樣計入，但排程不會倒回過去
+    if card and card.last_review and _naive(now) < card.last_review:
+        now = card.last_review.replace(tzinfo=UTC)
     fsrs_card, _ = _scheduler.review_card(fsrs_card, _RATINGS[grade], now)
 
     if card is None:
@@ -65,10 +84,10 @@ def remove(db: Session, item_type: ItemType, item_id: int) -> None:
 
 
 def due_item_ids(db: Session, item_type: ItemType, now: datetime | None = None, limit: int | None = None) -> list[int]:
-    """到期該複習的項目，最早到期的排前面。"""
+    """到期該複習的項目（本地今天之內到期的都算），最早到期的排前面。"""
     query = (
         select(SrsCard.item_id)
-        .where(SrsCard.item_type == item_type, SrsCard.due <= _naive(now or utc_now()))
+        .where(SrsCard.item_type == item_type, SrsCard.due <= _due_cutoff(now))
         .order_by(SrsCard.due)
     )
     if limit is not None:
@@ -85,7 +104,7 @@ def summary(db: Session, item_type: ItemType, now: datetime | None = None) -> Du
     base = select(func.count(SrsCard.id)).where(SrsCard.item_type == item_type)
     return DueSummary(
         item_type=item_type,
-        due_now=db.scalar(base.where(SrsCard.due <= _naive(now or utc_now()))) or 0,
+        due_now=db.scalar(base.where(SrsCard.due <= _due_cutoff(now))) or 0,
         total=db.scalar(base) or 0,
     )
 

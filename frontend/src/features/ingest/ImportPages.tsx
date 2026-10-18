@@ -106,7 +106,7 @@ export function ImportListPage() {
       <PageHeader
         eyebrow="匯入"
         title="匯入題目"
-        description="上傳高普考試卷、上課教材或題目文字檔，轉好的檔案會出現在「待匯入」。匯入前可以逐題對照原始試卷。重新匯入同一份試卷會更新題目，作答紀錄會保留。"
+        description="上傳國考試卷（高考、普考、地方特考）、上課教材或題目文字檔，轉好的檔案會出現在「待匯入」。匯入前可以逐題對照原始試卷。重新匯入同一份試卷會更新題目，作答紀錄會保留。"
       />
       <UploadPanel />
       <h2 className="eyebrow m-0 -mb-4">待匯入</h2>

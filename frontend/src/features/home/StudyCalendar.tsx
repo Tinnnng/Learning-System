@@ -40,6 +40,8 @@ export function StudyCalendar() {
   const calendar = useQuery({
     queryKey: ['activity', 'calendar'],
     queryFn: () => api.get<Calendar>(`/activity/calendar?days=${WEEKS * 7}`),
+    // 作答的頁面不會通知首頁；每次回到首頁都重抓，剛寫完的題目馬上算進今天
+    staleTime: 0,
   })
   const [picked, setPicked] = useState<Day | null>(null)
   if (!calendar.data) return null

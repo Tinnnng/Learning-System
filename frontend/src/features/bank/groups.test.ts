@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaperSummary } from '@/lib/types'
-import { groupFilter, groupPapers, groupPath } from './groups'
+import { groupFilter, groupPapers, groupPath, sortExamTypes } from './groups'
 
 const paper = (id: number, overrides: Partial<PaperSummary>): PaperSummary => ({
   id,
@@ -45,7 +45,13 @@ describe('groupPapers', () => {
 
   it('沒有類科時用科目分組與篩選', () => {
     const midterm = groups[3]
-    expect(groupFilter(midterm)).toEqual({ year: 115, exam_type: '期中考', category: null, subject: '程式設計-JAVA' })
+    expect(groupFilter(midterm)).toEqual({ year: 115, exam_type: '期中考', category: null, subject: '程式設計-JAVA', no_year: false, no_category: true })
     expect(groupPath(groups[1])).toBe(`/bank/group?year=115&exam_type=${encodeURIComponent('普考')}&category=${encodeURIComponent('一般行政')}`)
+  })
+})
+
+describe('sortExamTypes', () => {
+  it('orders national exams before school exams', () => {
+    expect(sortExamTypes(['地方特考', '普考', '期中考', '高考'])).toEqual(['高考', '普考', '地方特考', '期中考'])
   })
 })

@@ -16,7 +16,7 @@ import { api } from '@/lib/api'
 import type { components } from '@/lib/api-types'
 import { cx } from '@/lib/cx'
 import { plainText, shortName } from '@/lib/format'
-import { noteKey } from '@/lib/notes'
+import { type Note, noteKey } from '@/lib/notes'
 import { useStartSession } from '@/lib/sessions'
 
 type NotedQuestion = components['schemas']['NotedQuestion']
@@ -87,6 +87,12 @@ function NotedRow({ entry }: { entry: NotedQuestion }) {
   )
 }
 
+/** 快取的筆記是否不比列表舊（後端時間是同一種格式的字串，可以直接比） */
+function newerOrSame(cached: string | null | undefined, listed: string | null | undefined) {
+  if (!cached) return false
+  return !listed || cached >= listed
+}
+
 export function NotesPage() {
   const queryClient = useQueryClient()
   // 篩選放在網址（?which=starred）：重新整理、上一頁回來都還在
@@ -96,11 +102,19 @@ export function NotesPage() {
   const list = useQuery({ queryKey: ['notes', 'list', which], queryFn: () => api.get<NotedQuestion[]>(`/notes/list?which=${which}`) })
   const start = useStartSession()
   const entries = list.data ?? []
-  const starredCount = entries.filter((entry) => entry.note.starred).length
+  const starred = entries.filter((entry) => entry.note.starred)
+  const starredCount = starred.length
+  // 收藏裡有申論題就一起練（全是申論題時不帶這個會變成「沒有符合條件的題目」）
+  const starredHasEssay = starred.some((entry) => entry.question.type === 'essay')
 
   useEffect(() => {
-    // 列表已經帶了每題的收藏與筆記，直接放進快取，展開時不用再查
-    for (const entry of list.data ?? []) queryClient.setQueryData(noteKey(entry.question.id), entry.note)
+    // 列表已經帶了每題的收藏與筆記，直接放進快取，展開時不用再查。
+    // 列表可能是舊的（在別頁改過筆記、列表還在重抓），快取裡比較新的就不蓋掉
+    for (const entry of list.data ?? []) {
+      queryClient.setQueryData<Note>(noteKey(entry.question.id), (current) =>
+        current && newerOrSame(current.updated_at, entry.note.updated_at) ? current : entry.note,
+      )
+    }
   }, [list.data, queryClient])
 
   return (
@@ -112,7 +126,9 @@ export function NotesPage() {
         actions={
           starredCount > 0 && which !== 'noted' ? (
             <Button
-              onClick={() => start.mutate({ mode: 'practice', source: { kind: 'starred' }, shuffle_questions: true })}
+              onClick={() =>
+                start.mutate({ mode: 'practice', source: { kind: 'starred' }, shuffle_questions: true, include_essay: starredHasEssay })
+              }
               disabled={start.isPending}
             >
               <Icon name="play" size={16} />

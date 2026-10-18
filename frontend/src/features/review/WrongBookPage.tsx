@@ -18,29 +18,39 @@ import { cx } from '@/lib/cx'
 import { formatDateTime, parseUtc, plainText, relativeDay, shortName } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { WrongQuestionOut } from '@/lib/types'
-import { fetchHistory, fetchWrongQuestions, type WrongStatus } from './api'
+import { fetchHistory, fetchRules, fetchWrongQuestions, type MasteryRules, type WrongStatus } from './api'
+import { attemptSummary, masteredEmptyText, masteryDescription } from './history'
 
 const LETTERS = 'ABCDEFGHIJ'
 
 function History({ questionId }: { questionId: number }) {
   const history = useQuery({ queryKey: ['review', 'history', questionId], queryFn: () => fetchHistory(questionId) })
+  const rules = useRules()
   if (!history.data) return null
   return (
     <ol className="m-0 flex list-none flex-wrap gap-2 p-0" aria-label="作答紀錄（新到舊）">
-      {history.data.attempts.map((attempt) => (
-        <li
-          key={attempt.answered_at}
-          className={cx(
-            'rounded-sm border px-2 py-0.5 text-xs',
-            attempt.is_correct ? 'border-ok/40 text-ok' : 'border-bad/40 text-bad',
-          )}
-          title={formatDateTime(attempt.answered_at)}
-        >
-          {formatDateTime(attempt.answered_at)}　選 {attempt.response.join('、') || '—'}　{attempt.is_correct ? '對' : '錯'}
-        </li>
-      ))}
+      {history.data.attempts.map((attempt) => {
+        const summary = attemptSummary(attempt, rules)
+        return (
+          <li
+            key={attempt.answered_at}
+            className={cx(
+              'rounded-sm border px-2 py-0.5 text-xs',
+              summary.tone === 'ok' ? 'border-ok/40 text-ok' : summary.tone === 'bad' ? 'border-bad/40 text-bad' : 'border-line text-muted',
+            )}
+            title={formatDateTime(attempt.answered_at)}
+          >
+            {formatDateTime(attempt.answered_at)}　{summary.text}
+          </li>
+        )
+      })}
     </ol>
   )
+}
+
+/** 掌握規則（設定檔的次數與比例），很少變動 */
+function useRules(): MasteryRules | undefined {
+  return useQuery({ queryKey: ['review', 'rules'], queryFn: fetchRules, staleTime: Infinity }).data
 }
 
 function WrongRow({ entry, now }: { entry: WrongQuestionOut; now: number }) {
@@ -136,6 +146,9 @@ export function WrongBookPage() {
     queryFn: () => fetchWrongQuestions(status, subject),
   })
   const allActive = useQuery({ queryKey: ['review', 'wrong', 'active', null], queryFn: () => fetchWrongQuestions('active', null) })
+  // 科目選項要涵蓋「已掌握」「全部」分頁的題目，所以從曾經答錯的全部題目取
+  const allWrong = useQuery({ queryKey: ['review', 'wrong', 'all', null], queryFn: () => fetchWrongQuestions('all', null) })
+  const rules = useRules()
   const start = useStartSession()
   const [now] = useState(() => Date.now())
   // 申論題要打字、自己評分，比較花時間，重寫錯題時預設不含
@@ -149,7 +162,7 @@ export function WrongBookPage() {
   }
 
   const entries = wrong.data ?? []
-  const subjects = [...new Set((allActive.data ?? []).map((entry) => entry.question.paper.subject))].sort()
+  const subjects = [...new Set((allWrong.data ?? []).map((entry) => entry.question.paper.subject))].sort()
   const wanted = (entry: WrongQuestionOut) => includeEssay || entry.question.type !== 'essay'
   const dueCount = (allActive.data ?? []).filter(
     (entry) => wanted(entry) && entry.review_due && parseUtc(entry.review_due).getTime() <= now,
@@ -162,7 +175,7 @@ export function WrongBookPage() {
       <PageHeader
         eyebrow="錯題本"
         title="答錯過的題目"
-        description="答錯的題目會自動收進來，連續答對 5 次（寫滿一個「正」字）才會移出；申論題是連續 2 次拿到八成以上。系統依記憶曲線排好每題的複習日。"
+        description={masteryDescription(rules)}
         actions={
           <>
             {dueCount > 0 && (
@@ -241,7 +254,7 @@ export function WrongBookPage() {
       ) : entries.length === 0 ? (
         <EmptyState title={status === 'mastered' ? '還沒有掌握的錯題' : '錯題本是空的'}>
           {status === 'mastered'
-            ? '錯題連續答對 5 次就會出現在這裡。'
+            ? masteredEmptyText(rules)
             : '去題庫寫一份考古題吧，答錯的題目會自動收進來。'}
         </EmptyState>
       ) : (

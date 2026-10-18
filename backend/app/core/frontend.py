@@ -34,5 +34,9 @@ def mount_frontend(app: FastAPI, dist: Path) -> None:
         if relative and target.is_file() and target.is_relative_to(root):
             headers = _IMMUTABLE if relative.startswith("assets/") else _NO_CACHE
             return FileResponse(target, headers=headers)
+        # 找不到的打包檔（舊版雜湊檔名）或有副檔名的檔案回 404，不能回首頁 HTML：
+        # 否則 service worker 會把 HTML 當成字型或 JS 快取起來
+        if relative.startswith("assets/") or Path(relative).suffix:
+            return await http_exception_handler(request, error)
         # 其他路徑（/bank、/vocab…）都交給前端路由
         return FileResponse(index, headers=_NO_CACHE)

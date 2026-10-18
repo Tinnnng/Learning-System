@@ -24,7 +24,7 @@ export function PaperRow({ paper }: { paper: PaperSummary }) {
         </span>
         <span className="flex items-center gap-3 text-sm text-muted">
           <span className="tabular">
-            {paper.essay_count === paper.question_count ? `申論 ${paper.essay_count} 題` : `${paper.question_count - paper.essay_count} 題`}
+            {paper.essay_count > 0 && paper.essay_count === paper.question_count ? `申論 ${paper.essay_count} 題` : `${paper.question_count - paper.essay_count} 題`}
           </span>
           <Icon name="arrow" size={18} className="text-accent transition-transform duration-[var(--dur)] group-hover:translate-x-1" />
         </span>

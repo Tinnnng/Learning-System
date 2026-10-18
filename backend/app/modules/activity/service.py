@@ -15,6 +15,7 @@ from app.modules.review import service as review_service
 from app.modules.vocab import service as vocab_service
 
 MAX_DAYS = 371
+_EPOCH = datetime(2000, 1, 1)
 
 
 def _zone() -> ZoneInfo:
@@ -34,28 +35,30 @@ def calendar(db: Session, days: int = 126, now: datetime | None = None) -> Activ
     days = max(1, min(days, MAX_DAYS))
     end = today(now)
     start = end - timedelta(days=days - 1)
-    # 往前多抓一天（UTC 和台灣差 8 小時），分天後再切掉範圍外的
-    since = datetime.combine(start - timedelta(days=1), datetime.min.time())
-    questions = Counter(_local_day(t) for t in review_service.answer_times(db, since))
-    words = Counter(_local_day(t) for t in vocab_service.answer_times(db, since))
+    # 連續天數不受顯示範圍限制（連續讀超過 days 天也要算對），所以抓全部作答再分天；單人使用，筆數不大
+    questions = Counter(_local_day(t) for t in review_service.answer_times(db, _EPOCH))
+    words = Counter(_local_day(t) for t in vocab_service.answer_times(db, _EPOCH))
+    active_days = {day for day, count in (questions + words).items() if count > 0 and day <= end}
 
     rows = []
     for offset in range(days):
         day = start + timedelta(days=offset)
         rows.append(ActivityDay(date=day.isoformat(), questions=questions[day], words=words[day]))
 
-    active = [row.questions + row.words > 0 for row in rows]
     # 連續天數：今天還沒讀不算斷，從昨天往回數
-    index = len(active) - 1 if active[-1] else len(active) - 2
+    cursor = end if end in active_days else end - timedelta(days=1)
     streak = 0
-    while index >= 0 and active[index]:
+    while cursor in active_days:
         streak += 1
-        index -= 1
+        cursor -= timedelta(days=1)
     longest = current = 0
-    for flag in active:
-        current = current + 1 if flag else 0
+    previous: date | None = None
+    for day in sorted(active_days):
+        current = current + 1 if previous is not None and day - previous == timedelta(days=1) else 1
         longest = max(longest, current)
-    return ActivityCalendar(days=rows, today=end.isoformat(), streak=streak, longest_streak=longest, active_days=sum(active))
+        previous = day
+    active = sum(1 for row in rows if row.questions + row.words > 0)
+    return ActivityCalendar(days=rows, today=end.isoformat(), streak=streak, longest_streak=longest, active_days=active)
 
 
 def _fortune_out(row: DailyFortune) -> Fortune:

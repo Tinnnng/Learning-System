@@ -18,7 +18,8 @@ import pymupdf
 
 from app.modules.ingest.schemas import FigureDraft, QuestionDraft, QuestionDraftFile
 
-NUMBER_COLUMN_MAX_X = 52
+NUMBER_COLUMN_MAX_X = 56
+"""題號欄的右界：個位數題號實測 x≈45–53（113、114 年部分試卷），題幹最左可能從 x≈58 開始。"""
 PAGE_HEADER_MAX_Y = 68
 """每頁頂端代號、頁次的範圍（實測 y < 60）；題目最高可能從 y≈73 開始，不能設太大。"""
 SMALL_FONT_RATIO = 0.8

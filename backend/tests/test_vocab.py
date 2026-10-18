@@ -171,11 +171,15 @@ def test_next_round_skips_words_seen_today(db, words):
     assert item.word_id in {i.word_id for i in tomorrow}  # 隔天：昨天答錯、到期的字會出現
 
 
-def test_due_words_are_picked_first_the_next_day(db, words):
-    wrong = words["revenue"]
-    service.answer(db, AnswerIn(word_id=wrong.id, quiz_type="spelling", response="x"), now=NOW)
+def test_review_slots_pick_least_recently_answered_first(db, words):
+    """CLAUDE.md：學習中＋錯題最多 2 個，最久沒寫的先（2026-10-17 使用者確認，不是到期的先）。"""
+    order = ["negotiate", "invoice", "deadline", "postpone"]
+    for offset, term in enumerate(order):  # negotiate 最久沒寫，postpone 最近才寫
+        service.answer(db, AnswerIn(word_id=words[term].id, quiz_type="spelling", response="x"), now=NOW + timedelta(hours=offset))
     tomorrow = service.get_daily(db, now=NOW + timedelta(days=1))
-    assert wrong.id in {item.word_id for item in tomorrow.items}
+    picked = {item.word_id for item in tomorrow.items}
+    assert {words["negotiate"].id, words["invoice"].id} <= picked
+    assert not {words["deadline"].id, words["postpone"].id} & picked
 
 
 def test_wrong_word_mastery_after_five_correct(db, words):

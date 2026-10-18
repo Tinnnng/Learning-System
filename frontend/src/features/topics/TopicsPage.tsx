@@ -160,8 +160,9 @@ export function TopicsPage() {
 
   const tag = useMutation({
     mutationFn: (data: { subject: string; retag?: boolean }) => api.post<TagResult>('/topics/tag', data),
-    onSuccess: (result) => {
-      setLastResult(result)
+    onSuccess: (result) => setLastResult(result),
+    // 失敗也要重抓：一次標多科時前面已存好的批次要顯示出來，AI 用量也可能已經花了
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['topics'] })
       queryClient.invalidateQueries({ queryKey: ['ai', 'status'] })
     },

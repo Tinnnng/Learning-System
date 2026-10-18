@@ -139,9 +139,14 @@ class QuestionFilter(BaseModel):
     """挑選題目的條件，全部可省略；多個條件同時成立才選。"""
 
     paper_ids: list[int] | None = None
+    """指定試卷；給空串列表示「沒有試卷」，一題都不選"""
     exam_type: str | None = None
     year: int | None = None
+    no_year: bool = False
+    """只選沒有填年度的試卷（題庫分組「期中考－資料結構」這種沒有年度的組）"""
     category: str | None = None
+    no_category: bool = False
+    """只選沒有類科的試卷（用科目當組名的組，不能混進同科目、有類科的試卷）"""
     subject: str | None = None
     origin: Origin | None = None
     tags: list[str] | None = None
@@ -216,6 +221,8 @@ class QuestionEdit(BaseModel):
     explanation: str | None = None
     rubric: list[RubricPoint] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    client_id: str | None = Field(default=None, max_length=64)
+    """新增題目時前端產生的請求 id：同一個 id 重送（網路重試、連按）只新增一次；修改題目時不用"""
 
     @model_validator(mode="after")
     def check_answer(self) -> "QuestionEdit":

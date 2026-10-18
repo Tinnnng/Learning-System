@@ -43,7 +43,8 @@ function dateLabel(event: Pick<EventOut, 'date' | 'end_date' | 'time'>) {
   return `${format(event.date)}（${weekday}）${event.end_date ? `～${format(event.end_date)}` : ''}${event.time ? ` ${event.time}` : ''}`
 }
 
-function daysText(days: number) {
+function daysText(days: number, ongoing = false) {
+  if (ongoing) return '進行中'
   if (days === 0) return '今天'
   if (days === 1) return '明天'
   return days > 0 ? `${days} 天後` : `${-days} 天前`
@@ -55,12 +56,16 @@ function Countdown() {
   if (!exam) return null
   return (
     <section aria-label="下一場考試" className="flex flex-wrap items-end gap-x-8 gap-y-3 rounded-lg bg-sheet px-6 py-6 shadow-sheet sm:px-8">
-      <div className="flex items-baseline gap-2 text-accent">
-        <CountUp value={exam.days_until} duration={900} className="font-display text-[64px] font-bold leading-none tabular-nums" />
-        <span className="text-lg">天</span>
-      </div>
+      {exam.ongoing ? (
+        <span className="font-display text-[48px] font-bold leading-none text-accent">進行中</span>
+      ) : (
+        <div className="flex items-baseline gap-2 text-accent">
+          <CountUp value={exam.days_until} duration={900} className="font-display text-[64px] font-bold leading-none tabular-nums" />
+          <span className="text-lg">天</span>
+        </div>
+      )}
       <div className="flex flex-col gap-1 pb-1">
-        <span className="eyebrow">距離下一場考試</span>
+        <span className="eyebrow">{exam.ongoing ? '考試期間' : '距離下一場考試'}</span>
         <span className="font-display text-xl font-bold">{exam.title}</span>
         <span className="text-sm text-muted">
           {dateLabel(exam)}
@@ -496,7 +501,7 @@ export function CalendarPage() {
           event.kind === 'exam' && event.days_until >= 0 ? 'font-medium text-accent' : 'text-muted',
         )}
       >
-        {daysText(event.days_until)}
+        {daysText(event.days_until, event.ongoing)}
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="flex items-center gap-2">

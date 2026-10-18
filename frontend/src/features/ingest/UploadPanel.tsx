@@ -47,7 +47,7 @@ export function UploadPanel() {
   const queryClient = useQueryClient()
   const pending = useQuery({ queryKey: ['ingest', 'uploads'], queryFn: fetchPending })
   const [kind, setKind] = useState<UploadKind>('gaopu')
-  const [examType, setExamType] = useState<'高考' | '普考'>('普考')
+  const [examType, setExamType] = useState<'高考' | '普考' | '地方特考'>('普考')
   const [category, setCategory] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const categoryId = useId()
@@ -83,13 +83,13 @@ export function UploadPanel() {
             upload.reset()
           }}
           options={[
-            { value: 'gaopu', label: '高普考試卷', hint: '題目＋答案 PDF' },
+            { value: 'gaopu', label: '國考試卷', hint: '題目＋答案 PDF' },
             { value: 'lecture', label: '期中考教材', hint: 'PPT／Word／PDF' },
             { value: 'text', label: '題目文字檔', hint: '.txt／.md／.json' },
           ]}
         />
         {kind === 'gaopu' && (
-          <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,1fr)]">
+          <div className="grid gap-3 sm:grid-cols-[280px_minmax(0,1fr)]">
             <Segmented
               label="考試"
               value={examType}
@@ -97,11 +97,12 @@ export function UploadPanel() {
               options={[
                 { value: '普考', label: '普考' },
                 { value: '高考', label: '高考' },
+                { value: '地方特考', label: '地方特考' },
               ]}
             />
             <div className="flex flex-col gap-1.5">
               <label htmlFor={categoryId} className="text-xs text-muted">
-                類科（同一份試卷會依類科分組）
+                類科（同一份試卷會依類科分組；地方特考把等別寫在前面，例如：四等一般行政）
               </label>
               <input
                 id={categoryId}
@@ -219,8 +220,17 @@ function PaperRow({ paper }: { paper: PendingPaper }) {
   const withAi = useAiRun(convert(true))
   const busy = plain.mutation.isPending || withAi.mutation.isPending
   const blocked = !paper.has_question || !paper.has_answer || paper.kind === 'essay' || paper.reviewed
+  // 兩個按鈕各有自己的結果；開始其中一個時清掉另一個上次的結果，畫面只留最近一次的成功或錯誤
   const result = withAi.mutation.data ?? plain.mutation.data
   const error = withAi.mutation.error ?? plain.mutation.error
+  const runPlain = () => {
+    withAi.mutation.reset()
+    plain.mutation.mutate()
+  }
+  const runAi = () => {
+    plain.mutation.reset()
+    withAi.mutation.mutate()
+  }
   const status = paper.reviewed
     ? '已經有 Claude Code 逐題校對過的版本，不用再轉，直接在下方「待匯入」匯入'
     : !paper.has_question
@@ -249,7 +259,7 @@ function PaperRow({ paper }: { paper: PendingPaper }) {
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" disabled={blocked || busy} onClick={() => plain.mutation.mutate()}>
+        <Button size="sm" variant="secondary" disabled={blocked || busy} onClick={runPlain}>
           {plain.mutation.isPending ? '轉檔中…' : '自動轉檔（不用 AI）'}
         </Button>
         <Button size="sm" disabled={blocked || busy} onClick={() => setConfirmAi(true)}>
@@ -279,7 +289,7 @@ function PaperRow({ paper }: { paper: PendingPaper }) {
             <Button
               onClick={() => {
                 setConfirmAi(false)
-                withAi.mutation.mutate()
+                runAi()
               }}
             >
               開始校對
@@ -301,15 +311,17 @@ function PaperRow({ paper }: { paper: PendingPaper }) {
 
 function LectureRow({ lecture }: { lecture: PendingLecture }) {
   const [open, setOpen] = useState(false)
-  const [count, setCount] = useState(15)
+  // 輸入框先存使用者打的字，刪光再重打不會被立刻改回 1；送出時才換成 1～60 的整數
+  const [countText, setCountText] = useState('15')
+  const count = Math.min(60, Math.max(1, Math.round(Number(countText)) || 1))
   const [subject, setSubject] = useState('')
   const countId = useId()
   const subjectId = useId()
   const estimate = useQuery({
-    queryKey: ['ingest', 'estimate', lecture.name],
+    // 檔案大小也放進 key：同名教材換了內容要重新估算
+    queryKey: ['ingest', 'estimate', lecture.name, lecture.size_bytes],
     queryFn: () => api.get<{ calls: number }>(`/ingest/uploads/lectures/${encodeURIComponent(lecture.name)}/estimate`),
     enabled: open,
-    staleTime: Infinity,
   })
   const generate = useAiRun((id) =>
     api.post<ConvertResult>(`/ingest/uploads/lectures/${encodeURIComponent(lecture.name)}/generate`, {
@@ -378,8 +390,9 @@ function LectureRow({ lecture }: { lecture: PendingLecture }) {
                 type="number"
                 min={1}
                 max={60}
-                value={count}
-                onChange={(event) => setCount(Math.min(60, Math.max(1, Number(event.target.value) || 1)))}
+                value={countText}
+                onChange={(event) => setCountText(event.target.value)}
+                onBlur={() => setCountText(String(count))}
                 className="tabular h-11 rounded-md border border-line bg-sheet px-3 text-ink outline-none focus:border-ink"
               />
             </div>

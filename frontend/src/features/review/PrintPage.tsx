@@ -28,6 +28,9 @@ export function PrintPage() {
     queryKey: ['notes', 'batch', ids.join(',')],
     queryFn: () => api.get<Note[]>(`/notes/questions?${ids.map((id) => `ids=${id}`).join('&')}`),
     enabled: ids.length > 0,
+    // 每次打開都重抓：剛在錯題本改過筆記又馬上匯出時，不能印出快取裡的舊筆記
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
   const aiExplanations = useQuery({
     queryKey: ['tutor', 'explanations', ids.join(',')],
@@ -35,7 +38,7 @@ export function PrintPage() {
     enabled: ids.length > 0,
   })
 
-  const ready = wrong.isSuccess && (ids.length === 0 || (notes.isSuccess && aiExplanations.isSuccess))
+  const ready = wrong.isSuccess && (ids.length === 0 || (notes.isSuccess && !notes.isFetching && aiExplanations.isSuccess))
   useEffect(() => {
     if (!ready || ids.length === 0) return
     // 等字型與公式排好再開列印視窗

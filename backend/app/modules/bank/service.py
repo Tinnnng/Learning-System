@@ -1,6 +1,7 @@
 """題庫的公開介面。其他模組只能透過這裡的函式讀寫試卷與題目。"""
 
 import re
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -126,6 +127,8 @@ def list_papers(
     category: str | None = None,
     subject: str | None = None,
     origin: str | None = None,
+    no_year: bool = False,
+    no_category: bool = False,
 ) -> list[PaperSummary]:
     question_count = (
         select(func.count(Question.id)).where(Question.paper_id == ExamPaper.id).correlate(ExamPaper).scalar_subquery()
@@ -141,12 +144,16 @@ def list_papers(
         query = query.where(ExamPaper.exam_type == exam_type)
     if year is not None:
         query = query.where(ExamPaper.year == year)
+    elif no_year:
+        query = query.where(ExamPaper.year.is_(None))
     if subject:
         query = query.where(ExamPaper.subject == subject)
     if origin:
         query = query.where(ExamPaper.origin == origin)
     if category:
         query = query.where(ExamPaper.categories.any(PaperCategory.name == category))
+    elif no_category:
+        query = query.where(~ExamPaper.categories.any())
     query = query.order_by(ExamPaper.year.desc(), ExamPaper.exam_type, ExamPaper.subject_code, ExamPaper.subject)
     return [_summary(paper, count, essays) for paper, count, essays in db.execute(query).all()]
 
@@ -187,12 +194,16 @@ def query_question_ids(db: Session, criteria: QuestionFilter) -> list[int]:
     if criteria.keyword:
         columns += [Question.stem, Question.options, Question.passage, Question.explanation]
     query = select(*columns).join(ExamPaper).where(Question.type.in_(criteria.types))
-    if criteria.paper_ids:
+    if criteria.paper_ids is not None:
         query = query.where(ExamPaper.id.in_(criteria.paper_ids))
     if criteria.exam_type:
         query = query.where(ExamPaper.exam_type == criteria.exam_type)
     if criteria.year is not None:
         query = query.where(ExamPaper.year == criteria.year)
+    elif criteria.no_year:
+        query = query.where(ExamPaper.year.is_(None))
+    if criteria.no_category and not criteria.category:
+        query = query.where(~ExamPaper.categories.any())
     if criteria.subject:
         query = query.where(ExamPaper.subject == criteria.subject)
     if criteria.origin:
@@ -231,7 +242,11 @@ def _search_fields(row) -> dict[SearchField, str]:
 
 def _snippet(text: str, word: str, before: int = 40, after: int = 60) -> str:
     text = re.sub(r"\s+", " ", text).strip()
-    index = text.lower().find(word)
+    # 不用 text.lower() 找位置：有些字轉小寫後長度會變（例如 İ），位置會和原文錯開
+    match = re.search(re.escape(word), text, re.IGNORECASE)
+    index = match.start() if match else -1
+    if match:
+        word = match.group(0)
     if index < 0:
         return text[: before + after]
     start = max(0, index - before)
@@ -343,24 +358,34 @@ def _just_created(created_at: datetime | None) -> bool:
     return created_at is not None and datetime.now(UTC).replace(tzinfo=None) - created_at < RESEND_WINDOW
 
 
+# 新增題目的請求 id → (題目 id, 新增時間)。用請求 id 判斷重送，不比對內容：
+# 內容比對會把「剛把上一題改成 X、又新增一題內容也是 X」誤當成重送而吞掉
+_recent_adds: dict[tuple[int, str], tuple[int, datetime]] = {}
+_recent_adds_lock = threading.Lock()
+
+
 def add_question(db: Session, paper_id: int, data: QuestionEdit) -> QuestionOut:
     begin_write(db)  # 同時新增兩題時題號不會撞在一起
     paper = db.get(ExamPaper, paper_id)
     if paper is None:
         raise BankError("找不到這份試卷", status_code=404)
-    last = db.scalar(select(Question).where(Question.paper_id == paper_id).order_by(Question.number.desc()).limit(1))
-    question = Question(paper_id=paper_id, number=(last.number if last else 0) + 1, answer_source="manual", assets=[], added_in_app=True)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    key = (paper_id, data.client_id) if data.client_id else None
+    with _recent_adds_lock:
+        for stale in [k for k, (_, at) in _recent_adds.items() if now - at >= RESEND_WINDOW]:
+            del _recent_adds[stale]
+        seen = _recent_adds.get(key) if key else None
+    if seen is not None and (existing := db.get(Question, seen[0])) is not None:
+        return QuestionOut.model_validate(existing)  # 同一個請求重送：不再新增一題
+    last_number = db.scalar(select(func.max(Question.number)).where(Question.paper_id == paper_id))
+    question = Question(paper_id=paper_id, number=(last_number or 0) + 1, answer_source="manual", assets=[], added_in_app=True)
     _apply_edit(question, data)
-    if last is not None and last.added_in_app and _just_created(last.created_at) and _same_content(last, question):
-        return QuestionOut.model_validate(last)  # 同一個請求重送：不再新增一題
     db.add(question)
     db.commit()
+    if key:
+        with _recent_adds_lock:
+            _recent_adds[key] = (question.id, now)
     return QuestionOut.model_validate(question)
-
-
-def _same_content(a: Question, b: Question) -> bool:
-    fields = ("type", "label", "passage", "stem", "options", "answer", "points", "explanation", "rubric", "tags")
-    return all(getattr(a, field) == getattr(b, field) for field in fields)
 
 
 def create_paper(db: Session, data: PaperCreate) -> PaperDetail:
@@ -372,7 +397,7 @@ def create_paper(db: Session, data: PaperCreate) -> PaperDetail:
         and _just_created(latest.created_at)
         and (latest.exam_type, latest.year, latest.subject, latest.title, latest.duration_minutes)
         == (data.exam_type, data.year, data.subject, title, data.duration_minutes)
-        and [category.name for category in latest.categories] == list(dict.fromkeys(data.categories))
+        and sorted(category.name for category in latest.categories) == sorted(set(data.categories))
     ):
         return get_paper(db, latest.id)  # 同一個請求重送：不再建一份
     paper = ExamPaper(

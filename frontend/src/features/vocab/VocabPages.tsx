@@ -72,7 +72,10 @@ export function DailyPage() {
   const queryClient = useQueryClient()
   const daily = useQuery({ queryKey: ['vocab', 'daily'], queryFn: fetchDaily, staleTime: Infinity })
   const stats = useQuery({ queryKey: ['vocab', 'stats'], queryFn: fetchStats })
-  const [finished, setFinished] = useState(false)
+  // 寫完的是哪一天的每日單字：換日（頁面開著過午夜）後新的一組要重新作答，不能沿用昨天的「完成」
+  const [finishedDay, setFinishedDay] = useState<string | null>(null)
+  // 清除單字進度後要重新掛載 QuizRunner，從新一組的第 1 題開始
+  const [runKey, setRunKey] = useState(0)
   const [round, setRound] = useState<ExtraRound | null>(null)
   const roundSize = daily.data?.total || 5
   // 再測一組：選字方式和每日一樣（到期 → 新單字 → 隨機），避開今天已經出現過的字
@@ -81,7 +84,7 @@ export function DailyPage() {
     onSuccess: (items) => setRound({ number: (round?.number ?? 0) + 1, items, results: null }),
   })
 
-  const done = daily.data && daily.data.total > 0 && (finished || daily.data.done >= daily.data.total)
+  const done = daily.data && daily.data.total > 0 && (finishedDay === daily.data.day || daily.data.done >= daily.data.total)
   const startNext = () => nextRound.mutate()
 
   return (
@@ -98,6 +101,8 @@ export function DailyPage() {
             <Loading />
           ) : daily.isError ? (
             <ErrorState error={daily.error} onRetry={() => daily.refetch()} />
+          ) : daily.data.total === 0 && daily.data.word_count > 0 ? (
+            <AllLearned />
           ) : daily.data.total === 0 ? (
             <EmptyState title="單字庫是空的" action={<ButtonLink to="/vocab/words">匯入單字</ButtonLink>}>
               匯入自己的單字表，或使用內建的多益核心單字。
@@ -117,7 +122,15 @@ export function DailyPage() {
           ) : done ? (
             <DailyDone onNext={startNext} pending={nextRound.isPending} />
           ) : (
-            <QuizRunner items={daily.data.items} context="daily" onFinish={() => setFinished(true)} />
+            <QuizRunner
+              key={`${daily.data.day}-${runKey}`}
+              items={daily.data.items}
+              context="daily"
+              onFinish={() => {
+                setFinishedDay(daily.data.day)
+                queryClient.invalidateQueries({ queryKey: ['vocab', 'daily'] })
+              }}
+            />
           )}
           {nextRound.isError && <ErrorState error={nextRound.error} onRetry={startNext} />}
         </Sheet>
@@ -144,7 +157,8 @@ export function DailyPage() {
               run={resetVocab}
               doneText={(result) => `已清除，${result.words} 個單字都變回沒學過。`}
               onDone={() => {
-                setFinished(false)
+                setFinishedDay(null)
+                setRunKey((key) => key + 1)
                 setRound(null)
                 queryClient.invalidateQueries({ queryKey: ['vocab'] })
               }}
@@ -207,6 +221,23 @@ function RoundDone({ round, onNext, pending }: { round: ExtraRound; onNext: () =
         )}
         <ButtonLink to="/" variant="ghost">
           回今日
+        </ButtonLink>
+      </div>
+    </div>
+  )
+}
+
+/** 單字庫有字，但都學會了：今天沒有每日單字（不是單字庫空的） */
+function AllLearned() {
+  return (
+    <div className="flex flex-col items-start gap-4 animate-[rise-in_var(--dur)_var(--ease-out)]">
+      <span className="eyebrow">今天沒有要背的字</span>
+      <p className="m-0 font-display text-2xl font-bold">單字庫的字都學會了</p>
+      <p className="m-0 text-muted">匯入新的單字表，重新整理後就會抽今天的每日單字。</p>
+      <div className="flex flex-wrap gap-2">
+        <ButtonLink to="/vocab/words">匯入單字</ButtonLink>
+        <ButtonLink to="/vocab/mastered" variant="secondary">
+          看已學會單字
         </ButtonLink>
       </div>
     </div>

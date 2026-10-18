@@ -20,6 +20,11 @@ from app.modules.ingest.schemas import (
 router = APIRouter(tags=["ingest"])
 
 
+def _load_error(error: ValueError) -> HTTPException:
+    """匯入檔格式錯誤（文字檔格式不對、JSON 欄位不符）：回 422 並附上原因，不要變成 500。"""
+    return HTTPException(status_code=422, detail=f"檔案格式有問題：{error}")
+
+
 @router.get("/files", response_model=list[ConvertedFile])
 def list_converted_files(db: Session = Depends(get_db)) -> list[ConvertedFile]:
     """列出 data/converted/ 底下待匯入的檔案與檢查結果。"""
@@ -31,7 +36,10 @@ def get_converted_file(name: str) -> ImportBundle:
     path = service.resolve_converted(name)
     if path is None:
         raise HTTPException(status_code=404, detail="找不到檔案")
-    return service.load_bundle(path)
+    try:
+        return service.load_bundle(path)
+    except ValueError as error:
+        raise _load_error(error) from error
 
 
 @router.put("/files/{name}", response_model=CheckReport)
@@ -50,7 +58,11 @@ def import_converted_file(name: str, db: Session = Depends(get_db)) -> ImportOut
     path = service.resolve_converted(name)
     if path is None:
         raise HTTPException(status_code=404, detail="找不到檔案")
-    return service.import_file(db, path)
+    try:
+        bundle = service.load_bundle(path)
+    except ValueError as error:
+        raise _load_error(error) from error
+    return service.import_bundle(db, bundle)
 
 
 @router.post("/check", response_model=CheckReport)

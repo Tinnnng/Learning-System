@@ -188,9 +188,10 @@ def test_resent_create_requests_do_not_duplicate(client):
     assert client.post("/api/bank/papers", json=paper).json()["id"] == first["id"]  # 重送：同一份
     assert client.post("/api/bank/papers", json={**paper, "subject": "資料結構"}).json()["id"] != first["id"]
 
-    question = {"stem": "1+1=?", "options": ["1", "2"], "answer": ["B"]}
+    # 新增題目用前端帶的請求 id 判斷重送
+    question = {"stem": "1+1=?", "options": ["1", "2"], "answer": ["B"], "client_id": "req-1"}
     url = f"/api/bank/papers/{first['id']}/questions"
     one = client.post(url, json=question).json()
     assert client.post(url, json=question).json()["id"] == one["id"]
-    two = client.post(url, json={**question, "stem": "2+2=?", "options": ["4", "5"], "answer": ["A"]}).json()
+    two = client.post(url, json={**question, "stem": "2+2=?", "options": ["4", "5"], "answer": ["A"], "client_id": "req-2"}).json()
     assert (one["number"], two["number"]) == (1, 2)

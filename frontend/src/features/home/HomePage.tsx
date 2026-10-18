@@ -14,6 +14,7 @@ import { fetchCountdown, fetchOverview, fetchPapers, fetchSessions, fetchVocabSt
 import { FortuneCard } from './FortuneCard'
 import { PomodoroCard } from './PomodoroCard'
 import { StudyCalendar } from './StudyCalendar'
+import { useDayChange } from './useDayChange'
 
 /** 一排短短的螢光筆劃記，用來表示「完成幾個」 */
 function Bubbles({ total, done, label }: { total: number; done: number; label: string }) {
@@ -95,6 +96,7 @@ function SessionRow({ session }: { session: SessionSummary }) {
 }
 
 export function HomePage() {
+  useDayChange()
   const vocab = useQuery({ queryKey: ['vocab', 'stats'], queryFn: fetchVocabStats })
   const overview = useQuery({ queryKey: ['review', 'overview'], queryFn: fetchOverview })
   const open = useQuery({ queryKey: ['exam', 'sessions', 'open'], queryFn: () => fetchSessions('open') })
@@ -121,9 +123,19 @@ export function HomePage() {
         actions={
           nextExam ? (
             <Link to="/calendar" className="group flex items-baseline gap-2 rounded-md px-3 py-1 transition-colors hover:bg-accent-faint">
-              <span className="text-sm text-muted">距離{nextExam.title}</span>
-              <CountUp value={nextExam.days_until} className="font-display text-3xl font-bold leading-none text-accent tabular-nums" />
-              <span className="text-sm text-accent">天</span>
+              {'ongoing' in nextExam && nextExam.ongoing === true ? (
+                // 多天的考試已經開始、還沒結束
+                <>
+                  <span className="text-sm text-muted">{nextExam.title}</span>
+                  <span className="font-display text-2xl font-bold leading-none text-accent">進行中</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm text-muted">距離{nextExam.title}</span>
+                  <CountUp value={nextExam.days_until} className="font-display text-3xl font-bold leading-none text-accent tabular-nums" />
+                  <span className="text-sm text-accent">天</span>
+                </>
+              )}
             </Link>
           ) : (
             countdown.isSuccess && (

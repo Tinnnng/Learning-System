@@ -5,7 +5,9 @@
   - 中間答錯一次就進「錯題單字」，之後要連續答對 word_mastery_streak 次（預設 5）才移出、變成已學會。
   - 已學會的字不再出現在每日單字與再測一組。
 - 每日複習：每天抽 daily_vocab_count 個字（預設 5）。最多 daily_review_slots 個（預設 2）給學習中＋錯題的字
-  （到期的優先、再來是最久沒寫的），其餘從沒學過的字隨機抽；任一邊不夠就用另一邊補。順序打亂。
+  （最久沒寫的優先，CLAUDE.md 的決定），其餘從沒學過的字隨機抽；任一邊不夠就用另一邊補。順序打亂。
+  一個字都抽不到（全部學會）時不保存空的每日單字，當天匯入新字後重新整理就會抽。
+- 每日作答記在「那個字所在的每日單字」那一天：23:58 打開、00:01 才作答，算在前一天那組，不會佔掉今天的。
 - 錯題單字集中複習：一次 daily_vocab_count 個，最久沒寫的優先。
 - 每次作答都交給 srs 排下次複習時間；已學會的字移出 srs。
 """
@@ -13,7 +15,7 @@
 import json
 import random
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -261,10 +263,9 @@ def _attempt_counts(db: Session) -> dict[int, int]:
     return {p.word_id: p.attempts for p in db.scalars(select(WordProgress))}
 
 
-def _least_recent(progress: list[WordProgress], rng: random.Random, due: set[int] | None = None) -> list[int]:
-    """複習的字的出題順序：到期的優先，再來是最久沒寫的；同時間的隨機。每個字輪流出現，不會一直抽到同幾個。"""
-    due = due or set()
-    keyed = [(p.word_id not in due, p.last_answered_at or datetime.min, rng.random(), p.word_id) for p in progress]
+def _least_recent(progress: list[WordProgress], rng: random.Random) -> list[int]:
+    """複習的字的出題順序：最久沒寫的優先；同時間的隨機。每個字輪流出現，不會一直抽到同幾個。"""
+    keyed = [(p.last_answered_at or datetime.min, rng.random(), p.word_id) for p in progress]
     return [word_id for *_, word_id in sorted(keyed)]
 
 
@@ -282,8 +283,7 @@ def _pick_words(
     exclude = exclude or set()
     progress = {p.word_id: p for p in db.scalars(select(WordProgress)) if p.word_id in words and p.word_id not in exclude}
     reviewing = [p for p in progress.values() if not _is_mastered(p)]
-    due = set(srs_service.due_item_ids(db, "word", now=now))
-    review_ids = _least_recent(reviewing, rng, due)
+    review_ids = _least_recent(reviewing, rng)
     new_ids = [wid for wid in words if wid not in exclude and wid not in progress]
     rng.shuffle(new_ids)
 
@@ -309,7 +309,7 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
     day = today(now)
     pool = list(db.scalars(select(Word).order_by(Word.id)))
     if not pool:
-        return DailyQuiz(day=day, items=[], done=0, total=0)
+        return DailyQuiz(day=day, items=[], done=0, total=0, word_count=0)
     words = {word.id: word for word in pool}
 
     daily = db.get(DailySet, day)
@@ -320,6 +320,10 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
         rng = random.Random(day)
         attempts = _attempt_counts(db)
         chosen = _pick_words(db, words, get_settings().daily_vocab_count, rng, now, attempts)
+        if not chosen:
+            # 單字都學會了：不保存空的一組，當天匯入新字後再打開就會重新抽
+            db.rollback()
+            return DailyQuiz(day=day, items=[], done=0, total=0, word_count=len(pool))
         types = [quiz.choose_quiz_type(words[wid], attempts.get(wid, 0), rng, len(pool)) for wid in chosen]
         daily = DailySet(day=day, word_ids=chosen, quiz_types=types)
         db.add(daily)
@@ -341,7 +345,9 @@ def get_daily(db: Session, now: datetime | None = None) -> DailyQuiz:
         if word_id in answered:
             item = item.model_copy(update={"answered": True, "is_correct": answered[word_id]})
         items.append(item)
-    return DailyQuiz(day=day, items=items, done=sum(1 for item in items if item.answered), total=len(items))
+    return DailyQuiz(
+        day=day, items=items, done=sum(1 for item in items if item.answered), total=len(items), word_count=len(pool)
+    )
 
 
 def build_quiz(
@@ -419,6 +425,18 @@ def _replayed(db: Session, word: Word, client_id: str | None) -> AnswerResult | 
     )
 
 
+def _daily_day_of(db: Session, word_id: int, now: datetime) -> str:
+    """每日作答要記在哪一天：這個字在今天那組就記今天；只在昨天那組（例如 23:58 打開、00:01 才作答）就記昨天。
+    兩組都沒有：頁面停在更早的一天，請使用者重新整理。"""
+    day = today(now)
+    previous = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    for candidate in (day, previous):
+        daily = db.get(DailySet, candidate)
+        if daily is not None and word_id in daily.word_ids:
+            return candidate
+    raise VocabError("每日單字已經換成新的一組，請重新整理頁面", status_code=409)
+
+
 def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerResult:
     now = now or _utc_now()
     begin_write(db)  # 每日作答同時送兩次：第二次要看到第一次的紀錄（今天已作答）
@@ -428,7 +446,7 @@ def answer(db: Session, data: AnswerIn, now: datetime | None = None) -> AnswerRe
     if (replay := _replayed(db, word, data.client_id)) is not None:
         return replay
 
-    day = today(now) if data.context == "daily" else None
+    day = _daily_day_of(db, word.id, now) if data.context == "daily" else None
     if day is not None:
         already = db.scalar(
             select(WordAttempt.id).where(
@@ -475,9 +493,25 @@ def stats(db: Session, now: datetime | None = None) -> VocabStats:
     now = now or _utc_now()
     progress = list(db.scalars(select(WordProgress)))
     daily = db.get(DailySet, today(now))
-    daily_done = db.scalar(
-        select(func.count(WordAttempt.id)).where(WordAttempt.context == "daily", WordAttempt.daily_day == today(now))
+    # 只數今天那組裡的字（跨午夜補寫昨天那組的不算今天）
+    daily_done = (
+        db.scalar(
+            select(func.count(func.distinct(WordAttempt.word_id))).where(
+                WordAttempt.context == "daily",
+                WordAttempt.daily_day == daily.day,
+                WordAttempt.word_id.in_(daily.word_ids),
+            )
+        )
+        if daily
+        else 0
     )
+    if daily:
+        daily_total = len(daily.word_ids)
+    else:
+        # 今天還沒抽：可以出的字（沒學會的）有幾個，最多 daily_vocab_count 個
+        mastered = sum(1 for p in progress if _is_mastered(p))
+        word_total = db.scalar(select(func.count(Word.id))) or 0
+        daily_total = min(get_settings().daily_vocab_count, max(word_total - mastered, 0))
     return VocabStats(
         total=db.scalar(select(func.count(Word.id))) or 0,
         studied=len(progress),
@@ -485,7 +519,7 @@ def stats(db: Session, now: datetime | None = None) -> VocabStats:
         mastered=sum(1 for p in progress if p.mastered_at is not None and not p.in_wrong_list),
         due_today=srs_service.summary(db, "word", now=now).due_now,
         daily_done=daily_done or 0,
-        daily_total=len(daily.word_ids) if daily else get_settings().daily_vocab_count,
+        daily_total=daily_total,
     )
 
 

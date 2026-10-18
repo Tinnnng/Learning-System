@@ -112,6 +112,16 @@ export function BackupPage() {
     },
   })
 
+  // 換對象或關掉對話框時清掉上一次的錯誤，不然新對話框會顯示別份備份的錯誤
+  const openRestore = (target: RestoreTarget | null) => {
+    restore.reset()
+    setRestoreTarget(target)
+  }
+  const openDelete = (target: Snapshot | null) => {
+    remove.reset()
+    setDeleteTarget(target)
+  }
+
   const snapshots = status.data?.snapshots ?? []
   const latest = snapshots[0]
 
@@ -160,8 +170,8 @@ export function BackupPage() {
                   key={snapshot.name}
                   snapshot={snapshot}
                   latest={snapshot === latest}
-                  onRestore={() => setRestoreTarget({ kind: 'snapshot', snapshot })}
-                  onDelete={() => setDeleteTarget(snapshot)}
+                  onRestore={() => openRestore({ kind: 'snapshot', snapshot })}
+                  onDelete={() => openDelete(snapshot)}
                 />
               ))}
             </ul>
@@ -181,7 +191,7 @@ export function BackupPage() {
               aria-label="選擇備份 zip 檔"
               onChange={(event) => {
                 const file = event.target.files?.[0]
-                if (file) setRestoreTarget({ kind: 'file', file })
+                if (file) openRestore({ kind: 'file', file })
                 event.target.value = ''
               }}
             />
@@ -206,11 +216,13 @@ export function BackupPage() {
 
       <Dialog
         open={restoreTarget !== null}
-        onClose={() => !restore.isPending && setRestoreTarget(null)}
+        onClose={() => openRestore(null)}
+        // 還原進行中不能按 Esc 或點背景關掉：關掉了就看不到還原結果或錯誤，也沒辦法再打開
+        confirmClose={() => !restore.isPending}
         title="用這份備份還原？"
         actions={
           <>
-            <Button variant="ghost" onClick={() => setRestoreTarget(null)} disabled={restore.isPending}>
+            <Button variant="ghost" onClick={() => openRestore(null)} disabled={restore.isPending}>
               取消
             </Button>
             <Button variant="danger" onClick={() => restoreTarget && restore.mutate(restoreTarget)} disabled={restore.isPending}>
@@ -235,11 +247,11 @@ export function BackupPage() {
 
       <Dialog
         open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => openDelete(null)}
         title="刪除這份備份？"
         actions={
           <>
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            <Button variant="ghost" onClick={() => openDelete(null)}>
               取消
             </Button>
             <Button variant="danger" onClick={() => deleteTarget && remove.mutate(deleteTarget)} disabled={remove.isPending}>

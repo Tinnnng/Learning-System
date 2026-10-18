@@ -68,6 +68,8 @@ class DailyQuiz(BaseModel):
     items: list[QuizItem]
     done: int
     total: int
+    word_count: int = 0
+    """單字庫有幾個字：total 是 0 時，用來分辨「單字庫是空的」和「單字都學會了」。"""
 
 
 class AnswerIn(BaseModel):

@@ -63,7 +63,7 @@ def list_converted(db: Session) -> list[ConvertedFile]:
     for path in paths:
         try:
             report = check_bundle(load_bundle(path))
-        except (ValidationError, ValueError) as error:
+        except (ValidationError, ValueError, OSError) as error:
             files.append(ConvertedFile(name=path.name, report=None, error=str(error), imported_paper_id=None))
             continue
         files.append(

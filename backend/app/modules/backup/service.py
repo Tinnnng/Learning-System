@@ -166,7 +166,10 @@ def _write_snapshot(target: Path, partial: Path, now: datetime, kind: SnapshotKi
 def _prune_auto() -> None:
     autos = [s for s in list_snapshots() if s.kind == "auto"]
     for old in autos[max(get_settings().backup_keep, 1) :]:
-        (backups_dir() / old.name).unlink(missing_ok=True)
+        try:
+            (backups_dir() / old.name).unlink(missing_ok=True)
+        except PermissionError:
+            continue  # 正在被下載或開啟（Windows 檔案鎖），下次自動備份再清
 
 
 def maybe_auto_backup(now: datetime | None = None) -> SnapshotOut | None:
@@ -189,7 +192,11 @@ def snapshot_path(name: str) -> Path:
 
 
 def delete_snapshot(name: str) -> None:
-    snapshot_path(name).unlink()
+    try:
+        snapshot_path(name).unlink()
+    except PermissionError as error:
+        # Windows 上正在下載或被其他程式開啟的檔案不能刪
+        raise BackupError("這份備份檔正在使用中（例如還在下載），請稍後再試", 409) from error
 
 
 def restore_snapshot(name: str) -> RestoreResult:
@@ -213,8 +220,18 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict:
         raise BackupError("備份檔的 manifest.json 已損毀") from error
     if not isinstance(manifest, dict) or manifest.get("app") != APP_ID:
         raise BackupError("這不是本系統的備份檔")
-    if manifest.get("format", 0) > FORMAT_VERSION:
+    # 先驗證欄位格式，才不會在資料庫已經換掉之後才因為欄位錯誤而失敗
+    version = manifest.get("format", 0)
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise BackupError("備份檔的 manifest.json 格式不正確（format）")
+    if version > FORMAT_VERSION:
         raise BackupError("這份備份來自較新版本的系統，請先更新程式")
+    created = manifest.get("created_at")
+    if created is not None:
+        try:
+            datetime.fromisoformat(created)
+        except (TypeError, ValueError) as error:
+            raise BackupError("備份檔的 manifest.json 格式不正確（created_at）") from error
     return manifest
 
 

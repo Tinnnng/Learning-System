@@ -60,14 +60,28 @@ def _now() -> datetime:
 
 def _parse_json(text: str) -> dict:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-    try:
-        payload = json.loads(match.group()) if match else None
-    except json.JSONDecodeError:
-        payload = None
-    if not isinstance(payload, dict):
-        raise TopicsError("AI 回傳的格式看不懂，請再試一次", 502)
-    return payload
+    # 從每個「{」試著解析一個完整的 JSON 物件；JSON 後面多一句含大括號的說明也讀得到前面那段
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", cleaned):
+        try:
+            payload, _ = decoder.raw_decode(cleaned, match.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    raise TopicsError("AI 回傳的格式看不懂，請再試一次", 502)
+
+
+_NAME_SEPARATORS = re.compile(r"[、，,；;\n]+")
+
+
+def _names(value: object) -> list[str]:
+    """AI 給的知識點名稱：陣列照用；字串（例如「行政處分、比例原則」）依頓號、逗號、分號切開，不能逐字走過。"""
+    if isinstance(value, str):
+        return [name for name in _NAME_SEPARATORS.split(value) if name.strip()]
+    if isinstance(value, list):
+        return [name for name in value if isinstance(name, str)]
+    return []
 
 
 def _complete(db: Session, feature: str, system: str, prompt: str) -> str:
@@ -124,8 +138,8 @@ def _build_taxonomy(db: Session, subject: str, questions: list[QuestionOut], exi
     payload = _parse_json(_complete(db, "topics_taxonomy", TAXONOMY_SYSTEM, "\n".join(lines)))
     topics: list[str] = []
     keys = {_topic_key(OTHER)}
-    for topic in payload.get("topics") or []:
-        if isinstance(topic, str) and (name := _topic_name(topic)) and (key := _topic_key(name)) not in keys:
+    for topic in _names(payload.get("topics")):
+        if (name := _topic_name(topic)) and (key := _topic_key(name)) not in keys:
             keys.add(key)
             topics.append(name)
     if not topics:
@@ -149,10 +163,9 @@ def _classify(db: Session, subject: str, topics: list[str], batch: list[Question
 
     result = {}
     for index, question in enumerate(batch, start=1):
-        names = by_index.get(index) or []
-        if isinstance(names, str):
-            names = [names]
-        picked = [allowed[key] for name in names if isinstance(name, str) and (key := _topic_key(name)) in allowed]
+        names = _names(by_index.get(index))
+        # 清單裡太長的名稱存的是截斷後的版本，AI 回原本的全名時也要對得上
+        picked = [allowed[key] for name in names if (key := _topic_key(_topic_name(name))) in allowed]
         result[question.id] = list(dict.fromkeys(picked))[:2] or [OTHER]
     return result
 
@@ -183,17 +196,27 @@ def _tag_subject(db: Session, data: TagRequest) -> TagResult:
     db.execute(
         update(TopicTag).where(TopicTag.question_id.in_(ids), TopicTag.subject != data.subject).values(subject=data.subject)
     )
-    if data.retag:
-        db.execute(
-            delete(TopicTag).where(
-                or_(TopicTag.subject == data.subject, TopicTag.question_id.in_(ids)), TopicTag.source == "ai"
-            )
-        )
     db.commit()
 
-    tagged = set(db.scalars(select(TopicTag.question_id).where(TopicTag.question_id.in_(ids))))
-    todo = [qid for qid in ids if qid not in tagged]
-    existing = _subject_topics(db, data.subject)
+    # 重新標記：舊的 AI 標記先留著，全部分類完才一次換掉；AI 關閉、額度用完或回傳看不懂時，原本的標記都還在
+    old_ai_tags = (
+        or_(TopicTag.subject == data.subject, TopicTag.question_id.in_(ids)),
+        TopicTag.source == "ai",
+    )
+    if data.retag:
+        kept = set(db.scalars(select(TopicTag.question_id).where(TopicTag.question_id.in_(ids), TopicTag.source != "ai")))
+        todo = [qid for qid in ids if qid not in kept]
+        existing = [
+            topic
+            for topic in db.scalars(
+                select(TopicTag.topic).where(TopicTag.subject == data.subject, TopicTag.source != "ai").distinct().order_by(TopicTag.topic)
+            )
+            if topic != OTHER
+        ]
+    else:
+        tagged = set(db.scalars(select(TopicTag.question_id).where(TopicTag.question_id.in_(ids))))
+        todo = [qid for qid in ids if qid not in tagged]
+        existing = _subject_topics(db, data.subject)
     if not todo:
         return TagResult(subject=data.subject, tagged=0, topics=existing, calls=0)
 
@@ -205,14 +228,25 @@ def _tag_subject(db: Session, data: TagRequest) -> TagResult:
 
     questions = bank_service.get_questions(db, todo)
     size = max(get_settings().topic_batch_size, 1)
+    pending: list[TopicTag] = []
     for start in range(0, len(questions), size):
         result = _classify(db, data.subject, topics, questions[start : start + size])
         calls += 1
         now = _now()
-        for question_id, names in result.items():
-            for name in names:
-                db.add(TopicTag(question_id=question_id, subject=data.subject, topic=name, source="ai", created_at=now))
-        db.commit()  # 每批都存起來，後面失敗也不會白花前面的用量
+        tags = [
+            TopicTag(question_id=question_id, subject=data.subject, topic=name, source="ai", created_at=now)
+            for question_id, names in result.items()
+            for name in names
+        ]
+        if data.retag:
+            pending += tags
+        else:
+            db.add_all(tags)
+            db.commit()  # 每批都存起來，後面失敗也不會白花前面的用量
+    if data.retag:
+        db.execute(delete(TopicTag).where(*old_ai_tags))
+        db.add_all(pending)
+        db.commit()
     return TagResult(subject=data.subject, tagged=len(questions), topics=topics, calls=calls)
 
 
@@ -266,7 +300,10 @@ def overview(db: Session) -> TopicsOverview:
                 subject=subject,
                 questions=len(ids),
                 tagged=len(tagged),
-                estimated_calls=math.ceil(untagged / batch) + (0 if by_topic else 1) if untagged else 0,
+                # 標記時只沿用「其他」以外的知識點清單；全部都是「其他」時還要再整理一次清單
+                estimated_calls=math.ceil(untagged / batch) + (0 if any(topic != OTHER for topic in by_topic) else 1)
+                if untagged
+                else 0,
                 topics=topics,
             )
         )

@@ -38,6 +38,10 @@ class ProviderCancelled(ProviderError):
     """使用者按了中斷，模型呼叫被終止。"""
 
 
+class ProviderTimeout(ProviderError):
+    """模型呼叫超過時間限制被終止。"""
+
+
 class LLMProvider(Protocol):
     name: str
 

@@ -31,7 +31,9 @@ class EventOut(EventIn):
     subscription_id: int | None = None
     subscription_name: str | None = None
     days_until: int
-    """距離今天幾天（今天＝0，已過去為負數）"""
+    """距離今天幾天（今天＝0，已過去為負數；進行中的多天行程是 0）"""
+    ongoing: bool = False
+    """多天的行程已經開始、還沒結束"""
 
 
 class ExtractedEvent(EventIn):

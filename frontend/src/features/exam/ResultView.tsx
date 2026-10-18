@@ -1,6 +1,6 @@
 /** 交卷後：得分、題號對錯一覽、每題詳解、錯題重寫。 */
 
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnswerGrid } from '@/components/AnswerGrid'
 import { Button, ButtonLink } from '@/components/Button'
@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/States'
 import { clock, formatDateTime, parseUtc, percent, score, shortName } from '@/lib/format'
 import { useStartSession } from '@/lib/sessions'
 import type { ItemOut, SessionCreate, SessionOut } from '@/lib/types'
+import { fetchRules } from './api'
 import { QuestionBlock } from './QuestionBlock'
 
 type Filter = 'all' | 'wrong' | 'right' | 'pending'
@@ -17,11 +18,29 @@ type Filter = 'all' | 'wrong' | 'right' | 'pending'
 /** 申論題有寫、但還沒自評 */
 const isPending = (item: ItemOut) => item.type === 'essay' && !item.graded
 
+/** 這題算不算答錯（進錯題本）。申論題看得分比例：及格但未達「答對」門檻（預設 60%～80%）不算錯，也不進錯題本 */
+function isWrong(item: ItemOut, wrongRatio: number) {
+  if (isPending(item)) return false
+  if (item.type !== 'essay') return !item.is_correct
+  return !item.is_correct && (item.points ? (item.score ?? 0) / item.points : 0) < wrongRatio
+}
+
+/** 申論題及格但未達答對門檻：不算對也不算錯 */
+const isPartial = (item: ItemOut, wrongRatio: number) =>
+  item.type === 'essay' && !isPending(item) && !item.is_correct && !isWrong(item, wrongRatio)
+
 export function ResultView({ session }: { session: SessionOut }) {
   const result = session.result!
+  const rules = useQuery({ queryKey: ['review', 'rules'], queryFn: fetchRules, staleTime: Infinity }).data
+  const wrongRatio = rules?.essay_wrong_ratio ?? 0.6
+  const passRatio = rules?.essay_pass_ratio ?? 0.8
   // 有申論題待自評就先看那些；否則有答錯就先只看答錯的題目，檢討比較快
   const [filter, setFilter] = useState<Filter>(() =>
-    session.items.some(isPending) ? 'pending' : session.items.some((item) => !item.is_correct) ? 'wrong' : 'all',
+    session.items.some(isPending)
+      ? 'pending'
+      : session.items.some((item) => isWrong(item, rules?.essay_wrong_ratio ?? 0.6))
+        ? 'wrong'
+        : 'all',
   )
   const start = useStartSession()
   const queryClient = useQueryClient()
@@ -35,7 +54,8 @@ export function ResultView({ session }: { session: SessionOut }) {
   const essayProps = { sessionId: session.id, practice: session.mode === 'practice', submitted: true, onUpdate: updateItem }
 
   const pendingItems = session.items.filter(isPending)
-  const wrongItems = session.items.filter((item) => !item.is_correct && !isPending(item))
+  const wrongItems = session.items.filter((item) => isWrong(item, wrongRatio))
+  const partialCount = session.items.filter((item) => isPartial(item, wrongRatio)).length
   const answeredWrong = wrongItems.filter((item) => item.answered)
   const unanswered = session.items.length - result.answered_count
   const elapsed = session.submitted_at
@@ -49,10 +69,10 @@ export function ResultView({ session }: { session: SessionOut }) {
           : filter === 'pending'
             ? isPending(item)
             : filter === 'wrong'
-              ? !item.is_correct && !isPending(item)
+              ? isWrong(item, wrongRatio)
               : item.is_correct,
       ),
-    [filter, session.items],
+    [filter, session.items, wrongRatio],
   )
   const ratio = result.max_score ? result.score / result.max_score : 0
   // 交卷後畫面整個換掉：焦點移到標題，螢幕閱讀器從「這次的成績」開始念
@@ -175,7 +195,8 @@ export function ResultView({ session }: { session: SessionOut }) {
             cells={session.items.map((item) => ({
               position: item.position,
               answered: item.answered,
-              correct: item.answered ? item.is_correct : null,
+              // 申論題及格但未達答對門檻：不標對錯，只畫一般的螢光筆
+              correct: item.answered && !isPartial(item, wrongRatio) && !isPending(item) ? item.is_correct : null,
             }))}
             onJump={(position) => {
               setFilter('all')
@@ -194,6 +215,12 @@ export function ResultView({ session }: { session: SessionOut }) {
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-bad-hl" /> × 答錯（已收進錯題本）
             </span>
+            {partialCount > 0 && (
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-5 rounded-[var(--radius-marker)] bg-hl" /> 申論及格、未達{' '}
+                {Math.round(passRatio * 100)}%（不進錯題本）
+              </span>
+            )}
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-5 rounded-[var(--radius-marker)] border border-dashed border-muted" /> 未作答
             </span>

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.bank.schemas import Origin, QuestionFilter
 from app.modules.review import service
-from app.modules.review.schemas import Overview, QuestionHistory, WrongQuestionOut, WrongStatus
+from app.modules.review.schemas import MasteryRules, Overview, QuestionHistory, WrongQuestionOut, WrongStatus
 
 router = APIRouter(tags=["review"])
 
@@ -29,6 +29,12 @@ def wrong_questions(
         types=["single_choice", "multi_choice", "essay"],  # 錯題本列出申論題，出題時再由使用者決定要不要包含
     )
     return service.list_wrong_questions(db, criteria, status)
+
+
+@router.get("/rules", response_model=MasteryRules)
+def rules() -> MasteryRules:
+    """錯題本的掌握規則（選擇題、申論題各要連續答對幾次），給說明文字用。"""
+    return service.mastery_rules()
 
 
 @router.get("/overview", response_model=Overview)

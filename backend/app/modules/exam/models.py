@@ -42,8 +42,9 @@ class ExamItem(Base):
     option_order: Mapped[list[int]] = mapped_column(JSON)
     """顯示順序 → 原始選項索引。例如 [2, 0, 3, 1] 表示畫面上的 (A) 是原本的 (C)。"""
     points: Mapped[float] = mapped_column(Float)
-    response: Mapped[list[str] | None] = mapped_column(JSON)
-    """使用者選的選項字母（原始順序）。"""
+    response: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
+    """使用者選的選項字母（原始順序）。清除作答存 SQL NULL（不加 none_as_null 會存成 JSON 字串 'null'）；
+    舊資料可能還有 'null'，計數時用陣列長度判斷。"""
     is_correct: Mapped[bool | None] = mapped_column(Boolean)
     revealed: Mapped[bool] = mapped_column(Boolean, default=False)
     time_spent_seconds: Mapped[int | None] = mapped_column(Integer)

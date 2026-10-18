@@ -25,6 +25,13 @@ def parse_duration(text: str) -> int | None:
     return (int(hours[1]) * 60 if hours else 0) + (int(minutes[1]) if minutes else 0)
 
 
+def _instructions(first_page: str) -> str:
+    """表頭（到「頁次」為止）。題目內文也會出現「作文」（例如 114 地方特考行政學概要的選項「批改作文」），不能拿來判斷題型；
+    「甲、申論題部分」則排在頁次後面，另外看整個第一頁。"""
+    end = first_page.find("頁次")
+    return first_page if end < 0 else first_page[:end]
+
+
 def parse_question_header(path: Path) -> QuestionHeader:
     with pymupdf.open(path) as document:
         first_page = unicodedata.normalize("NFKC", document[0].get_text())
@@ -38,5 +45,5 @@ def parse_question_header(path: Path) -> QuestionHeader:
         duration_minutes=parse_duration(duration[1]) if duration else None,
         codes=list(dict.fromkeys(re.findall(r"代號\s*:\s*(\d+)", full_text))),
         has_choice=has_choice,
-        has_essay="申論" in full_text or "作文" in full_text or not has_choice,
+        has_essay="申論題" in first_page or "作文" in _instructions(first_page) or not has_choice,
     )

@@ -18,13 +18,15 @@
 
 import hashlib
 import re
+import unicodedata
 from pathlib import Path
 
 from app.modules.bank.schemas import OPTION_LETTERS
 from app.modules.ingest.schemas import ImportBundle
 
 _HEADER = re.compile(r"^#\s*(?P<key>[^:：]+?)\s*[:：]\s*(?P<value>.+?)\s*$")
-_QUESTION = re.compile(r"^(?P<number>\d+)\s*[.．、]\s*(?P<text>.*)$")
+# 「3.14」這種小數不算題號
+_QUESTION = re.compile(r"^(?P<number>\d+)\s*(?:\.(?!\d)|[．、])\s*(?P<text>.*)$")
 _OPTION = re.compile(r"^[(（]?(?P<letter>[A-Ja-j])\s*[)）.．、]\s*(?P<text>.*)$")
 _ANSWER = re.compile(r"^答案\s*[:：]\s*(?P<value>.+)$")
 _EXPLANATION = re.compile(r"^(?:詳解|解析)\s*[:：]\s*(?P<text>.*)$")
@@ -60,8 +62,25 @@ def _default_key(path: Path) -> str:
 
 
 def _parse_answer(value: str) -> list[str]:
-    letters = re.findall(r"[A-Ja-j]", value)
+    # 中文輸入法常打出全形字母（Ｂ），先正規化成半形
+    letters = re.findall(r"[A-Ja-j]", unicodedata.normalize("NFKC", value))
     return [letter.upper() for letter in letters]
+
+
+def _starts_question(lines: list[str], index: int, number: int, previous: int | None) -> bool:
+    """「數字.」開頭的行是不是新的一題：題號要比上一題大，而且到下一題之前要有選項或答案。
+    詳解、題幹裡的條列（1. 2. …）沒有選項和答案，不會被誤切成新題。"""
+    if previous is None:
+        return True  # 第一題
+    if number <= previous:
+        return False
+    for line in lines[index + 1 :]:
+        line = line.strip()
+        if (match := _QUESTION.match(line)) and int(match["number"]) >= number:
+            return False  # 碰到同號或下一題了，中間都沒有選項或答案
+        if _ANSWER.match(line) or ((option := _OPTION.match(line)) and option["letter"].upper() == "A"):
+            return True
+    return False
 
 
 def parse_text_questions(content: str, default_key: str) -> ImportBundle:
@@ -80,8 +99,19 @@ def parse_text_questions(content: str, default_key: str) -> ImportBundle:
         elif field == "explanation":
             current["explanation"] = f"{current['explanation']}\n{text}"
 
-    for line_number, raw in enumerate(content.splitlines(), start=1):
+    lines = content.splitlines()
+    in_code = False  # 程式碼區塊（```）裡的內容原樣保留：縮排、空行都不動，也不解析成題號或選項
+    for line_number, raw in enumerate(lines, start=1):
         line = raw.strip()
+        if in_code or line.startswith("```"):
+            if current is None:
+                raise TextFormatError(f"第 {line_number} 行：第一題之前只能放「# 設定：值」，看到：{line}")
+            if line.startswith("```"):
+                in_code = not in_code
+                append(line)
+            else:
+                append(raw.rstrip())
+            continue
         if not line:
             continue
         if current is None and (header := _HEADER.match(line)):
@@ -99,7 +129,9 @@ def parse_text_questions(content: str, default_key: str) -> ImportBundle:
                 paper[key] = value
             continue
 
-        if match := _QUESTION.match(line):
+        if (match := _QUESTION.match(line)) and _starts_question(
+            lines, line_number - 1, int(match["number"]), current["number"] if current else None
+        ):
             current = {
                 "number": int(match["number"]),
                 "stem": match["text"],
@@ -113,6 +145,8 @@ def parse_text_questions(content: str, default_key: str) -> ImportBundle:
         elif current is None:
             raise TextFormatError(f"第 {line_number} 行：第一題之前只能放「# 設定：值」，看到：{line}")
         elif (match := _OPTION.match(line)) and field in ("stem", "option"):
+            if len(current["options"]) >= len(OPTION_LETTERS):
+                raise TextFormatError(f"第 {line_number} 行：選項最多 {len(OPTION_LETTERS)} 個（A～{OPTION_LETTERS[-1]}）")
             expected = OPTION_LETTERS[len(current["options"])]
             if match["letter"].upper() != expected:
                 raise TextFormatError(f"第 {line_number} 行：選項應該是 ({expected})，看到 ({match['letter']})")

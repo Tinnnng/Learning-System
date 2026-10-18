@@ -10,7 +10,7 @@ import type { components } from '@/lib/api-types'
 import { EmptyState, ErrorState, Loading } from '@/components/States'
 import { Button, ButtonLink } from '@/components/Button'
 import { fetchFilters, fetchPapers, type PaperFilters } from './api'
-import { groupPapers, groupPath, ORIGIN_LABELS, type PaperGroup } from './groups'
+import { groupPapers, groupPath, ORIGIN_LABELS, sortExamTypes, type PaperGroup } from './groups'
 import { NewPaperDialog } from './NewPaperDialog'
 import { QuestionSearchForm } from './SearchPage'
 import { StartPanel } from './StartPanel'
@@ -97,7 +97,7 @@ export function BankPage() {
           <ChipGroup
             label="考試"
             value={filters.exam_type ?? null}
-            options={options.data.exam_types.map((value) => ({ value, label: value }))}
+            options={sortExamTypes(options.data.exam_types).map((value) => ({ value, label: value }))}
             onChange={(value) => setFilter('exam_type', value)}
           />
           <ChipGroup

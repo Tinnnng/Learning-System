@@ -44,6 +44,8 @@ class WrongQuestionOut(BaseModel):
 class AttemptOut(BaseModel):
     is_correct: bool
     response: list[str]
+    score_ratio: float | None = None
+    """申論題的得分比例（得分／配分）；選擇題是 null。"""
     session_id: int | None
     time_spent_seconds: int | None
     answered_at: datetime
@@ -52,6 +54,18 @@ class AttemptOut(BaseModel):
 class QuestionHistory(BaseModel):
     progress: ProgressOut | None
     attempts: list[AttemptOut]
+
+
+class MasteryRules(BaseModel):
+    """錯題本的掌握規則（設定檔的值），給前端說明文字用。"""
+
+    mastery_streak: int
+    """選擇題連續答對幾次移出錯題本。"""
+    essay_mastery_streak: int
+    """申論題連續幾次達到 essay_pass_ratio 移出錯題本。"""
+    essay_pass_ratio: float
+    essay_wrong_ratio: float
+    """申論題得分低於這個比例進錯題本。"""
 
 
 class GroupStat(BaseModel):

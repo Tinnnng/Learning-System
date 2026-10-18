@@ -5,7 +5,8 @@
 """
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from app.modules.review.schemas import (
     AttemptOut,
     DailyStat,
     GroupStat,
+    MasteryRules,
     Overview,
     ProgressOut,
     QuestionHistory,
@@ -38,6 +40,36 @@ def _utc_naive(moment: datetime | None = None) -> datetime:
     return moment
 
 
+def _in_wrong_book(progress: QuestionProgress) -> bool:
+    """還在錯題本裡。設定檔把掌握次數調低後，連續答對次數已經達到新門檻的題目視為已掌握，
+    下次作答時才真正寫回資料庫（_settle_mastered），讀取時先依新門檻判斷。"""
+    return progress.in_wrong_book and progress.correct_streak < _mastery_target(progress)
+
+
+def _is_mastered(progress: QuestionProgress) -> bool:
+    if progress.wrong_count == 0 or _in_wrong_book(progress):
+        return False
+    return progress.mastered_at is not None or progress.in_wrong_book
+
+
+def _settle_mastered(db: Session, progress: QuestionProgress) -> None:
+    """掌握次數調低後，已達新門檻但還標著在錯題本的題目，正式移出。"""
+    if progress.in_wrong_book and not _in_wrong_book(progress):
+        progress.in_wrong_book = False
+        progress.mastered_at = progress.last_answered_at
+        srs_service.remove(db, "question", progress.question_id)
+
+
+def mastery_rules() -> MasteryRules:
+    settings = get_settings()
+    return MasteryRules(
+        mastery_streak=settings.mastery_streak,
+        essay_mastery_streak=settings.essay_mastery_streak,
+        essay_pass_ratio=settings.essay_pass_ratio,
+        essay_wrong_ratio=settings.essay_wrong_ratio,
+    )
+
+
 def _progress_out(progress: QuestionProgress) -> ProgressOut:
     return ProgressOut(
         question_id=progress.question_id,
@@ -46,7 +78,7 @@ def _progress_out(progress: QuestionProgress) -> ProgressOut:
         wrong_count=progress.wrong_count,
         correct_streak=progress.correct_streak,
         mastery_target=_mastery_target(progress),
-        in_wrong_book=progress.in_wrong_book,
+        in_wrong_book=_in_wrong_book(progress),
         last_answered_at=progress.last_answered_at,
         last_wrong_at=progress.last_wrong_at,
         mastered_at=progress.mastered_at,
@@ -97,6 +129,7 @@ def record_attempts(db: Session, attempts: list[AttemptIn]) -> list[ProgressOut]
             )
         )
         progress = _get_or_create_progress(db, attempt.question_id)
+        _settle_mastered(db, progress)
         progress.attempts += 1
         progress.last_answered_at = answered_at
         progress.last_correct = passed
@@ -132,11 +165,12 @@ def record_attempts(db: Session, attempts: list[AttemptIn]) -> list[ProgressOut]
 
 def _wrong_progress(db: Session, status: WrongStatus) -> list[QuestionProgress]:
     query = select(QuestionProgress).where(QuestionProgress.wrong_count > 0)
+    rows = db.scalars(query.order_by(QuestionProgress.last_wrong_at.desc()))
     if status == "active":
-        query = query.where(QuestionProgress.in_wrong_book.is_(True))
-    elif status == "mastered":
-        query = query.where(QuestionProgress.in_wrong_book.is_(False))
-    return list(db.scalars(query.order_by(QuestionProgress.last_wrong_at.desc())))
+        return [row for row in rows if _in_wrong_book(row)]
+    if status == "mastered":
+        return [row for row in rows if not _in_wrong_book(row)]
+    return list(rows)
 
 
 def wrong_question_ids(
@@ -191,6 +225,7 @@ def question_history(db: Session, question_id: int) -> QuestionHistory:
             AttemptOut(
                 is_correct=log.is_correct,
                 response=log.response,
+                score_ratio=log.score_ratio,
                 session_id=log.session_id,
                 time_spent_seconds=log.time_spent_seconds,
                 answered_at=log.answered_at,
@@ -206,7 +241,7 @@ def question_stats(db: Session, question_ids: list[int]) -> dict[int, QuestionSt
         return {}
     rows = db.scalars(select(QuestionProgress).where(QuestionProgress.question_id.in_(question_ids)))
     return {
-        row.question_id: QuestionStat(attempts=row.attempts, correct=row.correct_count, in_wrong_book=row.in_wrong_book)
+        row.question_id: QuestionStat(attempts=row.attempts, correct=row.correct_count, in_wrong_book=_in_wrong_book(row))
         for row in rows
     }
 
@@ -222,7 +257,7 @@ def _group_stats(groups: dict[str, list[QuestionProgress]]) -> list[GroupStat]:
                 attempts=attempts,
                 correct=correct,
                 accuracy=round(correct / attempts, 4) if attempts else 0.0,
-                wrong_book=sum(1 for p in items if p.in_wrong_book),
+                wrong_book=sum(1 for p in items if _in_wrong_book(p)),
             )
         )
     return sorted(stats, key=lambda stat: (stat.accuracy, -stat.attempts))
@@ -244,23 +279,29 @@ def overview(db: Session, now: datetime | None = None) -> Overview:
         for tag in question.tags:
             by_tag[tag].append(item)
 
-    since = (now - timedelta(days=DAILY_STATS_DAYS - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # 以台灣（設定檔時區）的日期分天，和首頁讀書日曆、前端的「今天」一致；資料庫存的是 UTC
+    zone = ZoneInfo(get_settings().timezone)
+    first_day = now.replace(tzinfo=UTC).astimezone(zone).date() - timedelta(days=DAILY_STATS_DAYS - 1)
+    since = _utc_naive(datetime.combine(first_day, time(), tzinfo=zone))
     daily: dict = defaultdict(lambda: [0, 0])
     for log in db.scalars(select(AttemptLog).where(AttemptLog.answered_at >= since)):
-        bucket = daily[log.answered_at.date()]
+        bucket = daily[log.answered_at.replace(tzinfo=UTC).astimezone(zone).date()]
         bucket[0] += 1
         bucket[1] += int(log.is_correct)
 
     attempts = sum(p.attempts for p in progress)
     correct = sum(p.correct_count for p in progress)
+    active = {p.question_id for p in progress if _in_wrong_book(p)}
     return Overview(
         answered_questions=len(progress),
         attempts=attempts,
         correct=correct,
         accuracy=round(correct / attempts, 4) if attempts else 0.0,
-        wrong_book=sum(1 for p in progress if p.in_wrong_book),
-        mastered=sum(1 for p in progress if p.mastered_at is not None and not p.in_wrong_book),
-        review_due=len(srs_service.due_item_ids(db, "question", now=now.replace(tzinfo=UTC))),
+        wrong_book=sum(1 for p in progress if _in_wrong_book(p)),
+        mastered=sum(1 for p in progress if _is_mastered(p)),
+        review_due=len(
+            [qid for qid in srs_service.due_item_ids(db, "question", now=now.replace(tzinfo=UTC)) if qid in active]
+        ),
         by_subject=_group_stats(by_subject),
         by_tag=_group_stats(by_tag),
         daily=[DailyStat(day=day, attempts=values[0], correct=values[1]) for day, values in sorted(daily.items())],

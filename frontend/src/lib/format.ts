@@ -104,8 +104,8 @@ export function plainText(markdown: string): string {
   return markdown
     .replace(/```[\s\S]*?```/g, '〔程式碼〕')
     .replace(/\{\{blank(?::\d+)?\}\}/g, '＿＿')
-    .replace(/\$([^$]+)\$/g, (_, tex: string) =>
-      tex.replace(/\\oplus/g, '⊕').replace(/\\[a-zA-Z]+/g, '').replace(/[{}]/g, '').replace(/_(\w+)/g, '$1').replace(/\^(\w+)/g, '^$1'),
+    .replace(/\$\$([\s\S]+?)\$\$|\$([^$]+)\$/g, (_, block: string | undefined, inline: string | undefined) =>
+      (block ?? inline ?? '').replace(/\\oplus/g, '⊕').replace(/\\[a-zA-Z]+/g, '').replace(/[{}]/g, '').replace(/_(\w+)/g, '$1').replace(/\^(\w+)/g, '^$1'),
     )
     .replace(/[`*#>|]/g, '')
     .replace(/\s+/g, ' ')

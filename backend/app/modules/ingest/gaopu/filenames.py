@@ -3,6 +3,7 @@
 檔名：115080_0114_法學知識與英文（包括.pdf
       年度 115、考試代碼 080、科目代碼 0114；前綴 ANS＝標準答案、MOD＝更正答案
 資料夾：115普考QA-一般行政  →  年度 115、普考、類科「一般行政」
+      114地方特考QA-四等一般行政  →  地方特考的等別寫在類科前面
 """
 
 import re
@@ -14,7 +15,9 @@ FILE_PATTERN = re.compile(
     r"^(?P<year>\d{3})(?P<exam_code>\d{3})_(?P<kind>ANS|MOD)?(?P<subject_code>\d{4})_(?P<subject>.+)\.pdf$",
     re.IGNORECASE,
 )
-FOLDER_PATTERN = re.compile(r"^(?P<year>\d{3})(?P<exam_type>高考|普考)QA-(?P<category>.+)$")
+EXAM_TYPES = ("高考", "普考", "地方特考")
+"""考選部試卷支援的考試類型，資料夾名稱與上傳頁都用這份清單。"""
+FOLDER_PATTERN = re.compile(rf"^(?P<year>\d{{3}})(?P<exam_type>{'|'.join(EXAM_TYPES)})QA-(?P<category>.+)$")
 
 FileKind = Literal["question", "answer", "correction"]
 _KINDS: dict[str | None, FileKind] = {None: "question", "ANS": "answer", "MOD": "correction"}

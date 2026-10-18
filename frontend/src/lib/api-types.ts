@@ -45,7 +45,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Papers */
+        /**
+         * List Papers
+         * @description no_year／no_category：只列出沒有年度／沒有類科的試卷（題庫分組用）。
+         */
         get: operations["list_papers_api_bank_papers_get"];
         put?: never;
         /**
@@ -372,6 +375,26 @@ export interface paths {
          * @description 錯題本。status=all 時列出曾經答錯過的全部題目（含已掌握）。
          */
         get: operations["wrong_questions_api_review_wrong_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rules
+         * @description 錯題本的掌握規則（選擇題、申論題各要連續答對幾次），給說明文字用。
+         */
+        get: operations["rules_api_review_rules_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1372,8 +1395,16 @@ export interface components {
         };
         /** AskIn */
         AskIn: {
-            /** Content */
+            /**
+             * Content
+             * @description 只有空白會回 422，不呼叫 AI
+             */
             content: string;
+            /**
+             * My Answer
+             * @description 使用者選的答案（原始選項字母），讓 AI 針對錯誤說明；只用在追問，不放進共用的詳解
+             */
+            my_answer?: string[] | null;
             /**
              * Request Id
              * @description 同 ExplainIn.request_id
@@ -1402,6 +1433,8 @@ export interface components {
             is_correct: boolean;
             /** Response */
             response: string[];
+            /** Score Ratio */
+            score_ratio?: number | null;
             /** Session Id */
             session_id: number | null;
             /** Time Spent Seconds */
@@ -1526,6 +1559,11 @@ export interface components {
             done: number;
             /** Total */
             total: number;
+            /**
+             * Word Count
+             * @default 0
+             */
+            word_count: number;
         };
         /** DailyStat */
         DailyStat: {
@@ -1615,6 +1653,11 @@ export interface components {
             subscription_name?: string | null;
             /** Days Until */
             days_until: number;
+            /**
+             * Ongoing
+             * @default false
+             */
+            ongoing: boolean;
         };
         /**
          * ExamSource
@@ -1645,11 +1688,6 @@ export interface components {
              * @default false
              */
             regenerate: boolean;
-            /**
-             * My Answer
-             * @description 使用者選的答案（原始選項字母），讓 AI 針對錯誤說明
-             */
-            my_answer?: string[] | null;
             /**
              * Request Id
              * @description 前端產生的 id，按「中斷」時用 POST /api/ai/requests/{id}/cancel
@@ -1954,6 +1992,20 @@ export interface components {
             /** Request Id */
             request_id?: string | null;
         };
+        /**
+         * MasteryRules
+         * @description 錯題本的掌握規則（設定檔的值），給前端說明文字用。
+         */
+        MasteryRules: {
+            /** Mastery Streak */
+            mastery_streak: number;
+            /** Essay Mastery Streak */
+            essay_mastery_streak: number;
+            /** Essay Pass Ratio */
+            essay_pass_ratio: number;
+            /** Essay Wrong Ratio */
+            essay_wrong_ratio: number;
+        };
         /** MessageOut */
         MessageOut: {
             /** Id */
@@ -1978,14 +2030,20 @@ export interface components {
              */
             created_at: string;
         };
-        /** NoteIn */
+        /**
+         * NoteIn
+         * @description 只更新有送的欄位：只按星號時不帶 note，筆記就不會被蓋掉（前端還沒讀到筆記時也不會清空它）。
+         */
         NoteIn: {
             /**
              * Starred
-             * @default false
+             * @description 不送＝維持原本的收藏狀態
              */
-            starred: boolean;
-            /** Note */
+            starred?: boolean | null;
+            /**
+             * Note
+             * @description 不送＝維持原本的筆記；送 null 或空字串＝清除
+             */
             note?: string | null;
         };
         /** NoteOut */
@@ -2310,6 +2368,8 @@ export interface components {
             rubric?: components["schemas"]["RubricPoint"][];
             /** Tags */
             tags?: string[];
+            /** Client Id */
+            client_id?: string | null;
         };
         /**
          * QuestionFilter
@@ -2322,8 +2382,18 @@ export interface components {
             exam_type?: string | null;
             /** Year */
             year?: number | null;
+            /**
+             * No Year
+             * @default false
+             */
+            no_year: boolean;
             /** Category */
             category?: string | null;
+            /**
+             * No Category
+             * @default false
+             */
+            no_category: boolean;
             /** Subject */
             subject?: string | null;
             /** Origin */
@@ -3175,6 +3245,8 @@ export interface operations {
                 category?: string | null;
                 subject?: string | null;
                 origin?: ("official" | "generated" | "manual") | null;
+                no_year?: boolean;
+                no_category?: boolean;
             };
             header?: never;
             path?: never;
@@ -3824,6 +3896,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rules_api_review_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasteryRules"];
                 };
             };
         };

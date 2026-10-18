@@ -13,7 +13,8 @@ import { cx } from '@/lib/cx'
 import { shortName } from '@/lib/format'
 import { setShortcutsEnabled, useShortcutsEnabled } from '@/lib/shortcuts'
 import type { ItemOut, SessionOut } from '@/lib/types'
-import { answerItem, deleteSession, submitSession } from './api'
+import { answerItem, deleteSession, sessionDeadline, submitSession } from './api'
+import { flushEssayDrafts } from './essayDrafts'
 import { LETTERS, QuestionBlock } from './QuestionBlock'
 import { Timer } from './Timer'
 
@@ -69,17 +70,30 @@ export function TakingView({ session }: { session: SessionOut }) {
     [queryClient, session.id],
   )
 
+  // 正在送出的題號：整份試卷模式送出一題時，其他題照樣可以點（同一題要等上一次送完）
+  const [sending, setSending] = useState<ReadonlySet<number>>(new Set())
   const answer = useMutation({
     mutationFn: ({ position, response }: { position: number; response: string[] }) => {
       const started = enteredAt.current[position]
       const spent = started ? Math.round((Date.now() - started) / 1000) : undefined
       return answerItem(session.id, position, response, spent)
     },
+    onMutate: ({ position }) => setSending((old) => new Set(old).add(position)),
+    onSettled: (_data, _error, { position }) =>
+      setSending((old) => {
+        const next = new Set(old)
+        next.delete(position)
+        return next
+      }),
     onSuccess: updateItem,
   })
 
   const submit = useMutation({
-    mutationFn: () => submitSession(session.id),
+    // 申論題停止輸入 1 秒才自動儲存：交卷前先把還沒存的內容送出
+    mutationFn: async () => {
+      await flushEssayDrafts(session.id)
+      return submitSession(session.id)
+    },
     onSuccess: (result) => {
       queryClient.setQueryData(['exam', 'session', session.id], result)
       queryClient.invalidateQueries({ queryKey: ['review'] })
@@ -114,7 +128,7 @@ export function TakingView({ session }: { session: SessionOut }) {
 
   const toggle = useCallback(
     (target: ItemOut, letter: string) => {
-      if (target.revealed || answer.isPending) return
+      if (target.revealed || sending.has(target.position)) return
       setCurrent(target.position)
       if (target.type === 'multi_choice') {
         const base = drafts[target.position] ?? target.response ?? []
@@ -140,7 +154,7 @@ export function TakingView({ session }: { session: SessionOut }) {
         },
       )
     },
-    [answer, drafts, isPractice, items.length, view],
+    [answer, drafts, isPractice, items.length, sending, view],
   )
 
   // 鍵盤：1–9 / A–J 選選項（可關閉），←→ 換題，Enter 下一題
@@ -176,13 +190,10 @@ export function TakingView({ session }: { session: SessionOut }) {
     answered: entry.answered,
     correct: entry.revealed ? entry.is_correct : undefined,
   }))
-  // 計時器在桌機側欄、手機頂列（和題號一覽）各有一份，時間到只能交卷一次
-  const expired = useRef(false)
-  const onExpire = useCallback(() => {
-    if (expired.current) return
-    expired.current = true
-    submit.mutate()
-  }, [submit])
+  // 時間到只提醒、不自動交卷（使用者決定）。計時器在桌機側欄、手機頂列各有一份，提醒只出現一次
+  const deadline = sessionDeadline(session.id)
+  const [timeUp, setTimeUp] = useState<'none' | 'shown' | 'dismissed'>('none')
+  const onTimeUp = useCallback(() => setTimeUp((old) => (old === 'none' ? 'shown' : old)), [])
 
   const block = (entry: ItemOut) => (
     <QuestionBlock
@@ -192,7 +203,7 @@ export function TakingView({ session }: { session: SessionOut }) {
       onConfirmMulti={
         isPractice ? () => answer.mutate({ position: entry.position, response: selectionFor(entry) }) : undefined
       }
-      busy={answer.isPending && answer.variables?.position === entry.position}
+      busy={sending.has(entry.position)}
       essay={{ sessionId: session.id, practice: isPractice, submitted: false, onUpdate: updateItem }}
     />
   )
@@ -203,9 +214,7 @@ export function TakingView({ session }: { session: SessionOut }) {
         <span className="text-sm text-muted">
           已作答 <span className="tabular text-ink">{session.answered_count}</span>／{session.total}
         </span>
-        {session.remaining_seconds !== null && session.remaining_seconds !== undefined && (
-          <Timer remainingSeconds={session.remaining_seconds} onExpire={onExpire} />
-        )}
+        {deadline !== undefined && <Timer deadline={deadline} onTimeUp={onTimeUp} />}
       </div>
       <AnswerGrid cells={cells} current={current} onJump={goTo} />
     </>
@@ -230,14 +239,31 @@ export function TakingView({ session }: { session: SessionOut }) {
         />
       </header>
 
+      {timeUp === 'shown' && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 rounded-md border-l-4 border-bad bg-bad-soft px-4 py-3 text-[15px] text-ink animate-[rise-in_var(--dur)_var(--ease-out)]"
+        >
+          <Icon name="clock" size={18} className="flex-none text-bad" />
+          <p className="m-0 flex-1">
+            考試時間到了。可以繼續作答，寫完再按「交卷」；超過的時間會算進用時。
+          </p>
+          <button
+            type="button"
+            onClick={() => setTimeUp('dismissed')}
+            className="hit flex-none text-sm text-muted hover:text-ink"
+          >
+            知道了
+          </button>
+        </div>
+      )}
+
       {/* 手機：進度與計時列 */}
       <div className="sticky top-[calc(env(safe-area-inset-top,0px)+64px)] z-20 -mx-4 flex items-center justify-between gap-3 border-b border-line bg-paper/90 px-4 py-2 backdrop-blur-md lg:hidden">
         <span className="text-sm text-muted">
           <span className="tabular text-ink">{session.answered_count}</span>／{session.total} 已作答
         </span>
-        {session.remaining_seconds !== null && session.remaining_seconds !== undefined && (
-          <Timer remainingSeconds={session.remaining_seconds} onExpire={onExpire} />
-        )}
+        {deadline !== undefined && <Timer deadline={deadline} onTimeUp={onTimeUp} />}
         <Button size="sm" variant="secondary" onClick={() => setGridOpen(true)}>
           題號
         </Button>

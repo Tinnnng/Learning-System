@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import begin_write
 from app.core.text import match_key
 from app.modules.ai import service as ai_service
 from app.modules.calendar import subscriptions
@@ -97,6 +98,8 @@ def today() -> date:
 
 
 def _out(event: CalendarEvent, reference: date, subscription_names: dict[int, str] | None = None) -> EventOut:
+    # 多天的考試已經開始、還沒結束：倒數 0 天並標示進行中，不出現「-2 天」
+    ongoing = event.date < reference <= (event.end_date or event.date)
     return EventOut(
         subscription_id=event.subscription_id,
         subscription_name=(subscription_names or {}).get(event.subscription_id) if event.subscription_id else None,
@@ -110,7 +113,8 @@ def _out(event: CalendarEvent, reference: date, subscription_names: dict[int, st
         subject=event.subject,
         note=event.note,
         source=event.source,
-        days_until=(event.date - reference).days,
+        days_until=0 if ongoing else (event.date - reference).days,
+        ongoing=ongoing,
     )
 
 
@@ -143,9 +147,10 @@ def _existing_keys(db: Session, dates: set[date]) -> dict[tuple[str, date, date]
 
 
 def create(db: Session, data: EventIn, source: str = "manual") -> EventOut:
-    """新增行程。同名、同日期的行程已經存在時直接回傳那一筆，不重複新增（例如同一份公告辨識兩次）。"""
+    """新增行程。同名、同日期的行程已經存在時直接回傳那一筆，不重複新增（例如同一份公告辨識兩次）。
+    訂閱來的行程不算：使用者自己加的要獨立存一筆（有自己的地點、備註），來源刪掉訂閱事件時才不會跟著消失。"""
     same = _existing_keys(db, {data.date}).get(_event_key(data.title, data.date, data.end_date))
-    if same is not None:
+    if same is not None and same.subscription_id is None:
         return _out(same, today())
     event = CalendarEvent(source=source, created_at=datetime.now(UTC).replace(tzinfo=None))
     _apply(event, data)
@@ -191,11 +196,13 @@ ROC_TITLE_YEAR = re.compile(r"(\d{2,3})\s*年")
 
 def _fix_roc_year(draft: EventIn) -> EventIn:
     """AI 偶爾把民國年換算錯（116 年的考試寫成 2026 年）。名稱寫「116年」的考試不可能早於西元 2027 年，
-    早了就把年份補正（結束日期一起平移）。"""
+    早了就把年份補正（結束日期一起平移）。報名、繳費等期限常在前一年（116 年 1 月的初考在 115 年 10 月報名），
+    所以考試以外的行程只有早於前一年才補正。"""
     match = ROC_TITLE_YEAR.search(draft.title)
     if match is None:
         return draft
-    earliest = int(match.group(1)) + 1911
+    year = int(match.group(1)) + 1911
+    earliest = year if draft.kind == "exam" else year - 1
     if not 2000 < earliest < 2200 or draft.date.year >= earliest:
         return draft
     shift = earliest - draft.date.year
@@ -394,6 +401,12 @@ def sync_stale(db: Session, now: datetime | None = None) -> list[SyncResult]:
             results.append(sync(db, subscription_id))
         except CalendarError:
             continue
+        except Exception as error:  # noqa: BLE001 — 某個訂閱出了意料外的錯，記下來，其他訂閱照常同步
+            db.rollback()
+            subscription = db.get(CalendarSubscription, subscription_id)
+            if subscription is not None:
+                subscription.last_error = f"同步失敗：{error}"[:500]
+                db.commit()
     return results
 
 
@@ -414,20 +427,28 @@ def sync(db: Session, subscription_id: int) -> SyncResult:
     subscription = db.get(CalendarSubscription, subscription_id)
     if subscription is None:
         raise CalendarError("找不到這個訂閱", status_code=404)
+    reference = today()
     try:
-        _, remote = subscriptions.parse(subscriptions.fetch(subscription.url), get_settings().timezone, today())
+        _, remote, skipped = subscriptions.parse(subscriptions.fetch(subscription.url), get_settings().timezone, reference)
     except subscriptions.SubscriptionError as error:
         subscription.last_error = str(error)
         db.commit()
         raise CalendarError(str(error), status_code=502) from error
 
+    now = datetime.now(UTC).replace(tzinfo=None)
+    # 下載完才拿寫入鎖（不要在下載時佔著）：同一個訂閱同時同步兩次（兩個分頁、開發模式的 StrictMode）會排隊，
+    # 第二次讀到的是第一次寫完的事件，不會兩邊都新增同一個 UID 而撞到唯一限制
+    begin_write(db)
+    subscription = db.get(CalendarSubscription, subscription_id)
+    if subscription is None:
+        db.rollback()
+        raise CalendarError("找不到這個訂閱", status_code=404)
     if not subscription.include_deadlines:
         remote = [event for event in remote if event.kind != "deadline"]
     existing = {
         event.external_uid: event
         for event in db.scalars(select(CalendarEvent).where(CalendarEvent.subscription_id == subscription.id))
     }
-    now = datetime.now(UTC).replace(tzinfo=None)
     added = updated = 0
     for item in remote:
         event = existing.pop(item.uid, None)
@@ -450,11 +471,11 @@ def sync(db: Session, subscription_id: int) -> SyncResult:
 
     removed = 0
     for event in existing.values():  # 來源已經沒有的事件：未來的刪掉，過去的留著當紀錄
-        if (event.end_date or event.date) >= today():
+        if (event.end_date or event.date) >= reference:
             db.delete(event)
             removed += 1
     subscription.last_synced_at = now
-    subscription.last_error = None
+    subscription.last_error = f"有 {skipped} 筆事件的日期格式錯誤，已略過" if skipped else None
     db.commit()
     return SyncResult(subscription=_subscription_out(db, subscription), added=added, updated=updated, removed=removed)
 
@@ -469,7 +490,7 @@ def subscribe(db: Session, data: SubscriptionIn) -> SyncResult:
     if any(subscriptions.url_key(existing) == key for existing in db.scalars(select(CalendarSubscription.url))):
         raise CalendarError("已經訂閱過這個行事曆了", status_code=409)
     try:
-        name, _ = subscriptions.parse(subscriptions.fetch(url), get_settings().timezone, today())
+        name, _, _ = subscriptions.parse(subscriptions.fetch(url), get_settings().timezone, today())
     except subscriptions.SubscriptionError as error:
         raise CalendarError(str(error), status_code=502) from error
 
@@ -495,7 +516,26 @@ def unsubscribe(db: Session, subscription_id: int) -> None:
 
 
 def _ics_text(value: str) -> str:
+    value = value.replace("\r\n", "\n").replace("\r", "\n")  # 不能留下沒跳脫的 CR
     return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def _fold(line: str) -> str:
+    """RFC 5545 3.1：每行最多 75 octets（UTF-8），超過就換行、下一行開頭加一個空白；不切斷多位元組字元。"""
+    if len(line.encode()) <= 75:
+        return line
+    parts: list[str] = []
+    current, size = "", 0
+    for char in line:
+        width = len(char.encode())
+        limit = 75 if not parts else 74  # 續行開頭的空白也佔一個 octet
+        if size + width > limit:
+            parts.append(current)
+            current, size = "", 0
+        current += char
+        size += width
+    parts.append(current)
+    return "\r\n ".join(parts)
 
 
 def export_ics(db: Session) -> str:
@@ -509,10 +549,9 @@ def export_ics(db: Session) -> str:
             hour, minute = map(int, event.time.split(":"))
             start = datetime(event.date.year, event.date.month, event.date.day, hour, minute, tzinfo=tz)
             lines.append(f"DTSTART:{start.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}")
-            if event.end_date:
-                lines.append(f"DTEND;VALUE=DATE:{(event.end_date + timedelta(days=1)).strftime('%Y%m%d')}")
-            else:
-                lines.append(f"DTEND:{(start + timedelta(hours=2)).astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}")
+            # DTEND 要和 DTSTART 同型別（RFC 5545 3.6.1）：多天的行程結束在最後一天同一時間再加 2 小時
+            end = datetime.combine(event.end_date or event.date, start.timetz()) + timedelta(hours=2)
+            lines.append(f"DTEND:{end.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}")
         else:
             last_day = event.end_date or event.date
             lines.append(f"DTSTART;VALUE=DATE:{event.date.strftime('%Y%m%d')}")
@@ -527,4 +566,4 @@ def export_ics(db: Session) -> str:
             lines += ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_text('明天：' + event.title)}", "TRIGGER:-P1D", "END:VALARM"]
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
-    return "\r\n".join(lines) + "\r\n"
+    return "\r\n".join(_fold(line) for line in lines) + "\r\n"

@@ -25,7 +25,7 @@ export function PomodoroCard() {
   const running = timer.endsAt !== null
   const paused = timer.pausedLeft !== null
   const total = (timer.phase === 'break' ? timer.breakMinutes : timer.focusMinutes) * 60
-  const progress = timer.phase === 'idle' ? 0 : 1 - left / total
+  const progress = timer.phase === 'idle' ? 0 : Math.min(1, Math.max(0, 1 - left / total))
   const count = todayCount(timer)
 
   return (

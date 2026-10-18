@@ -41,7 +41,7 @@ interface Running {
 
 interface AiTutorProps {
   questionId: number
-  /** 使用者的作答（原始選項字母），讓 AI 針對錯誤說明 */
+  /** 使用者的作答（原始選項字母），追問時讓 AI 針對錯誤說明 */
   myAnswer?: string[] | null
   className?: string
 }
@@ -100,16 +100,20 @@ export function AiTutor({ questionId, myAnswer, className }: AiTutorProps) {
     current.controller.abort()
   }
 
+  // 詳解是這題共用的（題庫、錯題本都看同一份），不帶個人作答；個人作答只放在追問
+  // 兩個動作的錯誤只留最近一次：開始其中一個就清掉另一個的錯誤，避免成功後還掛著舊的「已中斷」或逾時訊息
   const explain = useMutation({
-    mutationFn: (regenerate: boolean) =>
-      send(`/tutor/questions/${questionId}/explain`, { regenerate, my_answer: myAnswer ?? null }),
+    mutationFn: (regenerate: boolean) => send(`/tutor/questions/${questionId}/explain`, { regenerate }),
+    onMutate: (): void => ask.reset(),
     onSuccess: (data) => {
       onThread(data)
       announceReply(data)
     },
   })
   const ask = useMutation({
-    mutationFn: (content: string) => send(`/tutor/questions/${questionId}/messages`, { content }),
+    mutationFn: (content: string) =>
+      send(`/tutor/questions/${questionId}/messages`, { content, my_answer: myAnswer ?? null }),
+    onMutate: (): void => explain.reset(),
     onSuccess: (data) => {
       onThread(data)
       announceReply(data)

@@ -26,9 +26,21 @@ def list_papers(
     category: str | None = None,
     subject: str | None = None,
     origin: Origin | None = None,
+    no_year: bool = False,
+    no_category: bool = False,
     db: Session = Depends(get_db),
 ) -> list[PaperSummary]:
-    return service.list_papers(db, exam_type=exam_type, year=year, category=category, subject=subject, origin=origin)
+    """no_year／no_category：只列出沒有年度／沒有類科的試卷（題庫分組用）。"""
+    return service.list_papers(
+        db,
+        exam_type=exam_type,
+        year=year,
+        category=category,
+        subject=subject,
+        origin=origin,
+        no_year=no_year,
+        no_category=no_category,
+    )
 
 
 @router.get("/papers/{paper_id}", response_model=PaperDetail)

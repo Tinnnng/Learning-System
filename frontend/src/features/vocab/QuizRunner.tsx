@@ -9,6 +9,7 @@ import { OptionBubble } from '@/components/OptionBubble'
 import { RichText } from '@/components/RichText'
 import { ErrorState } from '@/components/States'
 import { ZhengTally } from '@/components/ZhengTally'
+import { ApiError } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { setShortcutsEnabled, useShortcutsEnabled } from '@/lib/shortcuts'
 import { onRovingKeyDown, rovingTabIndex } from '@/lib/roving'
@@ -92,7 +93,14 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
     mutationFn: (response: string) => answerWord(item, response, context, `${runId}-${index}`),
     onSuccess: (data) => {
       setResults((old) => ({ ...old, [index]: data }))
-      queryClient.invalidateQueries({ queryKey: ['vocab'] })
+      if (context === 'daily') {
+        // 每日單字寫到第 5 題時，重新抓到的每日清單會變成「5／5 寫完」，頁面立刻換成完成畫面，
+        // 第 5 題的對錯就來不及顯示。所以只標記過期、不馬上重抓，等按「完成」或下次打開頁面再抓
+        queryClient.invalidateQueries({ queryKey: ['vocab', 'daily'], refetchType: 'none' })
+        queryClient.invalidateQueries({ queryKey: ['vocab'], predicate: (query) => query.queryKey[1] !== 'daily' })
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['vocab'] })
+      }
       window.setTimeout(() => nextRef.current?.focus(), 50)
     },
   })
@@ -116,6 +124,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
     const nextIndex = index + 1
     setPicked(null)
     setSpelling('')
+    answer.reset()
     setIndex(nextIndex)
     if (nextIndex >= items.length) onFinish?.(Object.values(results))
   }
@@ -138,6 +147,7 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
   }, [answer, item, result, shortcuts])
 
   if (!item) return null
+  const conflict = answer.error instanceof ApiError && answer.error.status === 409
 
   const submitSpelling = (event: FormEvent) => {
     event.preventDefault()
@@ -260,6 +270,15 @@ export function QuizRunner({ items, context, onFinish }: QuizRunnerProps) {
         </div>
       )}
       {answer.isError && <ErrorState error={answer.error} />}
+      {conflict && !result && (
+        // 這個字在別的分頁已經寫過（或每日單字已換日）：讓使用者跳過，不必重新整理
+        <div className="flex justify-end">
+          <Button onClick={next}>
+            {index + 1 < items.length ? '跳過這個' : '完成'}
+            <Icon name="arrow" size={18} />
+          </Button>
+        </div>
+      )}
       {result && <WordReveal result={result} />}
       {result && (
         <div className="flex justify-end">

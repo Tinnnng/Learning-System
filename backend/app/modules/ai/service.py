@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.modules.ai.models import AiUsage
-from app.modules.ai.providers.base import Completion, ImageInput, LLMProvider, ProviderCancelled, ProviderError
+from app.modules.ai.providers.base import (
+    Completion,
+    ImageInput,
+    LLMProvider,
+    ProviderCancelled,
+    ProviderError,
+    ProviderTimeout,
+)
 from app.modules.ai.providers.claude_code import ClaudeCodeProvider
 from app.modules.ai.providers.fake import FakeProvider
 from app.modules.ai.schemas import AiStatus
@@ -123,9 +130,10 @@ def complete(
             if request_id in _running:
                 # 同一個請求重送（例如網路重試）：不要再花一次用量，也不要和前一個共用中斷旗標
                 raise AiUnavailable("這個請求已經在處理中，請稍候。")
-            flag = _running[request_id] = Event()
             if _precancelled.pop(request_id, None) is not None:
-                flag.set()
+                # 送出前就按了中斷（例如教材分批出題、兩批之間按中斷）：不啟動 CLI，也不記用量
+                raise AiCancelled("已中斷，這次沒有產生內容。")
+            flag = _running[request_id] = Event()
     try:
         completion = provider.complete(system, prompt, images, cancel=flag)
     except ProviderError as error:
@@ -167,4 +175,5 @@ def _record_failed(db: Session, feature: str, error: ProviderError) -> None:
             select(AiUsage.cost_usd).where(AiUsage.feature == feature, AiUsage.cost_usd > 0).order_by(AiUsage.id.desc()).limit(20)
         ).all()
         estimate = sum(recent) / len(recent) if recent else 0.0
-        _record(db, feature, Completion(text="", cost_usd=round(estimate, 6)), model=f"{get_settings().ai_model}（中斷，估計）")
+        reason = "逾時" if isinstance(error, ProviderTimeout) else "中斷"
+        _record(db, feature, Completion(text="", cost_usd=round(estimate, 6)), model=f"{get_settings().ai_model}（{reason}，估計）")

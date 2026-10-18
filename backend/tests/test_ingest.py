@@ -7,7 +7,7 @@ import pytest
 from app.modules.ingest import service
 from app.modules.ingest.gaopu.answers import parse_answer_pdf, parse_note
 from app.modules.ingest.gaopu.filenames import parse_filename, parse_folder
-from app.modules.ingest.gaopu.header import parse_duration
+from app.modules.ingest.gaopu.header import parse_duration, parse_question_header
 from app.modules.ingest.gaopu.manifest import scan
 from app.modules.ingest.validation import check_bundle
 from tests.factories import make_bundle
@@ -73,6 +73,9 @@ def test_parse_filename_and_folder():
 
     folder = parse_folder("115普考QA-一般行政")
     assert (folder.year, folder.exam_type, folder.category) == (115, "普考", "一般行政")
+    folder = parse_folder("114地方特考QA-四等一般行政")
+    assert (folder.year, folder.exam_type, folder.category) == (114, "地方特考", "四等一般行政")
+    assert parse_folder("114特種考試QA-一般行政") is None
 
 
 @pytest.mark.parametrize(("text", "minutes"), [("1 小時", 60), ("1 小時30 分", 90), ("2 小時", 120), ("無", None)])
@@ -157,3 +160,27 @@ def test_save_converted_file(client, data_dir):
         for file in converted.iterdir():
             if file.is_file():
                 file.unlink()
+
+
+def _header_pdf(path, lines):
+    document = pymupdf.open()
+    page = document.new_page()
+    for index, line in enumerate(lines):
+        page.insert_text((40, 40 + index * 16), line, fontname="china-t", fontsize=10)
+    document.save(path)
+    return path
+
+
+def test_question_type_ignores_essay_words_inside_questions(tmp_path):
+    choice = _header_pdf(tmp_path / "choice.pdf", [
+        "科目：行政學概要", "※注意：本試題為單一選擇題", "頁次：4-1",
+        "1", "公務員得於公餘時間從事補習班批改作文之工作",
+    ])
+    header = parse_question_header(choice)
+    assert (header.has_choice, header.has_essay) == (True, False)
+
+    mixed = _header_pdf(tmp_path / "mixed.pdf", [
+        "科目：政治學概要", "頁次：3-1", "甲、申論題部分：（50 分）", "乙、測驗題部分：（50 分）", "本測驗試題為單一選擇題",
+    ])
+    header = parse_question_header(mixed)
+    assert (header.has_choice, header.has_essay) == (True, True)

@@ -88,11 +88,11 @@ def test_usage_is_logged_and_budget_enforced(db, fake_ai, monkeypatch):
 
 def test_explain_sends_official_answer_and_caches(db, fake_ai, question_id):
     fake_ai.replies = ["因為 B 和 C 都對。"]
-    thread = tutor_service.explain(db, question_id, my_answer=["A"])
+    thread = tutor_service.explain(db, question_id)
     assert thread.messages[0].content == "因為 B 和 C 都對。"
     prompt = fake_ai.calls[0]["prompt"]
     assert "正確答案：B、C（更正答案" in prompt
-    assert "學生選了：A" in prompt
+    assert "學生選了" not in prompt  # 詳解是共用的，不帶個人作答
     assert "(D) 丁" in prompt
 
     again = tutor_service.explain(db, question_id)

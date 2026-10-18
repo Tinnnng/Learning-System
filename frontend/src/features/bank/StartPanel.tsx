@@ -23,7 +23,7 @@ type CountChoice = 'all' | '10' | '20' | '30'
 
 export function StartPanel({ filter, questionCount: choiceCount, essayCount = 0, durationMinutes, title }: StartPanelProps) {
   const [mode, setMode] = useState<'practice' | 'mock'>('practice')
-  const [countChoice, setCountChoice] = useState<CountChoice>('all')
+  const [chosenCount, setCountChoice] = useState<CountChoice>('all')
   const [shuffleQuestions, setShuffleQuestions] = useState(false)
   const [shuffleOptions, setShuffleOptions] = useState(false)
   // 只有申論題時一定要包含；有選擇題時預設不含（申論題要打字、自己評分，比較花時間）
@@ -32,10 +32,12 @@ export function StartPanel({ filter, questionCount: choiceCount, essayCount = 0,
   const questionCount = choiceCount + (includeEssay ? essayCount : 0)
   const start = useStartSession()
 
-  const count = countChoice === 'all' ? null : Math.min(Number(countChoice), questionCount)
   const countOptions = (['all', '10', '20', '30'] as const)
     .filter((choice) => choice === 'all' || Number(choice) < questionCount)
     .map((choice) => ({ value: choice, label: choice === 'all' ? `全部 ${questionCount}` : `${choice} 題` }))
+  // 題數變少（例如關掉申論題、換篩選條件）時，選過的題數可能已經不在選項裡，回到「全部」
+  const countChoice: CountChoice = countOptions.some((option) => option.value === chosenCount) ? chosenCount : 'all'
+  const count = countChoice === 'all' ? null : Math.min(Number(countChoice), questionCount)
   const fullPaper = countChoice === 'all' && durationMinutes
 
   return (
@@ -46,7 +48,7 @@ export function StartPanel({ filter, questionCount: choiceCount, essayCount = 0,
         start.mutate({
           mode,
           title: title ? `${title}（${mode === 'mock' ? '模擬考' : '練習'}）` : undefined,
-          source: { kind: 'filter', filter: { ...filter, types: ['single_choice', 'multi_choice'] } },
+          source: { kind: 'filter', filter: { no_year: false, no_category: false, ...filter, types: ['single_choice', 'multi_choice'] } },
           include_essay: includeEssay,
           count,
           shuffle_questions: shuffleQuestions || count !== null,

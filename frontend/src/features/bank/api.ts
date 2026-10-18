@@ -7,12 +7,15 @@ export interface PaperFilters {
   category?: string | null
   subject?: string | null
   origin?: string | null
+  /** 只要沒有年度／沒有類科的試卷（題庫分組用） */
+  no_year?: boolean
+  no_category?: boolean
 }
 
 const query = (filters: PaperFilters) => {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== null && value !== undefined && value !== '') params.set(key, String(value))
+    if (value !== null && value !== undefined && value !== '' && value !== false) params.set(key, String(value))
   }
   const text = params.toString()
   return text ? `?${text}` : ''

@@ -3,8 +3,9 @@
 import re
 import unicodedata
 
-# 零寬字元與 BOM：從網頁、Excel 複製時常夾帶，肉眼看不到
-_INVISIBLE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+# 零寬字元、BOM、軟連字號與文字方向控制字元（LRM／RLM、U+202A–202E、U+2066–2069）：
+# 從網頁、Word、Excel 複製時常夾帶，肉眼看不到
+_INVISIBLE = re.compile("[\u00ad\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
 # 前後的句讀、引號與括號（中間的標點保留，例如 e-mail、TCP/IP）。
 # 不去掉 + # 這類符號：C++、C# 和 C 是不同的東西。
 _EDGE_CHARS = "\"'“”‘’「」『』《》〈〉()（）[]【】.,;:!?。，、；：！？…·"
@@ -44,7 +45,10 @@ def match_key(text: str, *, strip_punct: bool = False, keep_spaces: bool = True)
     key = _INVISIBLE.sub("", key).casefold()
     key = " ".join(key.split())
     if strip_punct:
-        key = _EDGE_PUNCT.sub("", key).strip()
+        # 標點和空白可能交錯（「“invoice” .」），要反覆去到不再變動
+        previous = None
+        while key != previous:
+            previous, key = key, _EDGE_PUNCT.sub("", key).strip()
     if not keep_spaces:
         key = key.replace(" ", "")
     return key

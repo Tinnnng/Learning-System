@@ -30,6 +30,10 @@ const examRank = (examType: string) => {
   return index === -1 ? EXAM_ORDER.length : index
 }
 
+/** 篩選列的考試選項也照同樣順序（高考、普考、地方特考、期中考…） */
+export const sortExamTypes = (examTypes: string[]) =>
+  [...examTypes].sort((a, b) => examRank(a) - examRank(b) || a.localeCompare(b, 'zh-Hant'))
+
 export function groupLabel(year: number | null, examType: string, name: string) {
   return `${year ?? ''}${examType}－${name}`
 }
@@ -70,16 +74,25 @@ export function groupPapers(papers: PaperSummary[]): PaperGroup[] {
   )
 }
 
-/** 這一組的篩選條件（出題、查詢用） */
+/** 這一組的篩選條件（出題、查詢用）。沒有年度、沒有類科的組要明確說「沒有」，否則會混進其他年度、或同科目但有類科的試卷 */
 export function groupFilter(
   group: Pick<PaperGroup, 'year' | 'examType' | 'category' | 'subject'>,
-): Pick<PaperFilters, 'year' | 'exam_type' | 'category' | 'subject'> {
-  return { year: group.year, exam_type: group.examType, category: group.category, subject: group.category ? null : group.subject }
+): Pick<PaperFilters, 'year' | 'exam_type' | 'category' | 'subject' | 'no_year' | 'no_category'> {
+  return {
+    year: group.year,
+    exam_type: group.examType,
+    category: group.category,
+    subject: group.category ? null : group.subject,
+    no_year: group.year === null,
+    no_category: !group.category,
+  }
 }
 
 export function groupPath(group: PaperGroup) {
   const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(groupFilter(group))) {
+  // 網址只放年度、考試、類科、科目；分組頁讀回來時沒有年度／類科就自己補上「沒有」的條件
+  const { year, exam_type, category, subject } = groupFilter(group)
+  for (const [key, value] of Object.entries({ year, exam_type, category, subject })) {
     if (value !== null && value !== undefined) params.set(key, String(value))
   }
   return `/bank/group?${params}`

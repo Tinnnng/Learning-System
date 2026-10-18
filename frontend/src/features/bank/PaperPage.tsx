@@ -81,11 +81,14 @@ function QuestionPreview({ question, showAnswer, onEdit }: { question: QuestionO
   )
 }
 
+// 手機用 dev:lan 的 http 連線沒有 crypto.randomUUID
+const newRequestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+
 export function PaperPage() {
   const id = Number(useParams().paperId)
   const paper = useQuery({ queryKey: ['bank', 'paper', id], queryFn: () => fetchPaper(id) })
   const [showAnswer, setShowAnswer] = useState(false)
-  const [editing, setEditing] = useState<{ id: number | null; draft: QuestionDraft } | null>(null)
+  const [editing, setEditing] = useState<{ id: number | null; draft: QuestionDraft; requestId?: string } | null>(null)
   const queryClient = useQueryClient()
   const questionIds = paper.data?.questions.map((question) => question.id).join(',')
   useEffect(() => {
@@ -94,7 +97,8 @@ export function PaperPage() {
   }, [queryClient, questionIds])
   const saveQuestion = async (draft: QuestionDraft) => {
     if (editing?.id) await api.put(`/bank/questions/${editing.id}`, draft)
-    else await api.post(`/bank/papers/${id}/questions`, draft)
+    // 同一次新增帶同一個請求 id：連按或網路重試時後端只新增一次
+    else await api.post(`/bank/papers/${id}/questions`, { ...draft, client_id: editing?.requestId })
     await queryClient.invalidateQueries({ queryKey: ['bank'] })
   }
 
@@ -153,7 +157,7 @@ export function PaperPage() {
             ))}
           </ol>
           <div className="border-t border-rule py-5">
-            <Button variant="secondary" size="sm" onClick={() => setEditing({ id: null, draft: emptyQuestion() })}>
+            <Button variant="secondary" size="sm" onClick={() => setEditing({ id: null, draft: emptyQuestion(), requestId: newRequestId() })}>
               <Icon name="plus" size={16} />
               新增題目
             </Button>

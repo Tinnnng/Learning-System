@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from threading import Event
 
-from app.modules.ai.providers.base import Completion, ImageInput, ProviderCancelled, ProviderError
+from app.modules.ai.providers.base import Completion, ImageInput, ProviderCancelled, ProviderError, ProviderTimeout
 
 
 class ClaudeCodeProvider:
@@ -76,12 +76,17 @@ class ClaudeCodeProvider:
             line = line.strip()
             if not line.startswith("{"):
                 continue
-            event = json.loads(line)
-            if event.get("type") == "result":
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # 被截斷或壞掉的一行：略過，繼續找後面的 result
+            if isinstance(event, dict) and event.get("type") == "result":
                 result = event
         if result is None:
             raise ProviderError("Claude Code 沒有回傳結果。")
-        usage = result.get("usage", {})
+        usage = result.get("usage")
+        if not isinstance(usage, dict):
+            usage = {}  # CLI 回錯誤時 usage 可能是 null
         completion = Completion(
             text=(result.get("result") or "").strip(),
             input_tokens=usage.get("input_tokens", 0)
@@ -102,17 +107,23 @@ class ClaudeCodeProvider:
     ) -> Completion:
         # 在空的暫存資料夾執行，避免讀到任何專案的 CLAUDE.md
         with tempfile.TemporaryDirectory(prefix="ls-ai-") as workdir:
-            process = subprocess.Popen(
-                self.command(system),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                cwd=workdir,
-                # 關掉延伸思考：實測擷取行事曆時思考會吃掉 1.5 萬 token、拖到 2 分鐘以上
-                env={**os.environ, "MAX_THINKING_TOKENS": "0"},
-            )
+            command = self.command(system)
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8",
+                    cwd=workdir,
+                    # 關掉延伸思考：實測擷取行事曆時思考會吃掉 1.5 萬 token、拖到 2 分鐘以上
+                    env={**os.environ, "MAX_THINKING_TOKENS": "0"},
+                )
+            except OSError as error:
+                raise ProviderError(
+                    f"無法執行 Claude Code（{command[0]}）：{error}。請確認已安裝 Claude Code，或修正 backend/.env 的 LS_CLAUDE_CLI。"
+                ) from error
             stdout, stderr = self._wait(process, self.message(prompt, images), cancel)
         if process.returncode != 0 and "\"type\":\"result\"" not in stdout.replace(" ", ""):
             detail = (stderr or stdout).strip().splitlines()[-1:] or ["未知錯誤"]
@@ -130,10 +141,28 @@ class ClaudeCodeProvider:
             except subprocess.TimeoutExpired:
                 pending_input = None  # 輸入在第一次 communicate 已經送出，重試時不能再給
             if cancel is not None and cancel.is_set():
-                process.kill()
-                process.communicate()
+                _kill_tree(process)
                 raise ProviderCancelled("已中斷，這次沒有產生內容。", spent=True)
             if time.monotonic() > deadline:
-                process.kill()
-                process.communicate()
-                raise ProviderError(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。", spent=True)
+                _kill_tree(process)
+                raise ProviderTimeout(f"AI 超過 {self.timeout} 秒沒有回應，請稍後再試。", spent=True)
+
+
+def _kill_tree(process: subprocess.Popen) -> None:
+    """連子程序一起終止。走 claude.cmd 時真正的 claude 是 cmd.exe 的子程序，只 kill cmd.exe 的話它會繼續跑、
+    繼續花用量，還握著 stdout 讓 communicate() 一直等。"""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    process.kill()
+    try:
+        process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        # 還有程序握著 pipe：不再等它，關掉 pipe 讓呼叫端可以先回應
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream:
+                stream.close()

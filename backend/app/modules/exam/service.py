@@ -2,7 +2,8 @@
 
 - 練習模式（practice）：每題作答後立即揭曉對錯並記錄到錯題本，答過不能改。
 - 模擬考（mock）：可以改答案，交卷時才評分並記錄。
-- 沒作答的題目交卷時計 0 分，但不記入錯題本（沒看過的題目不算答錯）。
+- 沒作答的題目交卷時計 0 分，但不記入錯題本（沒看過的題目不算答錯）；申論題沒寫就評分也一樣。
+- 模擬考時間到只提醒、不自動交卷，超時仍可作答（使用者 2026-10-17 決定）。
 - 申論題：打字作答；練習模式按「看參考答案」揭曉、模擬考交卷後揭曉，
   使用者勾選寫到的得分要點自評（可先請 AI 建議），評分後才記入錯題本與總分。
 """
@@ -153,19 +154,28 @@ def _load(db: Session, session_id: int) -> ExamSession:
     return session
 
 
+def _sync_options(item: ExamItem, question: QuestionWithPaper) -> None:
+    """出題後題庫改了選項數（修改題目、重新匯入更正），出題時記下的打亂順序就對不上：改回原始順序。
+    讀取時只改記憶體中的物件；作答、評分等寫入時才會一併存回資料庫。"""
+    if sorted(item.option_order) != list(range(len(question.options))):
+        item.option_order = list(range(len(question.options)))
+
+
 def _to_display(item: ExamItem, letters: list[str]) -> list[str]:
-    """原始選項字母 → 畫面上的字母。"""
+    """原始選項字母 → 畫面上的字母。題目改過選項後已經不存在的選項略過。"""
     position = {original: display for display, original in enumerate(item.option_order)}
-    return sorted(OPTION_LETTERS[position[OPTION_LETTERS.index(letter)]] for letter in letters)
+    indexes = [OPTION_LETTERS.find(letter) for letter in letters]
+    return sorted(OPTION_LETTERS[position[index]] for index in indexes if index in position)
 
 
 def _to_original(item: ExamItem, letters: list[str]) -> list[str]:
     """畫面上的字母 → 原始選項字母。"""
     original = []
     for letter in letters:
-        index = OPTION_LETTERS.find(letter.upper())
+        # 一次只能是一個字母：find("") 和 find("AB") 都會回傳 0，會被誤當成 (A)
+        index = OPTION_LETTERS.find(letter.upper()) if len(letter) == 1 else -1
         if index < 0 or index >= len(item.option_order):
-            raise ExamError(f"選項 {letter} 不存在")
+            raise ExamError(f"選項 {letter or '（空白）'} 不存在")
         original.append(OPTION_LETTERS[item.option_order[index]])
     return sorted(set(original))
 
@@ -175,6 +185,7 @@ def _answered(item: ExamItem) -> bool:
 
 
 def _item_out(item: ExamItem, question: QuestionWithPaper, reveal: bool) -> ItemOut:
+    _sync_options(item, question)
     revealed = reveal or item.revealed
     essay = question.type == "essay"
     return ItemOut(
@@ -210,10 +221,11 @@ def _item_out(item: ExamItem, question: QuestionWithPaper, reveal: bool) -> Item
 
 
 def _remaining_seconds(session: ExamSession) -> int | None:
+    """剩餘秒數；超時是負數（時間到不自動交卷，前端顯示已超時多久）。"""
     if session.duration_minutes is None or session.submitted_at is not None:
         return None
     elapsed = (_now() - session.started_at).total_seconds()
-    return max(0, int(session.duration_minutes * 60 - elapsed))
+    return int(session.duration_minutes * 60 - elapsed)
 
 
 def get_session(db: Session, session_id: int) -> SessionOut:
@@ -260,6 +272,13 @@ def _find_item(session: ExamSession, position: int) -> ExamItem:
     return item
 
 
+def _question(db: Session, item: ExamItem) -> QuestionWithPaper:
+    found = bank_service.get_questions_with_paper(db, [item.question_id])
+    if not found:
+        raise ExamError("這一題已經不在題庫裡", status_code=404)
+    return found[0]
+
+
 def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> ItemOut:
     begin_write(db)  # 同一題同時送兩次：第二次要看到第一次的結果（已揭曉／已交卷）
     session = _load(db, session_id)
@@ -269,7 +288,7 @@ def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> 
     if item.revealed:
         raise ExamError("揭曉答案後不能修改", status_code=409)
 
-    question = bank_service.get_questions_with_paper(db, [item.question_id])[0]
+    question = _question(db, item)
     if question.type == "essay":
         # 申論題只存作答內容；練習模式要按「看參考答案」才揭曉
         item.essay_text = (data.text or "").strip() or None
@@ -280,11 +299,12 @@ def answer_item(db: Session, session_id: int, position: int, data: AnswerIn) -> 
     if data.text is not None:
         raise ExamError("選擇題請選選項")
 
+    _sync_options(item, question)
     response = _to_original(item, data.response)
     if question.type == "single_choice" and len(response) > 1:
         raise ExamError("單選題只能選一個答案")
 
-    item.response = response or None  # 空陣列＝清除作答
+    item.response = response or None  # 空陣列＝清除作答（欄位設 none_as_null，存成 SQL NULL）
     item.is_correct = is_response_correct(question.type, question.answer, response) if response else None
     item.time_spent_seconds = data.time_spent_seconds
     item.answered_at = _now()
@@ -310,7 +330,7 @@ def _attempt(session: ExamSession, item: ExamItem, score_ratio: float | None = N
 def _essay_item(db: Session, session_id: int, position: int) -> tuple[ExamSession, ExamItem, QuestionWithPaper]:
     session = _load(db, session_id)
     item = _find_item(session, position)
-    question = bank_service.get_questions_with_paper(db, [item.question_id])[0]
+    question = _question(db, item)
     if question.type != "essay":
         raise ExamError("這一題不是申論題")
     return session, item, question
@@ -343,8 +363,10 @@ def grade_item(db: Session, session_id: int, position: int, data: GradeIn) -> It
     hits = sorted(set(data.hits))
     if any(index < 0 or index >= len(question.rubric) for index in hits):
         raise ExamError("得分要點不存在")
-    score = round(sum(question.rubric[index].points for index in hits), 2)
-    ratio = min(score / item.points, 1.0) if item.points else 0.0
+    # 依要點占比換算成這次測驗的配分：出題後題庫改了配分，得分也不會超過這次的滿分
+    rubric_total = sum(point.points for point in question.rubric)
+    ratio = min(sum(question.rubric[index].points for index in hits) / rubric_total, 1.0) if rubric_total else 0.0
+    score = round(item.points * ratio, 2)
     first_time = not item.graded
     item.rubric_hits = hits
     item.score = score
@@ -352,7 +374,8 @@ def grade_item(db: Session, session_id: int, position: int, data: GradeIn) -> It
     item.is_correct = ratio >= get_settings().essay_pass_ratio
     if item.answered_at is None:
         item.answered_at = _now()
-    if first_time:
+    # 沒寫就看參考答案再評分：和交卷時沒寫的一樣，不記入錯題本
+    if first_time and item.essay_text:
         review_service.record_attempts(db, [_attempt(session, item, score_ratio=ratio)])
     if session.submitted_at is not None:
         _session_score(session)
@@ -405,8 +428,13 @@ def ai_grade_item(db: Session, session_id: int, position: int) -> ItemOut:
     payload = _parse_json(text)
     hits: list[int] = []
     judgements = payload.get("judgements") if isinstance(payload.get("judgements"), list) else []
-    # 舊格式 {"hits": [...]} 也接受
-    values = [j.get("point") for j in judgements if isinstance(j, dict) and j.get("hit") is True] or payload.get("hits") or []
+    values = [j.get("point") for j in judgements if isinstance(j, dict) and j.get("hit") is True]
+    if not values:
+        # 舊格式 {"hits": [...]} 也接受；不是陣列就看不懂
+        legacy = payload.get("hits")
+        if legacy is not None and not isinstance(legacy, list):
+            raise ExamError("AI 回傳的格式看不懂，請再試一次", status_code=502)
+        values = legacy or []
     for value in values:
         found = re.search(r"\d+", str(value))
         index = int(found.group()) - 1 if found else -1
@@ -450,7 +478,11 @@ def submit_session(db: Session, session_id: int) -> SessionOut:
 def list_sessions(db: Session, status: str | None = None, limit: int = 50) -> list[SessionSummary]:
     answered = (
         select(func.count(ExamItem.id))
-        .where(ExamItem.session_id == ExamSession.id, ExamItem.response.is_not(None) | ExamItem.essay_text.is_not(None))
+        .where(
+            ExamItem.session_id == ExamSession.id,
+            # 舊資料清除作答時存成 JSON 字串 'null'，用陣列長度判斷（'null' 的長度是 0）
+            (func.coalesce(func.json_array_length(ExamItem.response), 0) > 0) | ExamItem.essay_text.is_not(None),
+        )
         .correlate(ExamSession)
         .scalar_subquery()
     )

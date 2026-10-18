@@ -5,8 +5,8 @@
  * 3. 對照參考答案勾選寫到的得分要點，加總成分數；可以先「請 AI 評分」，AI 會建議勾哪些並給評語，確認後才算分。
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { EssayReference } from '@/components/EssayReference'
 import { Icon } from '@/components/Icon'
@@ -15,6 +15,8 @@ import { api } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { score as formatScore } from '@/lib/format'
 import type { ItemOut } from '@/lib/types'
+import { fetchRules } from './api'
+import { essayDraftFlushers as flushers } from './essayDrafts'
 
 const SAVE_DELAY_MS = 1000
 
@@ -39,10 +41,39 @@ function EssayEditor({ item, sessionId, practice, onUpdate }: Omit<EssayAnswerPr
   const fieldId = useId()
   const [draft, setDraft] = useState(item.text ?? '')
   const base = `/exam/sessions/${sessionId}/items/${item.position}`
+  const inflight = useRef<Promise<unknown> | null>(null)
   const save = useMutation({
-    mutationFn: (text: string) => api.put<ItemOut>(base, { text }),
+    mutationFn: (text: string) => {
+      const request = api.put<ItemOut>(base, { text })
+      inflight.current = request
+      return request
+    },
     onSuccess: onUpdate,
   })
+
+  // 最新的草稿與已存的內容：給交卷前、卸載時的補存用（effect 裡讀，不受 render 時機影響）
+  const draftRef = useRef(draft)
+  const savedRef = useRef(item.text ?? '')
+  useEffect(() => {
+    draftRef.current = draft
+    savedRef.current = item.text ?? ''
+  })
+  const flush = useCallback(async () => {
+    await inflight.current?.catch(() => undefined)
+    const text = draftRef.current
+    if (text.trim() === savedRef.current) return
+    const updated = await api.put<ItemOut>(base, { text })
+    savedRef.current = updated.text ?? ''
+    onUpdate(updated)
+  }, [base, onUpdate])
+  useEffect(() => {
+    const key = `${sessionId}-${item.position}`
+    flushers.set(key, flush)
+    return () => {
+      flushers.delete(key)
+      void flush().catch(() => undefined)
+    }
+  }, [flush, item.position, sessionId])
   const reveal = useMutation({
     mutationFn: async () => {
       if (draft.trim() !== (item.text ?? '')) onUpdate(await api.put<ItemOut>(base, { text: draft }))
@@ -97,8 +128,13 @@ function EssayEditor({ item, sessionId, practice, onUpdate }: Omit<EssayAnswerPr
   )
 }
 
+const percentLabel = (ratio: number) => `${Math.round(ratio * 100)}%`
+
 function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'practice' | 'submitted'>) {
   const queryClient = useQueryClient()
+  const rules = useQuery({ queryKey: ['review', 'rules'], queryFn: fetchRules, staleTime: Infinity }).data
+  const passRatio = rules?.essay_pass_ratio ?? 0.8
+  const wrongRatio = rules?.essay_wrong_ratio ?? 0.6
   const rubric = item.rubric ?? []
   const [hits, setHits] = useState<number[]>(() => item.rubric_hits ?? item.ai_hits ?? [])
   const [editing, setEditing] = useState(!item.graded)
@@ -123,6 +159,8 @@ function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'pra
     },
   })
 
+  // 只顯示最近一次動作的錯誤：AI 評分失敗後改手動評分成功，舊的錯誤不該留著
+  const lastAction = (grade.submittedAt ?? 0) >= (aiGrade.submittedAt ?? 0) ? grade : aiGrade
   const total = rubric.reduce((sum, point, index) => sum + (hits.includes(index) ? point.points : 0), 0)
   const toggle = (index: number) =>
     setHits((old) => (old.includes(index) ? old.filter((value) => value !== index) : [...old, index].sort((a, b) => a - b)))
@@ -153,7 +191,11 @@ function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'pra
               <span
                 className={cx(
                   'marker font-hand text-2xl font-bold text-ink [--marker-scale:1]',
-                  ratio >= 0.8 ? '[--marker-color:var(--ok-hl)]' : ratio < 0.6 ? '[--marker-color:var(--bad-hl)]' : '[--marker-color:var(--hl)]',
+                  ratio >= passRatio
+                    ? '[--marker-color:var(--ok-hl)]'
+                    : ratio < wrongRatio && item.text
+                      ? '[--marker-color:var(--bad-hl)]'
+                      : '[--marker-color:var(--hl)]',
                 )}
               >
                 {formatScore(item.score ?? 0)}／{formatScore(item.points)} 分
@@ -216,7 +258,16 @@ function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'pra
                 </Button>
               )}
               {item.graded && (
-                <button type="button" onClick={() => setEditing(false)} className="h-11 text-sm text-muted hover:text-ink">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // 取消修改：勾選回到上次確定的得分要點
+                    setHits(item.rubric_hits ?? [])
+                    setEditing(false)
+                    grade.reset()
+                  }}
+                  className="h-11 text-sm text-muted hover:text-ink"
+                >
                   取消
                 </button>
               )}
@@ -224,11 +275,13 @@ function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'pra
           ) : (
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
               <span>
-                {ratio !== null && ratio < 0.6
-                  ? '低於 60%，已收進錯題本。'
-                  : ratio !== null && ratio >= 0.8
-                    ? '達 80% 以上，答得好！'
-                    : '及格但未達 80%。'}
+                {!item.text
+                  ? '沒有作答，不收進錯題本。'
+                  : ratio !== null && ratio < wrongRatio
+                    ? `低於 ${percentLabel(wrongRatio)}，已收進錯題本。`
+                    : ratio !== null && ratio >= passRatio
+                      ? `達 ${percentLabel(passRatio)} 以上，答得好！`
+                      : `及格但未達 ${percentLabel(passRatio)}。`}
               </span>
               {item.text && (
                 <button type="button" onClick={() => setEditing(true)} className="h-11 text-accent hover:underline">
@@ -240,7 +293,7 @@ function EssayGrading({ item, sessionId, onUpdate }: Omit<EssayAnswerProps, 'pra
           {editing && item.text && !item.ai_feedback && (
             <p className="m-0 text-xs text-muted">AI 會依得分要點建議要勾哪些並給評語（約 10 秒），你確認後才算分。</p>
           )}
-          {(grade.isError || aiGrade.isError) && <ErrorState error={grade.error ?? aiGrade.error} />}
+          {lastAction.isError && <ErrorState error={lastAction.error} />}
         </section>
       )}
     </div>

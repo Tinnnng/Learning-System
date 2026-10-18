@@ -22,10 +22,12 @@ class TutorThread(BaseModel):
 
 class ExplainIn(BaseModel):
     regenerate: bool = Field(default=False, description="重新產生（會清掉這題原本的 AI 詳解與追問）")
-    my_answer: list[str] | None = Field(default=None, description="使用者選的答案（原始選項字母），讓 AI 針對錯誤說明")
     request_id: str | None = Field(default=None, max_length=64, description="前端產生的 id，按「中斷」時用 POST /api/ai/requests/{id}/cancel")
 
 
 class AskIn(BaseModel):
-    content: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=500, description="只有空白會回 422，不呼叫 AI")
+    my_answer: list[str] | None = Field(
+        default=None, description="使用者選的答案（原始選項字母），讓 AI 針對錯誤說明；只用在追問，不放進共用的詳解"
+    )
     request_id: str | None = Field(default=None, max_length=64, description="同 ExplainIn.request_id")

@@ -4,48 +4,56 @@ import { cx } from '@/lib/cx'
 import { clock } from '@/lib/format'
 
 interface TimerProps {
-  remainingSeconds: number
-  onExpire: () => void
+  /** 截止時刻（瀏覽器時鐘的毫秒） */
+  deadline: number
+  /** 時間到時呼叫一次（只提醒，不交卷） */
+  onTimeUp: () => void
 }
 
-/** 模擬考倒數。剩 5 分鐘變印刷粉紅、剩 1 分鐘閃爍；時間到呼叫 onExpire（只呼叫一次）。 */
-export function Timer({ remainingSeconds, onExpire }: TimerProps) {
-  const deadline = useRef<number | null>(null)
-  const expired = useRef(false)
-  const [left, setLeft] = useState(remainingSeconds)
+const secondsLeft = (deadline: number) => Math.round((deadline - Date.now()) / 1000)
+
+/** 模擬考倒數。剩 5 分鐘變印刷粉紅、剩 1 分鐘閃爍；時間到不交卷，改成顯示「已超時」繼續計時。 */
+export function Timer({ deadline, onTimeUp }: TimerProps) {
+  const [left, setLeft] = useState(() => secondsLeft(deadline))
+  const notified = useRef(false)
 
   useEffect(() => {
-    deadline.current ??= Date.now() + remainingSeconds * 1000
     const tick = () => {
-      if (deadline.current === null) return
-      const seconds = Math.max(0, Math.round((deadline.current - Date.now()) / 1000))
+      const seconds = secondsLeft(deadline)
       setLeft(seconds)
-      if (seconds === 0 && !expired.current) {
-        expired.current = true
-        onExpire()
+      if (seconds <= 0 && !notified.current) {
+        notified.current = true
+        onTimeUp()
       }
     }
     tick()
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
-  }, [onExpire, remainingSeconds])
+  }, [deadline, onTimeUp])
 
+  const over = left <= 0
   const warning = left <= 300
-  const urgent = left <= 60
-  // 剩 5 分鐘、1 分鐘時念一次（role=timer 本身不朗讀，避免每秒打擾）；隱藏的那份計時器不會念
-  const notice = urgent ? '剩不到 1 分鐘' : warning ? '剩不到 5 分鐘' : ''
+  const urgent = left > 0 && left <= 60
+  // 剩 5 分鐘、1 分鐘、時間到時念一次（role=timer 本身不朗讀，避免每秒打擾）；隱藏的那份計時器不會念
+  const notice = over ? '時間到，可以繼續作答' : urgent ? '剩不到 1 分鐘' : warning ? '剩不到 5 分鐘' : ''
   return (
     <span
       role="timer"
-      aria-label={`剩餘時間 ${clock(left)}`}
+      aria-label={over ? `已超時 ${clock(-left)}` : `剩餘時間 ${clock(left)}`}
       className={cx(
         'tabular inline-flex items-center gap-1.5 text-lg transition-colors duration-[var(--dur)]',
-        warning ? 'text-accent' : 'text-ink',
+        over ? 'text-bad' : warning ? 'text-accent' : 'text-ink',
         urgent && 'animate-pulse',
       )}
     >
       <Icon name="clock" size={18} />
-      {clock(left)}
+      {over ? (
+        <>
+          <span className="text-sm">超時</span>+{clock(-left)}
+        </>
+      ) : (
+        clock(left)
+      )}
       <span className="sr-only" aria-live="polite">
         {notice}
       </span>

@@ -12,6 +12,7 @@
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pymupdf
@@ -23,7 +24,7 @@ from app.modules.ingest import lecture, service
 from app.modules.ingest.adapters import SUPPORTED_SUFFIXES
 from app.modules.ingest.gaopu.build import BuildError, build_bundle
 from app.modules.ingest.gaopu.draft import generate_draft
-from app.modules.ingest.gaopu.filenames import parse_filename
+from app.modules.ingest.gaopu.filenames import EXAM_TYPES, parse_filename
 from app.modules.ingest.gaopu.header import parse_question_header
 from app.modules.ingest.gaopu.manifest import PaperGroup, scan
 from app.modules.ingest.schemas import (
@@ -45,6 +46,7 @@ LECTURE_IMAGES_PER_CALL = 8
 SCANNED_TEXT_CHARS = 150
 """教材抽得到的文字少於這個數字，就當成整頁掃描的圖片，改送圖片給 AI"""
 CHOICE_COUNT = 4
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 
 class UploadError(Exception):
@@ -81,23 +83,42 @@ def _unique(path: Path) -> Path:
 def _write(folder: Path, name: str, data: bytes) -> str:
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / name
-    if target.exists() and target.read_bytes() == data:
-        return target.name  # 同一個檔案重傳
+    # 同一個檔案重傳：原檔名和之前另存的「檔名-2」「檔名-3」…都要比對，內容一樣就不再多存一份
+    variants = re.compile(rf"^{re.escape(target.stem)}(?:-\d+)?{re.escape(target.suffix)}$")
+    for existing in sorted(folder.iterdir()):
+        if existing.is_file() and variants.match(existing.name) and existing.read_bytes() == data:
+            return existing.name
     target = _unique(target)
     target.write_bytes(data)
     return target.name
+
+
+_BAD_FOLDER_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+"""Windows 資料夾名稱不能用的字元（類科會變成資料夾名稱）"""
+
+
+def _check_pdf(name: str, data: bytes) -> None:
+    """PDF 要打得開；壞掉的檔案存進去之後，待轉檔清單會一直讀不了。"""
+    try:
+        with pymupdf.open(stream=data, filetype="pdf") as document:
+            pages = len(document)
+    except Exception as error:
+        raise UploadError(f"{name}：不是可以打開的 PDF 檔") from error
+    if pages == 0:
+        raise UploadError(f"{name}：PDF 沒有任何一頁")
 
 
 # ---------- 上傳 ----------
 
 
 def save_uploads(kind: UploadKind, files: list[tuple[str, bytes]], exam_type: str | None, category: str | None) -> UploadResult:
+    """先檢查整批檔案，全部沒問題才寫入：不會出現「回報失敗、前面幾個檔案卻已經存進去」的情況。"""
     if not files:
         raise UploadError("沒有選擇檔案")
     for name, data in files:
         if len(data) > MAX_UPLOAD_BYTES:
             raise UploadError(f"{name} 超過 50 MB")
-    saved: list[str] = []
+    planned: list[tuple[Path, str, bytes]] = []  # （資料夾, 檔名, 內容）
     warnings: list[str] = []
 
     if kind == "text":
@@ -105,23 +126,27 @@ def save_uploads(kind: UploadKind, files: list[tuple[str, bytes]], exam_type: st
             name = _safe_name(name)
             if Path(name).suffix.lower() not in SUPPORTED_SUFFIXES:
                 raise UploadError(f"{name}：題目文字檔請用 {'、'.join(sorted(SUPPORTED_SUFFIXES))}")
-            saved.append(_write(service.converted_dir(), name, data))
-        return UploadResult(saved=saved, warnings=warnings)
+            planned.append((service.converted_dir(), name, data))
+        return UploadResult(saved=[_write(*item) for item in planned], warnings=warnings)
 
     if kind == "lecture":
         for name, data in files:
             name = _safe_name(name)
             if Path(name).suffix.lower() not in LECTURE_SUFFIXES:
                 raise UploadError(f"{name}：教材請用 {'、'.join(sorted(LECTURE_SUFFIXES))}")
-            saved.append(_write(lecture_root(), name, data))
-        return UploadResult(saved=saved, warnings=warnings)
+            if Path(name).suffix.lower() == ".pdf":
+                _check_pdf(name, data)
+            planned.append((lecture_root(), name, data))
+        return UploadResult(saved=[_write(*item) for item in planned], warnings=warnings)
 
     # 高普考：檔名要是考選部原檔名，才看得出年度、考試代碼、科目代碼與題目／答案
-    if exam_type not in ("高考", "普考"):
-        raise UploadError("請選擇高考或普考")
+    if exam_type not in EXAM_TYPES:
+        raise UploadError(f"請選擇{'、'.join(EXAM_TYPES)}")
     category = (category or "").strip()
-    if not category or "/" in category or "\\" in category:
+    if not category:
         raise UploadError("請填類科，例如：一般行政")
+    if _BAD_FOLDER_CHARS.search(category) or category.endswith("."):
+        raise UploadError('類科不能有 < > : " / \\ | ? * 這些符號，也不能用句點結尾')
     for name, data in files:
         name = _safe_name(name)
         parsed = parse_filename(Path(name))
@@ -129,8 +154,9 @@ def save_uploads(kind: UploadKind, files: list[tuple[str, bytes]], exam_type: st
             raise UploadError(
                 f"{name}：檔名要維持考選部下載的原檔名（例如 115080_0114_法學知識與英文.pdf、ANS 或 MOD 開頭的是答案）"
             )
-        folder = gaopu_root() / f"{parsed.year}{exam_type}QA-{category}"
-        saved.append(_write(folder, name, data))
+        _check_pdf(name, data)
+        planned.append((gaopu_root() / f"{parsed.year}{exam_type}QA-{category}", name, data))
+    saved = [_write(*item) for item in planned]
     groups, scan_warnings = scan(gaopu_root())
     warnings += scan_warnings
     warnings += [
@@ -173,9 +199,12 @@ def list_pending() -> PendingSources:
     if gaopu_root().exists():
         groups, _ = scan(gaopu_root())
         for group in groups:
-            header = parse_question_header(group.question_file) if group.question_file else None
+            try:
+                header = parse_question_header(group.question_file) if group.question_file else None
+                pages = _page_count(group.question_file) if group.question_file else 0
+            except Exception:  # 打不開的 PDF（例如以前上傳的壞檔）：標成看不懂，不要讓整個清單打不開
+                header, pages = None, 0
             kind = "unknown" if header is None else "essay" if not header.has_choice else "mixed" if header.has_essay else "choice"
-            pages = _page_count(group.question_file) if group.question_file else 0
             papers.append(
                 PendingPaper(
                     source_key=group.source_key,
@@ -278,7 +307,7 @@ def _proofread(db: Session, group: PaperGroup, draft: QuestionDraftFile, request
             request_id,
         )
         calls, cost = calls + 1, cost + spent
-        fixed = {item.get("number"): item for item in payload.get("questions", []) if isinstance(item, dict)}
+        fixed = {_as_number(item.get("number")): item for item in payload.get("questions", []) if isinstance(item, dict)}
         for question in items:
             item = fixed.get(question.number)
             if not item:
@@ -294,6 +323,14 @@ def _proofread(db: Session, group: PaperGroup, draft: QuestionDraftFile, request
             if isinstance(item.get("note"), str) and item["note"].strip():
                 notes.setdefault(question.number, []).append(f"AI 校對：{item['note'].strip()}")
     return calls, round(cost, 6), notes
+
+
+def _as_number(value: object) -> int | None:
+    """AI 有時把題號寫成字串（"3"、"第3題"）。"""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    match = re.search(r"\d+", str(value or ""))
+    return int(match.group()) if match else None
 
 
 def convert_gaopu(db: Session, source_key: str, use_ai: bool, request_id: str | None = None) -> ConvertResult:
@@ -355,9 +392,14 @@ def _source_number(title: str) -> int | None:
 def _lecture_batches(path: Path, work: Path) -> tuple[list[tuple[str, list]], str]:
     """回傳（[(這批的文字, 這批的圖片)], 出處種類 slide／page）。文字太少的教材（掃描檔）改送圖片。"""
     images_dir = work / "images"
+    # 每次都重新抽圖：投影片圖片依資料夾裡已有的張數編號，沒清掉的話每抽一次就多一份
+    shutil.rmtree(images_dir, ignore_errors=True)
     markdown = lecture.extract_markdown(path, convert_dir=work, image_dir=images_dir)
     sections = _sections(markdown)
-    kind = "slide" if any(title.startswith("投影片") for title, _ in sections) else "page"
+    if path.suffix.lower() in (".docx", ".doc"):
+        kind = "section"  # Word 檔沒有固定頁碼，出處用段落標題
+    else:
+        kind = "slide" if any(title.startswith("投影片") for title, _ in sections) else "page"
     text_chars = sum(len(re.sub(r"\[圖片[^\]]*\]|\s", "", body)) for _, body in sections)
 
     if text_chars >= SCANNED_TEXT_CHARS:
@@ -370,6 +412,9 @@ def _lecture_batches(path: Path, work: Path) -> tuple[list[tuple[str, list]], st
             current += block
         if current.strip():
             batches.append((current, []))
+        if kind == "section":
+            note = "這份是 Word 教材，沒有頁碼：source 請填出處段落的標題（## 後面的文字）。\n\n"
+            batches = [(note + text, images) for text, images in batches]
         return batches, kind
 
     # 掃描成圖片的教材：PPTX 用投影片裡的圖片，PDF 直接把每一頁畫成圖片
@@ -415,15 +460,14 @@ def generate_lecture(
     work = service.drafts_dir() / "uploads" / source_key
     batches, kind = _lecture_batches(path, work)
 
-    # 題數依每批的份量分配，至少 1 題
-    weights = [max(len(text), 1) + 2000 * len(images) for text, images in batches]
-    total = sum(weights)
-    quotas = [max(1, round(count * weight / total)) for weight in weights]
+    quotas = _split_count(count, [max(len(text), 1) + 2000 * len(images) for text, images in batches])
 
     questions: list[QuestionIn] = []
     calls, cost = 0, 0.0
     skipped = 0
     for (text, images), quota in zip(batches, quotas, strict=True):
+        if quota == 0:
+            continue  # 題數比批數少：分不到題目的批次不呼叫 AI，不花用量
         prompt = f"請依下面的教材出 {quota} 題單選題。\n\n{text}"
         payload, spent = _ask_json(db, "ingest_lecture", LECTURE_SYSTEM, prompt, images or None, request_id)
         calls, cost = calls + 1, cost + spent
@@ -459,6 +503,17 @@ def generate_lecture(
     return result.model_copy(update={"calls": calls, "cost_usd": round(cost, 6)})
 
 
+def _split_count(count: int, weights: list[int]) -> list[int]:
+    """題數依每批的份量分配，合計剛好等於 count（最大餘數法）。"""
+    total = sum(weights)
+    exact = [count * weight / total for weight in weights]
+    quotas = [int(value) for value in exact]
+    by_remainder = sorted(range(len(weights)), key=lambda i: (-(exact[i] - quotas[i]), i))
+    for i in by_remainder[: count - sum(quotas)]:
+        quotas[i] += 1
+    return quotas
+
+
 def _attach_snapshots(path: Path, source_key: str, questions: list[QuestionIn], images_dir: Path) -> None:
     """出處那一頁（PDF）或那張投影片的圖片當成「原始頁面」，匯入預覽頁和作答頁可以對照教材。"""
     assets = service.assets_dir()
@@ -479,9 +534,13 @@ def _attach_snapshots(path: Path, source_key: str, questions: list[QuestionIn], 
                 with pymupdf.open(path) as document:
                     document[number - 1].get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5)).save(target)
             else:
-                picture = next(iter(sorted(images_dir.glob(f"slide-{number:02d}-*.png"))), None) if images_dir.exists() else None
+                # 投影片圖片可能是 png、jpg…，都可以當截圖
+                pictures = sorted(images_dir.glob(f"slide-{number:02d}-*")) if images_dir.exists() else []
+                picture = next((p for p in pictures if p.suffix.lower() in IMAGE_SUFFIXES), None)
                 if picture is None:
                     continue
+                relative = f"{source_key}/source-{number}{picture.suffix.lower()}"
+                target = assets / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(picture.read_bytes())
             made[number] = relative
@@ -500,8 +559,12 @@ def _lecture_question(item: object, number: int, file: str, kind: str) -> Questi
     if answer not in OPTION_LETTERS[:CHOICE_COUNT] or len(answer) != 1:
         return None
     source = item.get("source")
-    source_number = source if isinstance(source, int) else _source_number(str(source or ""))
-    ref = SourceRef(file=file, slide=source_number) if kind == "slide" else SourceRef(file=file, page=source_number)
+    if kind == "section":
+        # Word 教材的段落標題常帶數字（「3.2 迴圈」），不能當成頁碼
+        ref = SourceRef(file=file, note=str(source).strip() or None if source is not None else None)
+    else:
+        source_number = source if isinstance(source, int) else _source_number(str(source or ""))
+        ref = SourceRef(file=file, slide=source_number) if kind == "slide" else SourceRef(file=file, page=source_number)
     tag = item.get("tag")
     return QuestionIn(
         number=number,
